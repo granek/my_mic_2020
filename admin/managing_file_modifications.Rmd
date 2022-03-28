@@ -1,0 +1,26 @@
+<!-- #region -->
+Git will often get upset if you try to `git pull` after modifying files in the git repository. The first option below prevents this from happening. The second option below will allow you to fix things if you forgot to do the second option before taking notes.
+
+
+
+# Before you start taking notes
+When a session starts, if you want to take notes in an Rmd notebook, do the following before you do anything else.
+
+1. Find Rmarkdown file in the Jupyter file browser.
+2. Click the checkbox next to the file.
+3. Click the **Duplicate** button (near the top of the Jupyter file browser)
+4. The duplicate file should have the same file name as the original, except with "-Copy1" near the end (right before the ".Rmd")
+5. Open the "-Copy1" file and take notes there
+
+# If you took notes in the original notebook
+If you have started modify the original notebook file, you can do the following, then you should be able to `git pull`
+
+1. Rename the notebook
+    - If you have the file open you can click on the file name next to the Jupyter logo at the top of the window and add "-Copy1" at the end.
+    - In the Jupyter file browser click the checkbox next to the file, click **Rename**, then add "-Copy1" near the end (right before the ".Rmd")
+2. Open a new terminal
+3. Change to the repository directory `cd ~/2021-mic/`
+4. Stash changes `git stash`
+
+Now you should be able to do `git pull` in the repo directory.
+<!-- #endregion -->
