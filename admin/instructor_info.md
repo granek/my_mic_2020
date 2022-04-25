@@ -1,11 +1,10 @@
 # Computing
-There are instructions on how to access the computing system here: 
-<https://gitlab.oit.duke.edu/hiv_r25/2021-2022-content-hiv-workshop/-/blob/main/misc/ondemand_howto.md>. 
+Here are [instructions on how to access the computing system](ondemand_howto.md)
 
 It defaults to 2 cores and 2 GB, but you can change these if you need more cores or more RAM, and if you need more than the set limits in the App, let us know and we can change the limits.
 
 # Content
-The git repo for content is here: <https://gitlab.oit.duke.edu/hiv_r25/2021-2022-content-hiv-workshop/>. Note that Tyler auto-converted the Jupyter notebooks to Rmarkdown, but not all of them have been tested yet.
+The git repo for content is here: <https://gitlab.oit.duke.edu/mic-course/2022-mic>.
 
 # Shared Data
 If you have shared datasets you can put them in /hpc/group/chsi-hiv-r25-2022/. Please make an appropriate subdirectory.
