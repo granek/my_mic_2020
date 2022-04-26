@@ -1,0 +1,433 @@
+---
+title: "QC scRNAseq data"
+output: html_document
+---
+
+**Data source:** 
+Christian et al. 2021 Cell Reports (https://doi.org/10.1016/j.celrep.2021.109118)
+
+**Methods overview, Single-cell RNA-seq analysis:**
+"Raw short reads were demultiplexed, filtering and mapped to mouse genome GRCm38/mm10 using cellranger v2.02. The gene count matrices from cellranger were subjected to quality control, pre-processing and clustering using the R Seurat 2.3.4 package (Butler et al., 2018). Low-quality cells that had less than 200 expressed genes and more than 5% mitochondrial genes were filtered out. Gene counts were scaled to total gene expression and percentage of mitochondrial genes with a scaling factor of 10,000, and then log-transformed. The high dimensional data for each sample were reduced by PCA and t-Distributed Stochastics Neighbor Embedding (tSNE). We used the FindCluster function to group clusters in each sample with a resolution of 0.6. Differential expressed genes (DEGs) were identified using the Wilcoxon rank-sum test."
+
+**Goal of this script**
+Examine quality of scRNAseq count matrix data from saved Seurat objects. Objects include information from downstream processing, but ignore for now. 
+
+
+## Prerequisites
+
+Libraries and Paths
+```{r}
+knitr::opts_chunk$set(echo = T, message = FALSE, warning = FALSE)
+stdt<-date()
+
+# Libraries
+library(tidyverse)
+library(Seurat)
+#BiocManager::install("org.Mm.eg.db")
+library("org.Mm.eg.db")
+
+# Paths
+wd <- ""
+datadir <- file.path("data")
+procdir <- file.path("proc")
+```
+
+### Load Seurat objects
+
+"Raw short reads were demultiplexed, filtering and mapped to mouse genome GRCm38/mm10 using cellranger v2.02."
+
+If we had the raw counts returned by CellRanger, we could use code like this to load the data and store it in a Seurate object.
+
+```{r}
+# read in 10x data as a Seurat object
+readin_10x_to_SO <- function(sample, path, min.cells = 10, min.genes = 200){
+  Seurat::Read10X(data.dir = path) %>%
+    Seurat::CreateSeuratObject(project = sample, 
+                               min.cells=min.cells, min.genes=min.genes) -> seu.obj
+  return(seu.obj)
+}
+```
+
+In this case, we need to get the count matrices from saved Seurat objects. Load the four Seurat objects that correspond to T cells sampled in and outside of the tumor. See Fig 2A for tSNE plots of each sample type.
+
+- tem = effector memory in tumor
+- tcm = central memory in tumor
+- trm = resident memory in tumor
+- disTrm = resident memory T-cells outside of the tumor 
+
+```{r}
+tem = readRDS(file = file.path(datadir, "TumorTem.rds")) %>% UpdateSeuratObject() # LSC3 CD8
+
+tcm = readRDS(file = file.path(datadir,"TumorTcm.rds")) %>% UpdateSeuratObject() # LSC2 CD8
+
+trm = readRDS(file = file.path(datadir,"TumorTrm.rds")) %>% UpdateSeuratObject() # LSC1 CD8
+
+disTrm = readRDS(file = file.path(datadir,"DistantMucosaTrm.rds")) %>% UpdateSeuratObject() # LSC5 CD8
+```
+
+Put all the seurat objects in list
+```{r}
+seulist <- list(tem = tem, 
+     tcm = tcm, 
+     trm = trm, 
+     disTrm = disTrm)
+seulist
+```
+
+### Load GRCm38/mm10 gtf
+gtf source: https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_mouse/release_M10/gencode.vM10.annotation.gtf.gz
+
+This isn't quite the right gtf...
+
+```{r}
+# gtffile <- "annotation/gencode.vM10.annotation.gtf"
+# rtracklayer::import(gtffile) %>%
+#     plyranges::filter(type == "gene") %>%
+#     tibble::as_tibble() %>%
+#     plyranges::select(gene_id, gene_name) %>%
+#     dplyr::mutate(geneid = gsub(pattern = "\\.\\d+$", "", gene_id)) ->
+#     gtf
+# head(gtf)
+# 
+# # extract genesymbols from the dataset
+# c(rownames(tem), rownames(tcm), rownames(trm), rownames(disTrm)) %>%
+#   unique() -> all.genesymbs
+# 
+# sum(!all.genesymbs %in% gtf$gene_name) # 90 symbols not found?
+# all.genesymbs[!all.genesymbs %in% gtf$gene_name]
+```
+
+### Add mitrochondiral gene percentage
+
+Percent mito is already in this metadata, but confirm that we can get the same values
+```{r}
+seulist %>%
+  map(~head(.x@meta.data))
+```
+
+Typically, CellRanger returns a count matrix where rownames are ensembl gene ids. If that is the case, you can grep for "^MT" in the ensembl id to calculate the percentage of mitochondrial genes.
+```{r}
+rownames(tem)[1:10] # genes are coded as symbols, not ensembl ids, so the pattern-matching approach will not work
+PercentageFeatureSet(tem, pattern = "^MT-")[1:10,] # all zeros!
+```
+
+In this case, the rownames are gene symbols. Investigating the names a bit more, they may be identified by "mt-"
+```{r}
+curr.count <- tem@assays$RNA@counts
+curr.features <- rownames(curr.count)
+curr.features[grepl("^mt-", curr.features)] # these look like mitochondrial genes!
+```
+
+Verify the mitochondrial percentage
+```{r}
+verify.mt <- function(seuobj){
+  seuobj[["percent.mt"]] <- PercentageFeatureSet(seuobj, pattern = "^mt-")
+  seuobj@meta.data %>%
+    mutate(pm.transform = percent.mt / percent.mito) %>%
+    dplyr::filter(pm.transform > 101 & pm.transform < 99) %>%
+    dim() -> out
+  return(out)
+}
+seulist %>%
+  map(~verify.mt(.x))
+```
+My guess is that the "percent.mito" values were not multiplied by 100.
+
+- percent.mito = mt counts / total counts
+- percent.mt = (mt counts / total counts) *100
+
+Add percent.mt
+```{r}
+add.mt <- function(seuobj){
+  seuobj[["percent.mt"]] <- PercentageFeatureSet(seuobj, pattern = "^mt-")
+  return(seuobj)
+}
+seulist %>%
+  map(~add.mt(.x)) -> seulist
+
+# check that it worked
+seulist %>%
+  map(~head(.x@meta.data))
+```
+
+
+
+## Initial QC
+
+Number of molecules aka reads detected per cell (nCount)
+
+- A very low number of reads per cell could indicate a sequencing failure.
+- A very high number of reads per cell could indicate more than one cell was actually sequenced.
+
+```{r}
+seulist %>%
+  map_dfr(~.x@meta.data, .id = "seuobj") %>%
+  ggplot(aes(x = seuobj, y = nCount_RNA))+
+	geom_jitter(shape = 16, position = position_jitter(0.2))+
+	geom_violin(trim = F, alpha = 0.7) +
+  labs(x = "Group", y = "nCount") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 30, hjust=1),
+        strip.text = element_text(size = 6))
+```
+
+Number of gene features detected per cell (nFeature)
+
+- A very low number of gene features per cell could indicate a library prep or sequencing failure.
+
+```{r}
+seulist %>%
+  map_dfr(~.x@meta.data, .id = "seuobj") %>%
+  ggplot(aes(x = seuobj, y = nFeature_RNA))+
+	geom_jitter(shape = 16, position = position_jitter(0.2))+
+	geom_violin(trim = F, alpha = 0.7)+
+  labs(x = "Group", y = "nFeature") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 30, hjust=1),
+        strip.text = element_text(size = 6))
+```
+
+Percentage of mitochondrial genes per cell (MT%)
+
+- A high percentage of mitochondrial genes (MT%) indicates a cell may be dead or dying based on the expectation that, if a cell is ruptured, non-MT genes will leak out first and increase the relative abundance of MT genes.
+
+```{r}
+seulist %>%
+  map_dfr(~.x@meta.data, .id = "seuobj") %>%
+  ggplot(aes(x = seuobj, y = percent.mt)) +
+  geom_jitter(shape=16, position=position_jitter(0.2))+
+	geom_violin(trim=FALSE, alpha=0.7)+
+  scale_y_continuous(limits = c(0, 100)) +
+  labs(x = "Group", y = "MT%") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 30, hjust=1),
+        strip.text = element_text(size = 6))
+```
+
+Correlation between nCounts and nFeatures, colored by MT%
+
+- The number of gene features detected in a cell (nFeatures) tends to increase with library size (nCounts). Divergence from this correlation could indicate low-quality data, e.g. often observed in high MT% cells.
+
+```{r}
+seulist %>%
+  map_dfr(~.x@meta.data, .id = "seuobj") %>%
+  ggplot(aes(x = nCount_RNA, y = nFeature_RNA, 
+                color = percent.mt))+
+	geom_point(size = 1)+
+	facet_wrap(~ seuobj, nrow = 2)+
+	labs(x = "nCount", y = "nFeature", color = "MT%") +
+  theme_classic()
+```
+
+
+## Filter cells
+
+"Low-quality cells that had less than 200 expressed genes and more than 5% mitochondrial genes were filtered out."
+
+It looks like the counts have already been filtered base on these criteria, but we can double-check. We will also examine the number of reads per cell
+
+
+### nCount
+
+```{r}
+cl <- 6 # min number of total reads per cell (nCount is analogous to library size or total number of reads)
+ch <- 11 # max number of total reads per cell
+```
+
+Filter out cells with log(nCount) $>$ `ch` \& $<$ `cl`
+
+- Note: Different y-axis scales
+
+```{r}
+seulist %>%
+  map_dfr(~.x@meta.data, .id = "seuobj") %>%
+  ggplot(aes(x = log(nCount_RNA))) +
+  geom_histogram(bins = 50) +
+  geom_vline(xintercept = c(cl, ch), 
+             color = "blue", linetype = "dashed") +
+  facet_wrap(~ seuobj, scales = "free_y", nrow = 2) +
+  labs(x = "log(nCount)", y = "Frequency") +
+  scale_x_continuous(breaks = seq(0, 10, 1)) +
+  theme_classic()
+```
+
+
+### nFeature
+
+```{r}
+fl <- 5.5 # min number of gene features per cell
+```
+
+Filtering out cells with log(nFeature) $<$ `fl`
+
+- Note: Different y-axis scales
+
+```{r}
+seulist %>%
+  map_dfr(~.x@meta.data, .id = "seuobj") %>%
+  ggplot(aes(x = log(nFeature_RNA))) +
+  geom_histogram(bins = 100) +
+  geom_vline(xintercept = fl, 
+             color = "blue", linetype = "dashed") +
+  scale_x_continuous(breaks = c(seq(0, 20, 1), fl)) +
+  facet_wrap(~ seuobj, scales = "free_y", nrow = 3) +
+  labs(x = "log(nCount)", y = "Frequency") +
+  theme_classic()
+```
+
+
+### MT%
+
+```{r}
+tmp <- lapply(seq(1, 40, 1), function(v){
+  
+  seulist %>%
+  map_dfr(~.x@meta.data, .id = "seuobj") %>%
+    group_by(orig.ident) %>%
+    summarize(threshold = v, 
+              ncells_kept = sum(percent.mt < v),
+              ncells_filtered = sum(percent.mt >= v))
+}) %>% 
+  bind_rows() %>%
+  pivot_longer(cols = c("ncells_filtered", "ncells_kept"),
+               names_to = "type",
+               values_to = "ncells") 
+
+ml <- 5
+ggplot(tmp, aes(x=threshold, y=ncells, colour=type))+
+	geom_line() + 
+  geom_vline(xintercept = ml, color = "blue", linetype = "dashed") + 
+  scale_x_continuous(breaks = seq(0, 40, by = 5)) +
+	labs(x="Thresholds for MT%", y="Number of Cells")+
+  facet_wrap(~orig.ident, nrow = 3, 
+             scales = "free_y")+
+  theme_classic()
+```
+
+Filtering out cells with MT% $>$ `ml`
+There aren't any of these cells because they have already been filtered.
+```{r}
+seulist %>%
+  map_dfr(~.x@meta.data, .id = "seuobj") %>%
+  ggplot(aes(x = percent.mt)) +
+  geom_histogram(bins = 100, fill = NA) +
+  geom_vline(xintercept = ml,
+             color = "blue", linetype = "dashed") +
+  # scale_x_continuous(breaks = c(seq(2, 14, 2), fl)) +
+  facet_wrap(~ orig.ident, scales = "free_y", nrow = 3) +
+  labs(x = "MT%", y = "Frequency") +
+  theme_classic()
+```
+
+### Do the filtering
+
+Pre
+
+```{r}
+seulist %>%
+  map_dfr(~.x@meta.data, .id = "seuobj") %>%
+  pull(seuobj) %>% table()
+```
+
+Filter 
+
+```{r, echo = T}
+seu_filt <- function(seuobj){
+  seuobj_filt <- subset(seuobj, 
+         nCount_RNA > exp(cl) & 
+         nCount_RNA < exp(ch) &
+         nFeature_RNA > exp(fl) &
+         percent.mt < ml)
+  return(seuobj_filt)
+}
+
+seulist %>%
+  map(~seu_filt(.x)) -> seulist.filt
+
+saveRDS(seulist.filt, file = file.path(procdir, "seulist-filt.rds"))
+```
+
+Post
+
+```{r}
+seulist.filt %>%
+  map_dfr(~.x@meta.data, .id = "seuobj") %>%
+  pull(seuobj) %>% table()
+```
+
+This stayed the same because our filtering criteria did not remove any cells.
+
+
+## Final QC
+
+nCount
+
+```{r}
+seulist.filt %>%
+  map_dfr(~.x@meta.data, .id = "seuobj") %>%
+  ggplot(aes(x = seuobj, y = nCount_RNA))+
+	geom_jitter(shape = 16, position = position_jitter(0.2))+
+	geom_violin(trim = F, alpha = 0.7) +
+  labs(x = "Group") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 30, hjust=1))
+```
+
+nFeature
+
+```{r}
+seulist.filt %>%
+  map_dfr(~.x@meta.data, .id = "seuobj") %>%
+  ggplot(aes(x = seuobj, y = nFeature_RNA)) +
+	geom_jitter(shape = 16, position = position_jitter(0.2))+
+	geom_violin(trim = F, alpha = 0.7)+
+  labs(x = "Group") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 30, hjust=1))
+```
+
+MT%
+
+```{r}
+seulist.filt %>%
+  map_dfr(~.x@meta.data, .id = "seuobj") %>%
+  ggplot(aes(x = seuobj, y = percent.mt)) +
+  geom_jitter(shape=16, position=position_jitter(0.2))+
+	geom_violin(trim=FALSE, alpha=0.7)+
+  labs(x = "Group", y = "MT%") +
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 30, hjust=1))
+```
+
+Correlation between nCounts and nFeatures, colored by MT%
+
+```{r}
+seulist.filt %>%
+  map_dfr(~.x@meta.data, .id = "seuobj") %>%
+  ggplot(aes(x = nCount_RNA, y = nFeature_RNA, 
+                color = percent.mt))+
+	geom_point(size = 1)+
+	facet_wrap(~ seuobj, nrow = 3)+
+	labs(x = "nCount", y = "nFeature", color = "MT%") +
+  theme_classic()
+```
+
+
+## Downstream processing
+
+"Gene counts were scaled to total gene expression and percentage of mitochondrial genes with a scaling factor of 10,000, and then log-transformed."
+
+"The high dimensional data for each sample were reduced by PCA and t-Distributed Stochastics Neighbor Embedding (tSNE)." 
+
+"We used the FindCluster function to group clusters in each sample with a resolution of 0.6." 
+
+"Differential expressed genes (DEGs) were identified using the Wilcoxon rank-sum test."
+
+
+## Session Info
+```{r echo=T}
+sessionInfo()
+print(paste("Start Time:  ",stdt))
+print(paste("End Time:  ",date()))
+```
+
