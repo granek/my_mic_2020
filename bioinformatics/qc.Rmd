@@ -1,6 +1,8 @@
 ---
 title: "QC scRNAseq data"
 output: html_document
+editor_options: 
+  chunk_output_type: console
 ---
 
 **Data source:** 
@@ -26,10 +28,17 @@ library(Seurat)
 #BiocManager::install("org.Mm.eg.db")
 library("org.Mm.eg.db")
 
-# Paths
-wd <- ""
-datadir <- file.path("data")
-procdir <- file.path("proc")
+# Input paths
+wd <- "/hpc/group/chsi-mic-2022"
+datadir <- file.path(wd, "data/")
+
+# Output paths
+scratchdir <- "/work"
+username <- Sys.info()[["user"]]
+procdir <- file.path(scratchdir,username,"proc")
+#procdir
+#dir(procdir)
+#dir.create(procdir) # uncomment if not already there
 ```
 
 ### Load Seurat objects
@@ -57,11 +66,8 @@ In this case, we need to get the count matrices from saved Seurat objects. Load 
 
 ```{r}
 tem = readRDS(file = file.path(datadir, "TumorTem.rds")) %>% UpdateSeuratObject() # LSC3 CD8
-
 tcm = readRDS(file = file.path(datadir,"TumorTcm.rds")) %>% UpdateSeuratObject() # LSC2 CD8
-
 trm = readRDS(file = file.path(datadir,"TumorTrm.rds")) %>% UpdateSeuratObject() # LSC1 CD8
-
 disTrm = readRDS(file = file.path(datadir,"DistantMucosaTrm.rds")) %>% UpdateSeuratObject() # LSC5 CD8
 ```
 
@@ -344,7 +350,8 @@ seu_filt <- function(seuobj){
 seulist %>%
   map(~seu_filt(.x)) -> seulist.filt
 
-saveRDS(seulist.filt, file = file.path(procdir, "seulist-filt.rds"))
+# R session crashed when I ran the next line
+#saveRDS(seulist.filt, file = file.path(procdir, "seulist-filt.rds"))
 ```
 
 Post
