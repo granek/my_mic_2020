@@ -31,14 +31,13 @@ library("org.Mm.eg.db")
 # Input paths
 wd <- "/hpc/group/chsi-mic-2022"
 datadir <- file.path(wd, "data/")
+intermeddir <- file.path(wd, "intermed/")
 
 # Output paths
 scratchdir <- "/work"
 username <- Sys.info()[["user"]]
-procdir <- file.path(scratchdir,username,"proc")
-#procdir
-#dir(procdir)
-#dir.create(procdir) # uncomment if not already there
+outdir <- file.path(scratchdir,username,"output")
+#dir.create(outdir) # uncomment if not already there
 ```
 
 ### Load Seurat objects
