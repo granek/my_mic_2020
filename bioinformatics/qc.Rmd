@@ -25,18 +25,21 @@ stdt<-date()
 # Libraries
 library(tidyverse)
 library(Seurat)
-#BiocManager::install("org.Mm.eg.db")
-library("org.Mm.eg.db")
+BiocManager::install("org.Mm.eg.db")
+#library("org.Mm.eg.db")
 
 # Input paths
 wd <- "/hpc/group/chsi-mic-2022"
-datadir <- file.path(wd, "data/")
-intermeddir <- file.path(wd, "intermed/")
+datadir <- file.path(wd, "data")
+datadir
+intermeddir <- file.path(wd, "intermed")
+intermeddir
 
 # Output paths
 scratchdir <- "/work"
 username <- Sys.info()[["user"]]
 outdir <- file.path(scratchdir,username,"output")
+outdir
 #dir.create(outdir) # uncomment if not already there
 ```
 
@@ -78,6 +81,7 @@ seulist <- list(tem = tem,
      disTrm = disTrm)
 seulist
 ```
+
 
 ### Load GRCm38/mm10 gtf
 gtf source: https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_mouse/release_M10/gencode.vM10.annotation.gtf.gz
@@ -349,8 +353,10 @@ seu_filt <- function(seuobj){
 seulist %>%
   map(~seu_filt(.x)) -> seulist.filt
 
-# R session crashed when I ran the next line
-#saveRDS(seulist.filt, file = file.path(procdir, "seulist-filt.rds"))
+# Students will not be able to run the saveRDS command because 
+# everything the data/ and intermed/ folders will need to be write-protected
+#saveRDS(seulist.filt, file = file.path(intermeddir, "seulist-filt.rds"))
+#seulist.filt <- readRDS(file.path(intermeddir, "seulist-filt.rds"))
 ```
 
 Post
