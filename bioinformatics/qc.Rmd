@@ -25,13 +25,12 @@ stdt<-date()
 # Libraries
 library(tidyverse)
 library(Seurat)
-BiocManager::install("org.Mm.eg.db")
-#library("org.Mm.eg.db")
 
 # Input paths
 wd <- "/hpc/group/chsi-mic-2022"
-datadir <- file.path(wd, "data")
-datadir
+datadirs <- list.files(path = file.path(wd, "data"), pattern = "_10x", full.names = T)
+datadirs <- datadirs[!grepl(".h5", datadirs)]
+datadirs
 intermeddir <- file.path(wd, "intermed")
 intermeddir
 
@@ -47,11 +46,11 @@ outdir
 
 "Raw short reads were demultiplexed, filtering and mapped to mouse genome GRCm38/mm10 using cellranger v2.02."
 
-If we had the raw counts returned by CellRanger, we could use code like this to load the data and store it in a Seurate object.
+We could use code like this to load the data and store it in a Seurat object.
 
 ```{r}
 # read in 10x data as a Seurat object
-readin_10x_to_SO <- function(sample, path, min.cells = 10, min.genes = 200){
+readin_10x_to_SO <- function(sample, path, min.cells = 0, min.genes = 0){
   Seurat::Read10X(data.dir = path) %>%
     Seurat::CreateSeuratObject(project = sample, 
                                min.cells=min.cells, min.genes=min.genes) -> seu.obj
@@ -59,106 +58,67 @@ readin_10x_to_SO <- function(sample, path, min.cells = 10, min.genes = 200){
 }
 ```
 
-In this case, we need to get the count matrices from saved Seurat objects. Load the four Seurat objects that correspond to T cells sampled in and outside of the tumor. See Fig 2A for tSNE plots of each sample type.
+Load the four 10x datasets that correspond to T cells sampled in and outside of the tumor. See Fig 2A for tSNE plots of each sample type.
 
-- tem = effector memory in tumor
-- tcm = central memory in tumor
-- trm = resident memory in tumor
+- Tem = effector memory in tumor
+- Tcm = central memory in tumor
+- Trm = resident memory in tumor
 - disTrm = resident memory T-cells outside of the tumor 
 
 ```{r}
-tem = readRDS(file = file.path(datadir, "TumorTem.rds")) %>% UpdateSeuratObject() # LSC3 CD8
-tcm = readRDS(file = file.path(datadir,"TumorTcm.rds")) %>% UpdateSeuratObject() # LSC2 CD8
-trm = readRDS(file = file.path(datadir,"TumorTrm.rds")) %>% UpdateSeuratObject() # LSC1 CD8
-disTrm = readRDS(file = file.path(datadir,"DistantMucosaTrm.rds")) %>% UpdateSeuratObject() # LSC5 CD8
-```
+sampleNames <- gsub("_10x","", basename(datadirs))
+sampleNames
 
-Put all the seurat objects in list
-```{r}
-seulist <- list(tem = tem, 
-     tcm = tcm, 
-     trm = trm, 
-     disTrm = disTrm)
+seulist <- list()
+for(i in 1:length(sampleNames)){
+  seulist[[i]] <- readin_10x_to_SO(sample = sampleNames[i], path = datadirs[i])
+}
+names(seulist) <- sampleNames
 seulist
-```
-
-
-### Load GRCm38/mm10 gtf
-gtf source: https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_mouse/release_M10/gencode.vM10.annotation.gtf.gz
-
-This isn't quite the right gtf...
-
-```{r}
-# gtffile <- "annotation/gencode.vM10.annotation.gtf"
-# rtracklayer::import(gtffile) %>%
-#     plyranges::filter(type == "gene") %>%
-#     tibble::as_tibble() %>%
-#     plyranges::select(gene_id, gene_name) %>%
-#     dplyr::mutate(geneid = gsub(pattern = "\\.\\d+$", "", gene_id)) ->
-#     gtf
-# head(gtf)
-# 
-# # extract genesymbols from the dataset
-# c(rownames(tem), rownames(tcm), rownames(trm), rownames(disTrm)) %>%
-#   unique() -> all.genesymbs
-# 
-# sum(!all.genesymbs %in% gtf$gene_name) # 90 symbols not found?
-# all.genesymbs[!all.genesymbs %in% gtf$gene_name]
 ```
 
 ### Add mitrochondiral gene percentage
 
-Percent mito is already in this metadata, but confirm that we can get the same values
+First, take look at the existing cell-level metadata in one of the seurat objects
 ```{r}
 seulist %>%
   map(~head(.x@meta.data))
 ```
 
-Typically, CellRanger returns a count matrix where rownames are ensembl gene ids. If that is the case, you can grep for "^MT" in the ensembl id to calculate the percentage of mitochondrial genes.
-```{r}
-rownames(tem)[1:10] # genes are coded as symbols, not ensembl ids, so the pattern-matching approach will not work
-PercentageFeatureSet(tem, pattern = "^MT-")[1:10,] # all zeros!
-```
+orig.ident = sample name
+nCount_RNA = number of reads per cell
+nFeature_RNA = number of gene features per cell
 
-In this case, the rownames are gene symbols. Investigating the names a bit more, they may be identified by "mt-"
+The rownames are gene symbols. Investigating the names a bit more, the mitochondrial genes can be identified by the prefix "mt-"
 ```{r}
+tem <- seulist$Tem
 curr.count <- tem@assays$RNA@counts
-curr.features <- rownames(curr.count)
-curr.features[grepl("^mt-", curr.features)] # these look like mitochondrial genes!
+rownames(curr.count)[1:10]
+rownames(curr.count)[grepl("^mt-", rownames(curr.count))] # these look like mitochondrial genes!
 ```
 
-Verify the mitochondrial percentage
+Add the mitochondrial percentage for 1 seurat object
 ```{r}
-verify.mt <- function(seuobj){
-  seuobj[["percent.mt"]] <- PercentageFeatureSet(seuobj, pattern = "^mt-")
-  seuobj@meta.data %>%
-    mutate(pm.transform = percent.mt / percent.mito) %>%
-    dplyr::filter(pm.transform > 101 & pm.transform < 99) %>%
-    dim() -> out
-  return(out)
-}
-seulist %>%
-  map(~verify.mt(.x))
+head(tem@meta.data)
+tem[["percent.mt"]] <- PercentageFeatureSet(tem, pattern = "^mt-")
+head(tem@meta.data)
 ```
-My guess is that the "percent.mito" values were not multiplied by 100.
 
-- percent.mito = mt counts / total counts
-- percent.mt = (mt counts / total counts) *100
-
-Add percent.mt
+Now, do the same thing but for all seurat objects in our list
 ```{r}
-add.mt <- function(seuobj){
-  seuobj[["percent.mt"]] <- PercentageFeatureSet(seuobj, pattern = "^mt-")
-  return(seuobj)
+add_mt <- function(so){
+  so[["percent.mt"]] <- PercentageFeatureSet(so, pattern = "^mt-")
+  return(so)
 }
-seulist %>%
-  map(~add.mt(.x)) -> seulist
 
-# check that it worked
 seulist %>%
+  map(~add_mt(.x)) -> seulist.mt
+
+seulist.mt %>%
   map(~head(.x@meta.data))
-```
 
+seulist <- seulist.mt
+```
 
 
 ## Initial QC
