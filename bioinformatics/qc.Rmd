@@ -1,24 +1,8 @@
 ---
-title: "QC scRNAseq data"
-output: html_document
-editor_options: 
-  chunk_output_type: console
+title: "QC scRNAseq"
+output: html_notebook
 ---
-
-**Data source:** 
-Christian et al. 2021 Cell Reports (https://doi.org/10.1016/j.celrep.2021.109118)
-
-**Methods overview, Single-cell RNA-seq analysis:**
-"Raw short reads were demultiplexed, filtering and mapped to mouse genome GRCm38/mm10 using cellranger v2.02. The gene count matrices from cellranger were subjected to quality control, pre-processing and clustering using the R Seurat 2.3.4 package (Butler et al., 2018). Low-quality cells that had less than 200 expressed genes and more than 5% mitochondrial genes were filtered out. Gene counts were scaled to total gene expression and percentage of mitochondrial genes with a scaling factor of 10,000, and then log-transformed. The high dimensional data for each sample were reduced by PCA and t-Distributed Stochastics Neighbor Embedding (tSNE). We used the FindCluster function to group clusters in each sample with a resolution of 0.6. Differential expressed genes (DEGs) were identified using the Wilcoxon rank-sum test."
-
-**Goal of this script**
-Examine quality of scRNAseq count matrix data from saved Seurat objects. Objects include information from downstream processing, but ignore for now. 
-
-
-## Prerequisites
-
-Libraries and Paths
-```{r}
+```{r prereqs}
 knitr::opts_chunk$set(echo = T, message = FALSE, warning = FALSE)
 stdt<-date()
 
@@ -30,26 +14,34 @@ library(Seurat)
 wd <- "/hpc/group/chsi-mic-2022"
 datadirs <- list.files(path = file.path(wd, "data"), pattern = "_10x", full.names = T)
 datadirs <- datadirs[!grepl(".h5", datadirs)]
-datadirs
 intermeddir <- file.path(wd, "intermed")
-intermeddir
 
 # Output paths
 scratchdir <- "/work"
 username <- Sys.info()[["user"]]
 outdir <- file.path(scratchdir,username,"output")
-outdir
 #dir.create(outdir) # uncomment if not already there
 ```
 
-### Load Seurat objects
+**Data source:** 
+Christian et al. 2021 Cell Reports (https://doi.org/10.1016/j.celrep.2021.109118)
 
-"Raw short reads were demultiplexed, filtering and mapped to mouse genome GRCm38/mm10 using cellranger v2.02."
+**Goal of this script:** QC
 
-We could use code like this to load the data and store it in a Seurat object.
+**Methods overview:**
+
+- Pre-processing: "Raw short reads were demultiplexed, filtering and mapped to mouse genome GRCm38/mm10 using cellranger v2.02. 
+
+- QC: The gene count matrices from cellranger were subjected to quality control, pre-processing and clustering using the R Seurat 2.3.4 package (Butler et al., 2018). Low-quality cells that had less than 200 expressed genes and more than 5% mitochondrial genes were filtered out. 
+
+- Analysis: Gene counts were scaled to total gene expression and percentage of mitochondrial genes with a scaling factor of 10,000, and then log-transformed. The high dimensional data for each sample were reduced by PCA and t-Distributed Stochastics Neighbor Embedding (tSNE). We used the FindCluster function to group clusters in each sample with a resolution of 0.6. Differential expressed genes (DEGs) were identified using the Wilcoxon rank-sum test."
+
+
+## Load Seurat objects
+
+We can use code like this to load the cell ranger output and store it in a Seurat object.
 
 ```{r}
-# read in 10x data as a Seurat object
 readin_10x_to_SO <- function(sample, path, min.cells = 0, min.genes = 0){
   Seurat::Read10X(data.dir = path) %>%
     Seurat::CreateSeuratObject(project = sample, 
@@ -77,7 +69,7 @@ names(seulist) <- sampleNames
 seulist
 ```
 
-### Add mitrochondiral gene percentage
+## Add mitrochondiral gene percentage
 
 First, take look at the existing cell-level metadata in one of the seurat objects
 ```{r}
@@ -166,11 +158,12 @@ seulist %>%
   ggplot(aes(x = seuobj, y = percent.mt)) +
   geom_jitter(shape=16, position=position_jitter(0.2))+
 	geom_violin(trim=FALSE, alpha=0.7)+
-  scale_y_continuous(limits = c(0, 100)) +
+  scale_y_continuous(limits = c(0, 10)) +
   labs(x = "Group", y = "MT%") +
   theme_classic() +
   theme(axis.text.x = element_text(angle = 30, hjust=1),
-        strip.text = element_text(size = 6))
+        strip.text = element_text(size = 6)) +
+  geom_hline(yintercept = 5, linetype = 2)
 ```
 
 Correlation between nCounts and nFeatures, colored by MT%
@@ -185,7 +178,8 @@ seulist %>%
 	geom_point(size = 1)+
 	facet_wrap(~ seuobj, nrow = 2)+
 	labs(x = "nCount", y = "nFeature", color = "MT%") +
-  theme_classic()
+  theme_classic() +
+  geom_hline(yintercept = 200, linetype = 2)
 ```
 
 
@@ -315,7 +309,7 @@ seulist %>%
 
 # Students will not be able to run the saveRDS command because 
 # everything the data/ and intermed/ folders will need to be write-protected
-#saveRDS(seulist.filt, file = file.path(intermeddir, "seulist-filt.rds"))
+saveRDS(seulist.filt, file = file.path(intermeddir, "seulist-filt.rds"))
 #seulist.filt <- readRDS(file.path(intermeddir, "seulist-filt.rds"))
 ```
 
@@ -383,17 +377,6 @@ seulist.filt %>%
 	labs(x = "nCount", y = "nFeature", color = "MT%") +
   theme_classic()
 ```
-
-
-## Downstream processing
-
-"Gene counts were scaled to total gene expression and percentage of mitochondrial genes with a scaling factor of 10,000, and then log-transformed."
-
-"The high dimensional data for each sample were reduced by PCA and t-Distributed Stochastics Neighbor Embedding (tSNE)." 
-
-"We used the FindCluster function to group clusters in each sample with a resolution of 0.6." 
-
-"Differential expressed genes (DEGs) were identified using the Wilcoxon rank-sum test."
 
 
 ## Session Info
