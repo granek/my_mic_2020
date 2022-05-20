@@ -41,12 +41,119 @@ Note that the Seurat - Guided Clustering Tutorial (https://satijalab.org/seurat/
 - Analysis: Gene counts were scaled to total gene expression and percentage of mitochondrial genes with a scaling factor of 10,000, and then log-transformed. The high dimensional data for each sample were reduced by PCA and t-Distributed Stochastics Neighbor Embedding (tSNE). We used the FindCluster function to group clusters in each sample with a resolution of 0.6. Differential expressed genes (DEGs) were identified using the Wilcoxon rank-sum test."
 
 
-## Load QC'd Seurat objects
+
+## Load Seurat objects
+
+We can use code like this to load the cell ranger output and store it in a Seurat object.
 
 ```{r}
-seulist.filt <- readRDS(file.path(intermeddir, "seulist-filt.rds"))
-names(seulist.filt)
+readin_10x_to_SO <- function(sample, path, min.cells = 0, min.genes = 0){
+  Seurat::Read10X(data.dir = path) %>%
+    Seurat::CreateSeuratObject(project = sample, 
+                               min.cells=min.cells, min.genes=min.genes) -> seu.obj
+  return(seu.obj)
+}
 ```
+
+Load the four 10x datasets that correspond to T cells sampled in and outside of the tumor. See Fig 2A for tSNE plots of each sample type.
+
+- Tem = effector memory in tumor
+- Tcm = central memory in tumor
+- Trm = resident memory in tumor
+- disTrm = resident memory T-cells outside of the tumor 
+
+```{r}
+sampleNames <- gsub("_10x","", basename(datadirs))
+sampleNames
+
+seulist <- list()
+for(i in 1:length(sampleNames)){
+  seulist[[i]] <- readin_10x_to_SO(sample = sampleNames[i], path = datadirs[i])
+}
+names(seulist) <- sampleNames
+seulist
+```
+
+## Make sure the Seurat objects have been QC'd
+
+The rownames are gene symbols. Investigating the names a bit more, the mitochondrial genes can be identified by the prefix "mt-"
+```{r}
+tem <- seulist$Tem
+curr.count <- tem@assays$RNA@counts
+rownames(curr.count)[1:10]
+rownames(curr.count)[grepl("^mt-", rownames(curr.count))] # these look like mitochondrial genes!
+```
+
+Add the mitochondrial percentage for all seurat objects in our list
+```{r}
+add_mt <- function(so){
+  so[["percent.mt"]] <- PercentageFeatureSet(so, pattern = "^mt-")
+  return(so)
+}
+
+seulist %>%
+  map(~add_mt(.x)) -> seulist.mt
+
+seulist.mt %>%
+  map(~head(.x@meta.data))
+
+seulist <- seulist.mt
+```
+
+"Low-quality cells that had less than 200 expressed genes and more than 5% mitochondrial genes were filtered out."
+
+Examine the distribution of nFeature and nCount for each dataset
+```{r}
+seulist %>%
+  map_dfr(~.x@meta.data, .id = "seuobj") %>%
+  ggplot(aes(x = nCount_RNA, y = nFeature_RNA, 
+                color = percent.mt))+
+	geom_point(size = 1)+
+	facet_wrap(~ seuobj, nrow = 2)+
+	labs(x = "nCount", y = "nFeature", color = "MT%") +
+  theme_classic() +
+  geom_hline(yintercept = 200, linetype = 2)
+```
+Are there any cells with less than 200 expressed genes?
+```{r}
+seulist %>%
+  map_dfr(~.x@meta.data, .id = "seuobj") %>%
+  ggplot(aes(x = nFeature_RNA))+
+	geom_histogram() +
+	facet_wrap(~ seuobj, nrow = 2)+
+  theme_classic() +
+  geom_vline(xintercept = 200, linetype = 2)
+```
+Summarize as a table
+```{r}
+seulist %>%
+  map_dfr(~.x@meta.data, .id = "seuobj") %>%
+  group_by(seuobj) %>%
+  summarize(min = min(nFeature_RNA),
+            mean = mean(nFeature_RNA),
+            max = max(nFeature_RNA))
+```
+
+Are there any cells with more than 5% mitochondrial genes?
+```{r}
+seulist %>%
+  map_dfr(~.x@meta.data, .id = "seuobj") %>%
+  ggplot(aes(x = percent.mt))+
+	geom_histogram() +
+	facet_wrap(~ seuobj, nrow = 2)+
+  theme_classic() +
+  geom_vline(xintercept = 5, linetype = 2)
+```
+Summarize as a table
+```{r}
+seulist %>%
+  map_dfr(~.x@meta.data, .id = "seuobj") %>%
+  group_by(seuobj) %>%
+  summarize(min = min(percent.mt),
+            mean = mean(percent.mt),
+            max = max(percent.mt))
+```
+
 
 ## Transform counts
 
@@ -54,7 +161,7 @@ names(seulist.filt)
 
 First, take a look at how data are structured inside the filtered seurat object
 ```{r}
-tem <- seulist.filt$Tem
+tem <- seulist$Tem
 
 Assays(tem)
 tem@assays
@@ -120,10 +227,10 @@ Normalize each of the seurat objects in the list.
 
 Here is an example of how to do this with a for-loop
 ```{r}
-sampleNames <- names(seulist.filt)
+sampleNames <- names(seulist)
 seulist.n <- list()
 for(i in 1:length(sampleNames)){
-  seulist.n[[i]] <- NormalizeData(object = seulist.filt[[i]], normalization.method = "LogNormalize", 
+  seulist.n[[i]] <- NormalizeData(object = seulist[[i]], normalization.method = "LogNormalize", 
                                   scale.factor = 10000)
 }
 names(seulist.n) <- sampleNames
@@ -131,7 +238,7 @@ names(seulist.n) <- sampleNames
 
 Here is an example of how to this using purrr::map and pipes
 ```{r}
-# seulist.filt %>%
+# seulist %>%
 #   map(~NormalizeData(object = .x, normalization.method = "LogNormalize", scale.factor = 10000)) -> seulist.n
 ```
 
@@ -299,8 +406,8 @@ dimRed_and_cluster <- function(seuobj){
 
 Apply that function to each seurat object in the list of objects that we normalized
 ```{r}
-# seulist.n %>%
-#   map(~dimRed_and_cluster(.x)) -> seulist.drc
+#seulist.n %>%
+#  map(~dimRed_and_cluster(.x)) -> seulist.drc
 # this takes a minute or two, so we can just load a version that we previously created, cooking-show style.
 
 # Students will not be able to run the saveRDS command because 
@@ -457,20 +564,62 @@ p4 = Cluster 5
 
 We can add this information to the tem seurat object metadata
 ```{r}
-
+new.cluster.ids <- c("p1", "p1", "p1", 
+                     "p2", 
+                     "p3", 
+                     "p4")
+levels(tem)
+names(new.cluster.ids) <- levels(tem)
+tem <- RenameIdents(tem, new.cluster.ids)
 ```
 
 Based on these updated classifications, we can re-color the tSNE plot
 ```{r}
-
+DimPlot(tem, reduction = "tsne", label = TRUE, pt.size = 0.5)
 ```
 
 We can also perform DE analyses between p4 and p2. 
 ```{r}
-# find all markers distinguishing cluster 5 from clusters 0 and 3
-#cluster5.markers <- FindMarkers(pbmc, ident.1 = 5, ident.2 = c(0, 3), min.pct = 0.25)
-#head(cluster5.markers, n = 5)
+p4v2markers <- FindMarkers(tem, ident.1 = "p4", ident.2 = "p2", min.pct = 0.25)
 ```
+Examine up-regulated genes in p4 as compared to p2
+```{r}
+p4v2markers %>%
+  slice_max(n = 5, order_by = avg_log2FC) %>%
+  arrange(-avg_log2FC) -> upGenes
+upGenes
+```
+Examine down-regulated genes in p4 as compared to p2
+```{r}
+p4v2markers %>%
+  slice_min(n = 5, order_by = avg_log2FC) %>%
+  arrange(avg_log2FC) -> downGenes
+downGenes
+```
+
+Are these statements true...?
+
+"Elevated levels of Cxcr6 in TEff/EM p4 are associated with enhanced Pdcd1 expression, in opposition to Il7r and Il18r1 expression, which are expressed in TEff/EM p2." (Christian 2021 Cell Reports)
+
+```{r}
+p4v2markers %>%
+  rownames_to_column(var = "gene") %>%
+  filter(gene == "Pdcd1")
+```
+```{r}
+p4v2markers %>%
+  rownames_to_column(var = "gene") %>%
+  filter(gene %in% c("Il7r","Il18r1"))
+```
+
+"T cell activation markers Gzmb, Klrc1/2, and Klrd1 are upregulated in TEFF/TEM p4" (Christian 2021 Cell Reports)
+
+```{r}
+p4v2markers %>%
+  rownames_to_column(var = "gene") %>%
+  filter(gene %in% c("Gzmb","Klrc1", "Klrc2","Klrd1")) 
+```
+
 
 These results will be used to reproduce... 
 
@@ -478,13 +627,12 @@ These results will be used to reproduce...
 (B) Elevated levels of Cxcr6 in TEff/EM p4 are associated with enhanced Pdcd1 expression, in opposition to Il7r and Il18r1 expression, which are expressed in TEff/EM p2. Classical exhaustion markers Nr4a1, Lag3, and Havcr2 were upregulated in the tumor TEff/EM p4 population.
 (C) Volcano plot of gene expression between tumor TEff/EM p2 (left) and TEff/EM p4 (right) shows that T cell activation markers Gzmb, Klrc1/2, and Klrd1 are upregulated in TEFF/TEM p4, indicating it is effector like."
 
-
-X in Fig 5B
+Fig 5B
 ```{r}
 
 ```
 
-Volcano plot in Fig 5C
+Fig 5C
 ```{r}
 
 ```

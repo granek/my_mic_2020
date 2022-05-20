@@ -1,6 +1,8 @@
 ---
 title: "QC scRNAseq"
 output: html_notebook
+editor_options: 
+  chunk_output_type: inline
 ---
 ```{r prereqs}
 knitr::opts_chunk$set(echo = T, message = FALSE, warning = FALSE)
@@ -11,10 +13,8 @@ library(tidyverse)
 library(Seurat)
 
 # Input paths
-wd <- "/hpc/group/chsi-mic-2022"
-datadirs <- list.files(path = file.path(wd, "data"), pattern = "_10x", full.names = T)
-datadirs <- datadirs[!grepl(".h5", datadirs)]
-intermeddir <- file.path(wd, "intermed")
+cr.outs <- "/hpc/group/chsi-mic-2022/data/pbmc8k/pbmc8k/outs"
+intermeddir <- "/hpc/group/chsi-mic-2022/intermed"
 
 # Output paths
 scratchdir <- "/work"
@@ -24,17 +24,11 @@ outdir <- file.path(scratchdir,username,"output")
 ```
 
 **Data source:** 
-Christian et al. 2021 Cell Reports (https://doi.org/10.1016/j.celrep.2021.109118)
+scRNA-seq dataset of 8K human peripheral blood mononuclear cells (PBMCs) freely available from 10X Genomics (https://support.10xgenomics.com/single-cell-gene-expression/datasets/2.1.0/pbmc8k)
 
 **Goal of this script:** QC
 
-**Methods overview:**
-
-- Pre-processing: "Raw short reads were demultiplexed, filtering and mapped to mouse genome GRCm38/mm10 using cellranger v2.02. 
-
-- QC: The gene count matrices from cellranger were subjected to quality control, pre-processing and clustering using the R Seurat 2.3.4 package (Butler et al., 2018). Low-quality cells that had less than 200 expressed genes and more than 5% mitochondrial genes were filtered out. 
-
-- Analysis: Gene counts were scaled to total gene expression and percentage of mitochondrial genes with a scaling factor of 10,000, and then log-transformed. The high dimensional data for each sample were reduced by PCA and t-Distributed Stochastics Neighbor Embedding (tSNE). We used the FindCluster function to group clusters in each sample with a resolution of 0.6. Differential expressed genes (DEGs) were identified using the Wilcoxon rank-sum test."
+Example of QC filtering statement in methods of Christian et al. 2021 Cell Reports (https://doi.org/10.1016/j.celrep.2021.109118): The gene count matrices from cellranger were subjected to quality control, pre-processing and clustering using the R Seurat 2.3.4 package (Butler et al., 2018). Low-quality cells that had less than 200 expressed genes and more than 5% mitochondrial genes were filtered out. 
 
 
 ## Load Seurat objects
@@ -42,39 +36,17 @@ Christian et al. 2021 Cell Reports (https://doi.org/10.1016/j.celrep.2021.109118
 We can use code like this to load the cell ranger output and store it in a Seurat object.
 
 ```{r}
-readin_10x_to_SO <- function(sample, path, min.cells = 0, min.genes = 0){
-  Seurat::Read10X(data.dir = path) %>%
-    Seurat::CreateSeuratObject(project = sample, 
-                               min.cells=min.cells, min.genes=min.genes) -> seu.obj
-  return(seu.obj)
-}
+Seurat::Read10X_h5(file.path(cr.outs, "filtered_feature_bc_matrix.h5")) %>% 
+  Seurat::CreateSeuratObject() -> pbmc8k
+pbmc8k
 ```
 
-Load the four 10x datasets that correspond to T cells sampled in and outside of the tumor. See Fig 2A for tSNE plots of each sample type.
-
-- Tem = effector memory in tumor
-- Tcm = central memory in tumor
-- Trm = resident memory in tumor
-- disTrm = resident memory T-cells outside of the tumor 
-
-```{r}
-sampleNames <- gsub("_10x","", basename(datadirs))
-sampleNames
-
-seulist <- list()
-for(i in 1:length(sampleNames)){
-  seulist[[i]] <- readin_10x_to_SO(sample = sampleNames[i], path = datadirs[i])
-}
-names(seulist) <- sampleNames
-seulist
-```
 
 ## Add mitrochondiral gene percentage
 
 First, take look at the existing cell-level metadata in one of the seurat objects
 ```{r}
-seulist %>%
-  map(~head(.x@meta.data))
+head(pbmc8k@meta.data)
 ```
 
 orig.ident = sample name
@@ -83,33 +55,16 @@ nFeature_RNA = number of gene features per cell
 
 The rownames are gene symbols. Investigating the names a bit more, the mitochondrial genes can be identified by the prefix "mt-"
 ```{r}
-tem <- seulist$Tem
-curr.count <- tem@assays$RNA@counts
+curr.count <- pbmc8k@assays$RNA@counts
 rownames(curr.count)[1:10]
-rownames(curr.count)[grepl("^mt-", rownames(curr.count))] # these look like mitochondrial genes!
+rownames(curr.count)[grepl("^MT-", rownames(curr.count))] # these look like mitochondrial genes!
 ```
 
 Add the mitochondrial percentage for 1 seurat object
 ```{r}
-head(tem@meta.data)
-tem[["percent.mt"]] <- PercentageFeatureSet(tem, pattern = "^mt-")
-head(tem@meta.data)
-```
-
-Now, do the same thing but for all seurat objects in our list
-```{r}
-add_mt <- function(so){
-  so[["percent.mt"]] <- PercentageFeatureSet(so, pattern = "^mt-")
-  return(so)
-}
-
-seulist %>%
-  map(~add_mt(.x)) -> seulist.mt
-
-seulist.mt %>%
-  map(~head(.x@meta.data))
-
-seulist <- seulist.mt
+head(pbmc8k@meta.data)
+pbmc8k[["percent.mt"]] <- PercentageFeatureSet(pbmc8k, pattern = "^MT-")
+head(pbmc8k@meta.data)
 ```
 
 
@@ -121,9 +76,8 @@ Number of molecules aka reads detected per cell (nCount)
 - A very high number of reads per cell could indicate more than one cell was actually sequenced.
 
 ```{r}
-seulist %>%
-  map_dfr(~.x@meta.data, .id = "seuobj") %>%
-  ggplot(aes(x = seuobj, y = nCount_RNA))+
+pbmc8k@meta.data %>%
+  ggplot(aes(x = orig.ident, y = nCount_RNA))+
 	geom_jitter(shape = 16, position = position_jitter(0.2))+
 	geom_violin(trim = F, alpha = 0.7) +
   labs(x = "Group", y = "nCount") +
@@ -137,9 +91,8 @@ Number of gene features detected per cell (nFeature)
 - A very low number of gene features per cell could indicate a library prep or sequencing failure.
 
 ```{r}
-seulist %>%
-  map_dfr(~.x@meta.data, .id = "seuobj") %>%
-  ggplot(aes(x = seuobj, y = nFeature_RNA))+
+pbmc8k@meta.data %>%
+  ggplot(aes(x = orig.ident, y = nFeature_RNA))+
 	geom_jitter(shape = 16, position = position_jitter(0.2))+
 	geom_violin(trim = F, alpha = 0.7)+
   labs(x = "Group", y = "nFeature") +
@@ -153,9 +106,8 @@ Percentage of mitochondrial genes per cell (MT%)
 - A high percentage of mitochondrial genes (MT%) indicates a cell may be dead or dying based on the expectation that, if a cell is ruptured, non-MT genes will leak out first and increase the relative abundance of MT genes.
 
 ```{r}
-seulist %>%
-  map_dfr(~.x@meta.data, .id = "seuobj") %>%
-  ggplot(aes(x = seuobj, y = percent.mt)) +
+pbmc8k@meta.data %>%
+  ggplot(aes(x = orig.ident, y = percent.mt)) +
   geom_jitter(shape=16, position=position_jitter(0.2))+
 	geom_violin(trim=FALSE, alpha=0.7)+
   scale_y_continuous(limits = c(0, 10)) +
@@ -171,12 +123,10 @@ Correlation between nCounts and nFeatures, colored by MT%
 - The number of gene features detected in a cell (nFeatures) tends to increase with library size (nCounts). Divergence from this correlation could indicate low-quality data, e.g. often observed in high MT% cells.
 
 ```{r}
-seulist %>%
-  map_dfr(~.x@meta.data, .id = "seuobj") %>%
+pbmc8k@meta.data %>%
   ggplot(aes(x = nCount_RNA, y = nFeature_RNA, 
                 color = percent.mt))+
 	geom_point(size = 1)+
-	facet_wrap(~ seuobj, nrow = 2)+
 	labs(x = "nCount", y = "nFeature", color = "MT%") +
   theme_classic() +
   geom_hline(yintercept = 200, linetype = 2)
@@ -186,8 +136,6 @@ seulist %>%
 ## Filter cells
 
 "Low-quality cells that had less than 200 expressed genes and more than 5% mitochondrial genes were filtered out."
-
-It looks like the counts have already been filtered base on these criteria, but we can double-check. We will also examine the number of reads per cell
 
 
 ### nCount
@@ -202,13 +150,11 @@ Filter out cells with log(nCount) $>$ `ch` \& $<$ `cl`
 - Note: Different y-axis scales
 
 ```{r}
-seulist %>%
-  map_dfr(~.x@meta.data, .id = "seuobj") %>%
+pbmc8k@meta.data %>%
   ggplot(aes(x = log(nCount_RNA))) +
   geom_histogram(bins = 50) +
   geom_vline(xintercept = c(cl, ch), 
              color = "blue", linetype = "dashed") +
-  facet_wrap(~ seuobj, scales = "free_y", nrow = 2) +
   labs(x = "log(nCount)", y = "Frequency") +
   scale_x_continuous(breaks = seq(0, 10, 1)) +
   theme_classic()
@@ -226,14 +172,12 @@ Filtering out cells with log(nFeature) $<$ `fl`
 - Note: Different y-axis scales
 
 ```{r}
-seulist %>%
-  map_dfr(~.x@meta.data, .id = "seuobj") %>%
+pbmc8k@meta.data %>%
   ggplot(aes(x = log(nFeature_RNA))) +
   geom_histogram(bins = 100) +
   geom_vline(xintercept = fl, 
              color = "blue", linetype = "dashed") +
   scale_x_continuous(breaks = c(seq(0, 20, 1), fl)) +
-  facet_wrap(~ seuobj, scales = "free_y", nrow = 3) +
   labs(x = "log(nCount)", y = "Frequency") +
   theme_classic()
 ```
@@ -244,8 +188,7 @@ seulist %>%
 ```{r}
 tmp <- lapply(seq(1, 40, 1), function(v){
   
-  seulist %>%
-  map_dfr(~.x@meta.data, .id = "seuobj") %>%
+  pbmc8k@meta.data %>%
     group_by(orig.ident) %>%
     summarize(threshold = v, 
               ncells_kept = sum(percent.mt < v),
@@ -270,14 +213,12 @@ ggplot(tmp, aes(x=threshold, y=ncells, colour=type))+
 Filtering out cells with MT% $>$ `ml`
 There aren't any of these cells because they have already been filtered.
 ```{r}
-seulist %>%
-  map_dfr(~.x@meta.data, .id = "seuobj") %>%
+pbmc8k@meta.data %>%
   ggplot(aes(x = percent.mt)) +
-  geom_histogram(bins = 100, fill = NA) +
+  geom_histogram(bins = 100) +
   geom_vline(xintercept = ml,
              color = "blue", linetype = "dashed") +
   # scale_x_continuous(breaks = c(seq(2, 14, 2), fl)) +
-  facet_wrap(~ orig.ident, scales = "free_y", nrow = 3) +
   labs(x = "MT%", y = "Frequency") +
   theme_classic()
 ```
@@ -287,9 +228,7 @@ seulist %>%
 Pre
 
 ```{r}
-seulist %>%
-  map_dfr(~.x@meta.data, .id = "seuobj") %>%
-  pull(seuobj) %>% table()
+nrow(pbmc8k@meta.data)
 ```
 
 Filter 
@@ -304,24 +243,21 @@ seu_filt <- function(seuobj){
   return(seuobj_filt)
 }
 
-seulist %>%
-  map(~seu_filt(.x)) -> seulist.filt
-
-# Students will not be able to run the saveRDS command because 
-# everything the data/ and intermed/ folders will need to be write-protected
-saveRDS(seulist.filt, file = file.path(intermeddir, "seulist-filt.rds"))
-#seulist.filt <- readRDS(file.path(intermeddir, "seulist-filt.rds"))
+pbmc8k.filt <- seu_filt(seuobj = pbmc8k)
 ```
 
 Post
 
 ```{r}
-seulist.filt %>%
-  map_dfr(~.x@meta.data, .id = "seuobj") %>%
-  pull(seuobj) %>% table()
+nrow(pbmc8k.filt@meta.data)
 ```
 
-This stayed the same because our filtering criteria did not remove any cells.
+Number of cells removed by filtering
+```{r}
+nrow(pbmc8k@meta.data) - nrow(pbmc8k.filt@meta.data)
+```
+
+
 
 
 ## Final QC
@@ -329,9 +265,8 @@ This stayed the same because our filtering criteria did not remove any cells.
 nCount
 
 ```{r}
-seulist.filt %>%
-  map_dfr(~.x@meta.data, .id = "seuobj") %>%
-  ggplot(aes(x = seuobj, y = nCount_RNA))+
+pbmc8k.filt@meta.data %>%
+  ggplot(aes(x = orig.ident, y = nCount_RNA))+
 	geom_jitter(shape = 16, position = position_jitter(0.2))+
 	geom_violin(trim = F, alpha = 0.7) +
   labs(x = "Group") +
@@ -342,9 +277,8 @@ seulist.filt %>%
 nFeature
 
 ```{r}
-seulist.filt %>%
-  map_dfr(~.x@meta.data, .id = "seuobj") %>%
-  ggplot(aes(x = seuobj, y = nFeature_RNA)) +
+pbmc8k.filt@meta.data %>%
+  ggplot(aes(x = orig.ident, y = nFeature_RNA)) +
 	geom_jitter(shape = 16, position = position_jitter(0.2))+
 	geom_violin(trim = F, alpha = 0.7)+
   labs(x = "Group") +
@@ -355,9 +289,8 @@ seulist.filt %>%
 MT%
 
 ```{r}
-seulist.filt %>%
-  map_dfr(~.x@meta.data, .id = "seuobj") %>%
-  ggplot(aes(x = seuobj, y = percent.mt)) +
+pbmc8k.filt@meta.data %>%
+  ggplot(aes(x = orig.ident, y = percent.mt)) +
   geom_jitter(shape=16, position=position_jitter(0.2))+
 	geom_violin(trim=FALSE, alpha=0.7)+
   labs(x = "Group", y = "MT%") +
@@ -368,12 +301,10 @@ seulist.filt %>%
 Correlation between nCounts and nFeatures, colored by MT%
 
 ```{r}
-seulist.filt %>%
-  map_dfr(~.x@meta.data, .id = "seuobj") %>%
+pbmc8k.filt@meta.data %>%
   ggplot(aes(x = nCount_RNA, y = nFeature_RNA, 
                 color = percent.mt))+
 	geom_point(size = 1)+
-	facet_wrap(~ seuobj, nrow = 3)+
 	labs(x = "nCount", y = "nFeature", color = "MT%") +
   theme_classic()
 ```
