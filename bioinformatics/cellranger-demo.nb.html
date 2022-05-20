@@ -268,69 +268,67 @@ drwxr-s---. 4 mrl17 chsi-mic-2022  83 May 20 13:54 pbmc8k</code></pre>
 <!-- rnb-source-end -->
 <!-- rnb-chunk-end -->
 <!-- rnb-text-begin -->
-<p><strong>Note that wget didn’t work</strong> –2022-05-20 16:57:10– <a href="https://cf.10xgenomics.com/supp/cell-exp/cellranger-tiny-bcl-simple-1.2.0.csv" class="uri">https://cf.10xgenomics.com/supp/cell-exp/cellranger-tiny-bcl-simple-1.2.0.csv</a> Resolving cf.10xgenomics.com (cf.10xgenomics.com)… 2606:4700::6812:1ad, 2606:4700::6812:ad Connecting to cf.10xgenomics.com (cf.10xgenomics.com)|2606:4700::6812:1ad|:443… failed: Network is unreachable. Connecting to cf.10xgenomics.com (cf.10xgenomics.com)|2606:4700::6812:ad|:443… failed: Network is unreachable.</p>
 </div>
 <div id="get-fastqs-for-the-pbmc8k-dataset" class="section level1">
 <h1>Get fastqs for the pbmc8k dataset</h1>
 <!-- rnb-text-end -->
 <!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgYmFzaFxuI3dnZXQgaHR0cDovL3MzLXVzLXdlc3QtMi5hbWF6b25hd3MuY29tLzEweC5maWxlcy9zYW1wbGVzL2NlbGwtZXhwLzIuMS4wL3BibWM4ay9wYm1jOGtfZmFzdHFzLnRhclxuYGBgIn0= -->
-<pre class="bash"><code>#wget http://s3-us-west-2.amazonaws.com/10x.files/samples/cell-exp/2.1.0/pbmc8k/pbmc8k_fastqs.tar</code></pre>
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgYmFzaFxuI21rZGlyIHBibWM4a1xuI3dnZXQgLS1kaXJlY3RvcnktcHJlZml4PXBibWM4ay8gaHR0cDovL3MzLXVzLXdlc3QtMi5hbWF6b25hd3MuY29tLzEweC5maWxlcy9zYW1wbGVzL2NlbGwtZXhwLzIuMS4wL3BibWM4ay9wYm1jOGtfZmFzdHFzLnRhclxuYGBgIn0= -->
+<pre class="bash"><code>#mkdir pbmc8k
+#wget --directory-prefix=pbmc8k/ http://s3-us-west-2.amazonaws.com/10x.files/samples/cell-exp/2.1.0/pbmc8k/pbmc8k_fastqs.tar</code></pre>
 <!-- rnb-source-end -->
 <!-- rnb-chunk-end -->
 <!-- rnb-text-begin -->
 </div>
 <div id="run-cellranger" class="section level1">
 <h1>Run Cellranger</h1>
-<p><strong>NOTE</strong> Need to update paths and link the cellranger sif</p>
-<p>Make sure that the cellranger singularity container works</p>
+<p>Make sure that the cellranger works from within the course singularity container</p>
 <!-- rnb-text-end -->
 <!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgYmFzaFxuc2luZ3VsYXJpdHkgZXhlYyAvb3B0L05HUy9zaW5ndWxhcml0eS9jZWxscmFuZ2VyLnNpZiBjZWxscmFuZ2VyIC0tdmVyc2lvblxuYGBgIn0= -->
-<pre class="bash"><code>singularity exec /opt/NGS/singularity/cellranger.sif cellranger --version</code></pre>
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgYmFzaFxuY2VsbHJhbmdlciAtLXZlcnNpb25cbmBgYCJ9 -->
+<pre class="bash"><code>cellranger --version</code></pre>
 <!-- rnb-source-end -->
+<!-- rnb-output-begin eyJkYXRhIjoiY2VsbHJhbmdlciBjZWxscmFuZ2VyLTYuMS4yXG4ifQ== -->
+<pre><code>cellranger cellranger-6.1.2</code></pre>
+<!-- rnb-output-end -->
 <!-- rnb-chunk-end -->
 <!-- rnb-text-begin -->
+<p><strong>NOTE!</strong></p>
+<ul>
+<li>I haven’t actually run the cellranger commands in the course workspace, I just copied /outs from plp server and updated the paths above</li>
+<li>We would need to a copy #ANNO=/mnt/data2/Annotation/CellRanger/refdata-gex-GRCh38-2020-A/ to the workspace</li>
+</ul>
 <p>Run cellranger’s mkfastq command to reformat BCL files into fastqs</p>
 <!-- rnb-text-end -->
 <!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjpbInNpbmd1bGFyaXR5ICBleGVjIFxcIiwiICAgIC0taG9tZSAvbW50L3Byb2MvIFxcIiwiICAgIC0tYmluZCAvbW50L2RhdGExL3dvcmtzcGFjZS9NSUMvMjAyMi9EYXRhL2NyYW5nZXJiY2wvY2VsbHJhbmdlci10aW55LWJjbC0xLjIuMC86L21udC9iY2wvOnJvIFxcIiwiICAgIC0tYmluZCAvbW50L2RhdGExL3dvcmtzcGFjZS9NSUMvMjAyMi9EYXRhL2NyYW5nZXJiY2wvY2VsbHJhbmdlci10aW55LWNzdi0xLjIuMC86L21udC9jc3YvOnJvIFxcIiwiICAgIC0tYmluZCAvbW50L2RhdGExL3dvcmtzcGFjZS9NSUMvMjAyMi9QUk9DL2NlbGxyYW5nZXItdGlueS1wcm9jLzovbW50L3Byb2MvOnJ3IFxcIiwiICAgIC9vcHQvTkdTL3Npbmd1bGFyaXR5L2NlbGxyYW5nZXIuc2lmIFxcIiwiICAgIGNlbGxyYW5nZXIgbWtmYXN0cSBcXCIsIiAgICAtLXJ1bj0vbW50L2JjbC8gXFwiLCIgICAgLS1jc3Y9L21udC9jc3YvY2VsbHJhbmdlci10aW55LWJjbC1zaW1wbGUtMS4yLjAuY3N2IFxcIiwiICAgIC0tb3V0cHV0LWRpcj0vbW50L3Byb2MvIl19 -->
-<pre class="r"><code>singularity  exec \
-    --home /mnt/proc/ \
-    --bind /mnt/data1/workspace/MIC/2022/Data/crangerbcl/cellranger-tiny-bcl-1.2.0/:/mnt/bcl/:ro \
-    --bind /mnt/data1/workspace/MIC/2022/Data/crangerbcl/cellranger-tiny-csv-1.2.0/:/mnt/csv/:ro \
-    --bind /mnt/data1/workspace/MIC/2022/PROC/cellranger-tiny-proc/:/mnt/proc/:rw \
-    /opt/NGS/singularity/cellranger.sif \
-    cellranger mkfastq \
-    --run=/mnt/bcl/ \
-    --csv=/mnt/csv/cellranger-tiny-bcl-simple-1.2.0.csv \
-    --output-dir=/mnt/proc/</code></pre>
+<!-- rnb-source-begin eyJkYXRhIjpbIkRBVEFESVI9L2hwYy9ncm91cC9jaHNpLW1pYy0yMDIyL2RhdGEiLCJCQ0xTPSR7REFUQURJUn0vY2VsbHJhbmdlci10aW55LWJjbC0xLjIuMCIsIlNBTVA9JHtCQ0xTfS9jZWxscmFuZ2VyLXRpbnktYmNsLXNpbXBsZS0xLjIuMC5jc3YiLCJGQVNUUT0ke0RBVEFESVJ9L3BibWM4ay9mYXN0cSIsImNlbGxyYW5nZXIgbWtmYXN0cSBcXCIsIiAgICAtLXJ1bj0ke0JDTFN9IFxcIiwiICAgIC0tY3N2PSR7U0FNUH0gXFwiLCIgICAgLS1vdXRwdXQtZGlyPSR7RkFTVFF9Il19 -->
+<pre class="r"><code>DATADIR=/hpc/group/chsi-mic-2022/data
+BCLS=${DATADIR}/cellranger-tiny-bcl-1.2.0
+SAMP=${BCLS}/cellranger-tiny-bcl-simple-1.2.0.csv
+FASTQ=${DATADIR}/pbmc8k/fastq
+cellranger mkfastq \
+    --run=${BCLS} \
+    --csv=${SAMP} \
+    --output-dir=${FASTQ}</code></pre>
 <!-- rnb-source-end -->
 <!-- rnb-chunk-end -->
 <!-- rnb-text-begin -->
 <p>Run cellranger’s count command to map reads to the reference transcriptome and count the reads per feature</p>
 <!-- rnb-text-end -->
 <!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjpbInNpbmd1bGFyaXR5ICBleGVjIFxcIiwiICAgIC0taG9tZSAvbW50L2RhdGExL3dvcmtzcGFjZS9NSUMvMjAyMi9EYXRhL3BibWM4ay8gXFwiLCIgICAgLS1iaW5kIC9tbnQvZGF0YTEvd29ya3NwYWNlL01JQy8yMDIyL0RhdGEvcGJtYzhrL2Zhc3Rxcy86L21udC9mYXN0cTpybyBcXCIsIiAgICAtLWJpbmQgL21udC9kYXRhMi9Bbm5vdGF0aW9uL0NlbGxSYW5nZXIvcmVmZGF0YS1nZXgtR1JDaDM4LTIwMjAtQS86L21udC9hbm5vLzpybyBcXCIsIiAgICAvb3B0L05HUy9zaW5ndWxhcml0eS9jZWxscmFuZ2VyLnNpZiBcXCIsIiAgICBjZWxscmFuZ2VyIGNvdW50IFxcIiwiICAgIC0taWQ9cGJtYzhrIFxcIiwiICAgIC0tc2FtcGxlPXBibWM4ayBcXCIsIiAgICAtLWZhc3RxcyAvbW50L2Zhc3RxLyBcXCIsIiAgICAtLXRyYW5zY3JpcHRvbWU9L21udC9hbm5vLyBcXCIsIiAgICAtLWxvY2FsY29yZXMgMjAiXX0= -->
-<pre class="r"><code>singularity  exec \
-    --home /mnt/data1/workspace/MIC/2022/Data/pbmc8k/ \
-    --bind /mnt/data1/workspace/MIC/2022/Data/pbmc8k/fastqs/:/mnt/fastq:ro \
-    --bind /mnt/data2/Annotation/CellRanger/refdata-gex-GRCh38-2020-A/:/mnt/anno/:ro \
-    /opt/NGS/singularity/cellranger.sif \
-    cellranger count \
+<!-- rnb-source-begin eyJkYXRhIjpbIiNBTk5PPS9tbnQvZGF0YTIvQW5ub3RhdGlvbi9DZWxsUmFuZ2VyL3JlZmRhdGEtZ2V4LUdSQ2gzOC0yMDIwLUEvIiwiY2VsbHJhbmdlciBjb3VudCBcXCIsIiAgICAtLWlkPXBibWM4ayBcXCIsIiAgICAtLXNhbXBsZT1wYm1jOGsgXFwiLCIgICAgLS1mYXN0cXMgJHtGQVNUUX0gXFwiLCIgICAgLS10cmFuc2NyaXB0b21lPSR7QU5OT30gXFwiLCIgICAgLS1sb2NhbGNvcmVzIDIwIl19 -->
+<pre class="r"><code>#ANNO=/mnt/data2/Annotation/CellRanger/refdata-gex-GRCh38-2020-A/
+cellranger count \
     --id=pbmc8k \
     --sample=pbmc8k \
-    --fastqs /mnt/fastq/ \
-    --transcriptome=/mnt/anno/ \
+    --fastqs ${FASTQ} \
+    --transcriptome=${ANNO} \
     --localcores 20</code></pre>
 <!-- rnb-source-end -->
 <!-- rnb-chunk-end -->
-<!-- rnb-text-begin -->
-<p>```</p>
-<!-- rnb-text-end -->
 </div>
 
-<div id="rmd-source-code">LS0tCnRpdGxlOiAiQ2VsbHJhbmdlciBEZW1vIgpvdXRwdXQ6IGh0bWxfbm90ZWJvb2sKLS0tCmBgYHtyfQprbml0cjo6b3B0c19jaHVuayRzZXQoZWNobyA9IFQsIG1lc3NhZ2UgPSBGQUxTRSwgd2FybmluZyA9IEZBTFNFKQpzdGR0PC1kYXRlKCkKYGBgCgojIE5hdmlnYXRlIHRvIGRhdGEgZGlyZWN0b3J5CmBgYHtiYXNofQpEQVRBRElSPS9ocGMvZ3JvdXAvY2hzaS1taWMtMjAyMi9kYXRhCmNkICR7REFUQURJUn0KcHdkCmxzIC1sCmBgYAoKIyBCQ0wgZmlsZXMKCkdldCB0YXIgb2YgYmNsIGZpbGVzIGFuZCB1bnppcCB0aGVtCmBgYHtiYXNofQojd2dldCAtUCAvaHBjL2dyb3VwL2Noc2ktbWljLTIwMjIvZGF0YSBodHRwczovL2NmLjEweGdlbm9taWNzLmNvbS9zdXBwL2NlbGwtZXhwL2NlbGxyYW5nZXItdGlueS1iY2wtMS4yLjAudGFyLmd6XAojdGFyIC16eHZmIC9ocGMvZ3JvdXAvY2hzaS1taWMtMjAyMi9kYXRhL2NlbGxyYW5nZXItdGlueS1iY2wtMS4yLjAudGFyLmd6CmBgYAoKIyBHZXQgc2FtcGxlIHNoZWV0CmBgYHtiYXNofQojbWtkaXIgY2VsbHJhbmdlci10aW55LWNzdi0xLjIuMC8KI3dnZXQgLS1kaXJlY3RvcnktcHJlZml4PWNlbGxyYW5nZXItdGlueS1jc3YtMS4yLjAvIGh0dHBzOi8vY2YuMTB4Z2Vub21pY3MuY29tL3N1cHAvY2VsbC1leHAvY2VsbHJhbmdlci10aW55LWJjbC1zaW1wbGUtMS4yLjAuY3N2CmBgYAoKKipOb3RlIHRoYXQgd2dldCBkaWRuJ3Qgd29yayoqCi0tMjAyMi0wNS0yMCAxNjo1NzoxMC0tICBodHRwczovL2NmLjEweGdlbm9taWNzLmNvbS9zdXBwL2NlbGwtZXhwL2NlbGxyYW5nZXItdGlueS1iY2wtc2ltcGxlLTEuMi4wLmNzdgpSZXNvbHZpbmcgY2YuMTB4Z2Vub21pY3MuY29tIChjZi4xMHhnZW5vbWljcy5jb20pLi4uIDI2MDY6NDcwMDo6NjgxMjoxYWQsIDI2MDY6NDcwMDo6NjgxMjphZApDb25uZWN0aW5nIHRvIGNmLjEweGdlbm9taWNzLmNvbSAoY2YuMTB4Z2Vub21pY3MuY29tKXwyNjA2OjQ3MDA6OjY4MTI6MWFkfDo0NDMuLi4gZmFpbGVkOiBOZXR3b3JrIGlzIHVucmVhY2hhYmxlLgpDb25uZWN0aW5nIHRvIGNmLjEweGdlbm9taWNzLmNvbSAoY2YuMTB4Z2Vub21pY3MuY29tKXwyNjA2OjQ3MDA6OjY4MTI6YWR8OjQ0My4uLiBmYWlsZWQ6IE5ldHdvcmsgaXMgdW5yZWFjaGFibGUuCgojIEdldCBmYXN0cXMgZm9yIHRoZSBwYm1jOGsgZGF0YXNldApgYGB7YmFzaH0KI3dnZXQgaHR0cDovL3MzLXVzLXdlc3QtMi5hbWF6b25hd3MuY29tLzEweC5maWxlcy9zYW1wbGVzL2NlbGwtZXhwLzIuMS4wL3BibWM4ay9wYm1jOGtfZmFzdHFzLnRhcgpgYGAKCiMgUnVuIENlbGxyYW5nZXIKCioqTk9URSoqIE5lZWQgdG8gdXBkYXRlIHBhdGhzIGFuZCBsaW5rIHRoZSBjZWxscmFuZ2VyIHNpZgoKTWFrZSBzdXJlIHRoYXQgdGhlIGNlbGxyYW5nZXIgc2luZ3VsYXJpdHkgY29udGFpbmVyIHdvcmtzCmBgYHtiYXNofQpzaW5ndWxhcml0eSBleGVjIC9vcHQvTkdTL3Npbmd1bGFyaXR5L2NlbGxyYW5nZXIuc2lmIGNlbGxyYW5nZXIgLS12ZXJzaW9uCmBgYAoKUnVuIGNlbGxyYW5nZXIncyBta2Zhc3RxIGNvbW1hbmQgdG8gcmVmb3JtYXQgQkNMIGZpbGVzIGludG8gZmFzdHFzCmBgYHtiYXNoIGV2YWw9RkFMU0V9CnNpbmd1bGFyaXR5ICBleGVjIFwKICAgIC0taG9tZSAvbW50L3Byb2MvIFwKICAgIC0tYmluZCAvbW50L2RhdGExL3dvcmtzcGFjZS9NSUMvMjAyMi9EYXRhL2NyYW5nZXJiY2wvY2VsbHJhbmdlci10aW55LWJjbC0xLjIuMC86L21udC9iY2wvOnJvIFwKICAgIC0tYmluZCAvbW50L2RhdGExL3dvcmtzcGFjZS9NSUMvMjAyMi9EYXRhL2NyYW5nZXJiY2wvY2VsbHJhbmdlci10aW55LWNzdi0xLjIuMC86L21udC9jc3YvOnJvIFwKICAgIC0tYmluZCAvbW50L2RhdGExL3dvcmtzcGFjZS9NSUMvMjAyMi9QUk9DL2NlbGxyYW5nZXItdGlueS1wcm9jLzovbW50L3Byb2MvOnJ3IFwKICAgIC9vcHQvTkdTL3Npbmd1bGFyaXR5L2NlbGxyYW5nZXIuc2lmIFwKICAgIGNlbGxyYW5nZXIgbWtmYXN0cSBcCiAgICAtLXJ1bj0vbW50L2JjbC8gXAogICAgLS1jc3Y9L21udC9jc3YvY2VsbHJhbmdlci10aW55LWJjbC1zaW1wbGUtMS4yLjAuY3N2IFwKICAgIC0tb3V0cHV0LWRpcj0vbW50L3Byb2MvCmBgYAoKUnVuIGNlbGxyYW5nZXIncyBjb3VudCBjb21tYW5kIHRvIG1hcCByZWFkcyB0byB0aGUgcmVmZXJlbmNlIHRyYW5zY3JpcHRvbWUgYW5kIGNvdW50IHRoZSByZWFkcyBwZXIgZmVhdHVyZQpgYGB7YmFzaCBldmFsPUZBTFNFfQpzaW5ndWxhcml0eSAgZXhlYyBcCiAgICAtLWhvbWUgL21udC9kYXRhMS93b3Jrc3BhY2UvTUlDLzIwMjIvRGF0YS9wYm1jOGsvIFwKICAgIC0tYmluZCAvbW50L2RhdGExL3dvcmtzcGFjZS9NSUMvMjAyMi9EYXRhL3BibWM4ay9mYXN0cXMvOi9tbnQvZmFzdHE6cm8gXAogICAgLS1iaW5kIC9tbnQvZGF0YTIvQW5ub3RhdGlvbi9DZWxsUmFuZ2VyL3JlZmRhdGEtZ2V4LUdSQ2gzOC0yMDIwLUEvOi9tbnQvYW5uby86cm8gXAogICAgL29wdC9OR1Mvc2luZ3VsYXJpdHkvY2VsbHJhbmdlci5zaWYgXAogICAgY2VsbHJhbmdlciBjb3VudCBcCiAgICAtLWlkPXBibWM4ayBcCiAgICAtLXNhbXBsZT1wYm1jOGsgXAogICAgLS1mYXN0cXMgL21udC9mYXN0cS8gXAogICAgLS10cmFuc2NyaXB0b21lPS9tbnQvYW5uby8gXAogICAgLS1sb2NhbGNvcmVzIDIwCmBgYAoKCgoKCmBgYA==</div>
+<div id="rmd-source-code">LS0tCnRpdGxlOiAiQ2VsbHJhbmdlciBEZW1vIgpvdXRwdXQ6IGh0bWxfbm90ZWJvb2sKLS0tCmBgYHtyfQprbml0cjo6b3B0c19jaHVuayRzZXQoZWNobyA9IFQsIG1lc3NhZ2UgPSBGQUxTRSwgd2FybmluZyA9IEZBTFNFKQpzdGR0PC1kYXRlKCkKYGBgCgojIE5hdmlnYXRlIHRvIGRhdGEgZGlyZWN0b3J5CmBgYHtiYXNofQpEQVRBRElSPS9ocGMvZ3JvdXAvY2hzaS1taWMtMjAyMi9kYXRhCmNkICR7REFUQURJUn0KcHdkCmxzIC1sCmBgYAoKIyBCQ0wgZmlsZXMKCkdldCB0YXIgb2YgYmNsIGZpbGVzIGFuZCB1bnppcCB0aGVtCmBgYHtiYXNofQojd2dldCAtUCAvaHBjL2dyb3VwL2Noc2ktbWljLTIwMjIvZGF0YSBodHRwczovL2NmLjEweGdlbm9taWNzLmNvbS9zdXBwL2NlbGwtZXhwL2NlbGxyYW5nZXItdGlueS1iY2wtMS4yLjAudGFyLmd6XAojdGFyIC16eHZmIC9ocGMvZ3JvdXAvY2hzaS1taWMtMjAyMi9kYXRhL2NlbGxyYW5nZXItdGlueS1iY2wtMS4yLjAudGFyLmd6CmBgYAoKIyBHZXQgc2FtcGxlIHNoZWV0CmBgYHtiYXNofQojbWtkaXIgY2VsbHJhbmdlci10aW55LWNzdi0xLjIuMC8KI3dnZXQgLS1kaXJlY3RvcnktcHJlZml4PWNlbGxyYW5nZXItdGlueS1jc3YtMS4yLjAvIGh0dHBzOi8vY2YuMTB4Z2Vub21pY3MuY29tL3N1cHAvY2VsbC1leHAvY2VsbHJhbmdlci10aW55LWJjbC1zaW1wbGUtMS4yLjAuY3N2CmBgYAoKIyBHZXQgZmFzdHFzIGZvciB0aGUgcGJtYzhrIGRhdGFzZXQKYGBge2Jhc2h9CiNta2RpciBwYm1jOGsKI3dnZXQgLS1kaXJlY3RvcnktcHJlZml4PXBibWM4ay8gaHR0cDovL3MzLXVzLXdlc3QtMi5hbWF6b25hd3MuY29tLzEweC5maWxlcy9zYW1wbGVzL2NlbGwtZXhwLzIuMS4wL3BibWM4ay9wYm1jOGtfZmFzdHFzLnRhcgpgYGAKCiMgUnVuIENlbGxyYW5nZXIKCk1ha2Ugc3VyZSB0aGF0IHRoZSBjZWxscmFuZ2VyIHdvcmtzIGZyb20gd2l0aGluIHRoZSBjb3Vyc2Ugc2luZ3VsYXJpdHkgY29udGFpbmVyCmBgYHtiYXNofQpjZWxscmFuZ2VyIC0tdmVyc2lvbgpgYGAKCioqTk9URSEqKgoKLSBJIGhhdmVuJ3QgYWN0dWFsbHkgcnVuIHRoZSBjZWxscmFuZ2VyIGNvbW1hbmRzIGluIHRoZSBjb3Vyc2Ugd29ya3NwYWNlLCBJIGp1c3QgY29waWVkIC9vdXRzIGZyb20gcGxwIHNlcnZlciBhbmQgdXBkYXRlZCB0aGUgcGF0aHMgYWJvdmUKLSBXZSB3b3VsZCBuZWVkIHRvIGEgY29weSAjQU5OTz0vbW50L2RhdGEyL0Fubm90YXRpb24vQ2VsbFJhbmdlci9yZWZkYXRhLWdleC1HUkNoMzgtMjAyMC1BLyB0byB0aGUgd29ya3NwYWNlCgoKUnVuIGNlbGxyYW5nZXIncyBta2Zhc3RxIGNvbW1hbmQgdG8gcmVmb3JtYXQgQkNMIGZpbGVzIGludG8gZmFzdHFzCmBgYHtiYXNoIGV2YWwgPSBGQUxTRX0KREFUQURJUj0vaHBjL2dyb3VwL2Noc2ktbWljLTIwMjIvZGF0YQpCQ0xTPSR7REFUQURJUn0vY2VsbHJhbmdlci10aW55LWJjbC0xLjIuMApTQU1QPSR7QkNMU30vY2VsbHJhbmdlci10aW55LWJjbC1zaW1wbGUtMS4yLjAuY3N2CkZBU1RRPSR7REFUQURJUn0vcGJtYzhrL2Zhc3RxCmNlbGxyYW5nZXIgbWtmYXN0cSBcCiAgICAtLXJ1bj0ke0JDTFN9IFwKICAgIC0tY3N2PSR7U0FNUH0gXAogICAgLS1vdXRwdXQtZGlyPSR7RkFTVFF9CmBgYAoKUnVuIGNlbGxyYW5nZXIncyBjb3VudCBjb21tYW5kIHRvIG1hcCByZWFkcyB0byB0aGUgcmVmZXJlbmNlIHRyYW5zY3JpcHRvbWUgYW5kIGNvdW50IHRoZSByZWFkcyBwZXIgZmVhdHVyZQpgYGB7YmFzaCBldmFsPUZBTFNFfQojQU5OTz0vbW50L2RhdGEyL0Fubm90YXRpb24vQ2VsbFJhbmdlci9yZWZkYXRhLWdleC1HUkNoMzgtMjAyMC1BLwpjZWxscmFuZ2VyIGNvdW50IFwKICAgIC0taWQ9cGJtYzhrIFwKICAgIC0tc2FtcGxlPXBibWM4ayBcCiAgICAtLWZhc3RxcyAke0ZBU1RRfSBcCiAgICAtLXRyYW5zY3JpcHRvbWU9JHtBTk5PfSBcCiAgICAtLWxvY2FsY29yZXMgMjAKYGBgCg==</div>
 
 
 
