@@ -1,0 +1,85 @@
+---
+title: "Cellranger Demo"
+output: html_notebook
+---
+```{r}
+knitr::opts_chunk$set(echo = T, message = FALSE, warning = FALSE)
+stdt<-date()
+```
+
+# Navigate to data directory
+```{bash}
+DATADIR=/hpc/group/chsi-mic-2022/data
+cd ${DATADIR}
+pwd
+ls -l
+```
+
+# BCL files
+
+Get tar of bcl files and unzip them
+```{bash}
+#wget -P /hpc/group/chsi-mic-2022/data https://cf.10xgenomics.com/supp/cell-exp/cellranger-tiny-bcl-1.2.0.tar.gz\
+#tar -zxvf /hpc/group/chsi-mic-2022/data/cellranger-tiny-bcl-1.2.0.tar.gz
+```
+
+# Get sample sheet
+```{bash}
+#mkdir cellranger-tiny-csv-1.2.0/
+#wget --directory-prefix=cellranger-tiny-csv-1.2.0/ https://cf.10xgenomics.com/supp/cell-exp/cellranger-tiny-bcl-simple-1.2.0.csv
+```
+
+**Note that wget didn't work**
+--2022-05-20 16:57:10--  https://cf.10xgenomics.com/supp/cell-exp/cellranger-tiny-bcl-simple-1.2.0.csv
+Resolving cf.10xgenomics.com (cf.10xgenomics.com)... 2606:4700::6812:1ad, 2606:4700::6812:ad
+Connecting to cf.10xgenomics.com (cf.10xgenomics.com)|2606:4700::6812:1ad|:443... failed: Network is unreachable.
+Connecting to cf.10xgenomics.com (cf.10xgenomics.com)|2606:4700::6812:ad|:443... failed: Network is unreachable.
+
+# Get fastqs for the pbmc8k dataset
+```{bash}
+#wget http://s3-us-west-2.amazonaws.com/10x.files/samples/cell-exp/2.1.0/pbmc8k/pbmc8k_fastqs.tar
+```
+
+# Run Cellranger
+
+**NOTE** Need to update paths and link the cellranger sif
+
+Make sure that the cellranger singularity container works
+```{bash}
+singularity exec /opt/NGS/singularity/cellranger.sif cellranger --version
+```
+
+Run cellranger's mkfastq command to reformat BCL files into fastqs
+```{bash eval=FALSE}
+singularity  exec \
+    --home /mnt/proc/ \
+    --bind /mnt/data1/workspace/MIC/2022/Data/crangerbcl/cellranger-tiny-bcl-1.2.0/:/mnt/bcl/:ro \
+    --bind /mnt/data1/workspace/MIC/2022/Data/crangerbcl/cellranger-tiny-csv-1.2.0/:/mnt/csv/:ro \
+    --bind /mnt/data1/workspace/MIC/2022/PROC/cellranger-tiny-proc/:/mnt/proc/:rw \
+    /opt/NGS/singularity/cellranger.sif \
+    cellranger mkfastq \
+    --run=/mnt/bcl/ \
+    --csv=/mnt/csv/cellranger-tiny-bcl-simple-1.2.0.csv \
+    --output-dir=/mnt/proc/
+```
+
+Run cellranger's count command to map reads to the reference transcriptome and count the reads per feature
+```{bash eval=FALSE}
+singularity  exec \
+    --home /mnt/data1/workspace/MIC/2022/Data/pbmc8k/ \
+    --bind /mnt/data1/workspace/MIC/2022/Data/pbmc8k/fastqs/:/mnt/fastq:ro \
+    --bind /mnt/data2/Annotation/CellRanger/refdata-gex-GRCh38-2020-A/:/mnt/anno/:ro \
+    /opt/NGS/singularity/cellranger.sif \
+    cellranger count \
+    --id=pbmc8k \
+    --sample=pbmc8k \
+    --fastqs /mnt/fastq/ \
+    --transcriptome=/mnt/anno/ \
+    --localcores 20
+```
+
+
+
+
+
+```
