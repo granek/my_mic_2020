@@ -7,7 +7,7 @@ It defaults to 2 cores and 2 GB, but you can change these if you need more cores
 The git repo for content is here: <https://gitlab.oit.duke.edu/mic-course/2022-mic>.
 
 # Shared Data
-If you have shared datasets you can put them in /hpc/group/chsi-hiv-r25-2022/. Please make an appropriate subdirectory.
+If you have shared datasets you can put them in /hpc/group/chsi-mic-2022. Please make an appropriate subdirectory.
 
 ## Uploading Shared Data
 ### Command-line Upload
@@ -22,6 +22,6 @@ For output files, We tell participants to make a subdirectory named based on the
 ```
 scratch_dir="/work"
 username=Sys.info()[["user"]]
-out_dir=file.path(scratch_dir,username,"hiv2022","rnaseq”)
+out_dir=file.path(scratch_dir,username,"mic2022")
 dir_create(out_dir)
 ```
