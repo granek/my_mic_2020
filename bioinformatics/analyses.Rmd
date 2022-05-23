@@ -32,14 +32,13 @@ Christian et al. 2021 Cell Reports (https://doi.org/10.1016/j.celrep.2021.109118
 
 Note that the Seurat - Guided Clustering Tutorial (https://satijalab.org/seurat/articles/pbmc3k_tutorial.html) includes a lot of overlapping information.
 
-**Methods overview:**
+**METHOD DETAILS, Single-cell RNA-seq analysis, page e4**
 
-- Pre-processing: "Raw short reads were demultiplexed, filtering and mapped to mouse genome GRCm38/mm10 using cellranger v2.02. 
+- Pre-processing: "Raw short reads were demultiplexed, filtering and mapped to mouse genome GRCm38/mm10 using cellranger v2.02."
 
-- QC: The gene count matrices from cellranger were subjected to quality control, pre-processing and clustering using the R Seurat 2.3.4 package (Butler et al., 2018). Low-quality cells that had less than 200 expressed genes and more than 5% mitochondrial genes were filtered out. 
+- QC: "The gene count matrices from cellranger were subjected to quality control, pre-processing and clustering using the R Seurat 2.3.4 package (Butler et al., 2018). Low-quality cells that had less than 200 expressed genes and more than 5% mitochondrial genes were filtered out."
 
-- Analysis: Gene counts were scaled to total gene expression and percentage of mitochondrial genes with a scaling factor of 10,000, and then log-transformed. The high dimensional data for each sample were reduced by PCA and t-Distributed Stochastics Neighbor Embedding (tSNE). We used the FindCluster function to group clusters in each sample with a resolution of 0.6. Differential expressed genes (DEGs) were identified using the Wilcoxon rank-sum test."
-
+- Analysis: "Gene counts were scaled to total gene expression and percentage of mitochondrial genes with a scaling factor of 10,000, and then log-transformed. The high dimensional data for each sample were reduced by PCA and t-Distributed Stochastics Neighbor Embedding (tSNE). We used the FindCluster function to group clusters in each sample with a resolution of 0.6. Differential expressed genes (DEGs) were identified using the Wilcoxon rank-sum test."
 
 
 ## Load Seurat objects
@@ -76,6 +75,8 @@ seulist
 
 ## Make sure the Seurat objects have been QC'd
 
+*METHOD DETAILS, Single-cell RNA-seq analysis, page e4*: "Low-quality cells that had less than 200 expressed genes and more than 5% mitochondrial genes were filtered out."
+
 The rownames are gene symbols. Investigating the names a bit more, the mitochondrial genes can be identified by the prefix "mt-"
 ```{r}
 tem <- seulist$Tem
@@ -99,8 +100,6 @@ seulist.mt %>%
 
 seulist <- seulist.mt
 ```
-
-"Low-quality cells that had less than 200 expressed genes and more than 5% mitochondrial genes were filtered out."
 
 Examine the distribution of nFeature and nCount for each dataset
 ```{r}
@@ -154,10 +153,9 @@ seulist %>%
             max = max(percent.mt))
 ```
 
-
 ## Transform counts
 
-"Gene counts were scaled to total gene expression and percentage of mitochondrial genes with a scaling factor of 10,000, and then log-transformed." (Christian et al. 2021 Cell Reports)
+*METHOD DETAILS, Single-cell RNA-seq analysis, page e4*: "Gene counts were scaled to total gene expression and percentage of mitochondrial genes with a scaling factor of 10,000, and then log-transformed."
 
 First, take a look at how data are structured inside the filtered seurat object
 ```{r}
@@ -253,7 +251,7 @@ tem <- seulist.n[["Tem"]]
 
 ### Dimension reduction
 
-"The high dimensional data for each sample were reduced by PCA..." (Christian et al. 2021 Cell Reports)
+*METHOD DETAILS, Single-cell RNA-seq analysis, page e4*: "The high dimensional data for each sample were reduced by PCA..."
 
 **First, find the top 2000 most variable gene features.** This function finds the features, stashes them inside the seurat object, then returns the seurat object.
 ```{r}
@@ -360,7 +358,7 @@ Here we can see an "elbow" that forms around PC10 to PC15, suggesting that we sh
 
 ### Cell clustering
 
-" ..and t-Distributed Stochastics Neighbor Embedding (tSNE). We used the FindCluster function to group clusters in each sample with a resolution of 0.6." (Christian et al. 2021 Cell Reports)
+*METHOD DETAILS, Single-cell RNA-seq analysis, page 4e*: " ..and t-Distributed Stochastics Neighbor Embedding (tSNE). We used the FindCluster function to group clusters in each sample with a resolution of 0.6."
 
 ```{r}
 tem.pVF <- FindNeighbors(tem.pVF, dims = 1:10)
@@ -416,11 +414,9 @@ Apply that function to each seurat object in the list of objects that we normali
 seulist.drc <- readRDS(file.path(intermeddir, "seulist_drc.rds"))
 ```
 
-Examine the tSNE plots. These should resemble plots in Fig2.
+### Examine the tSNE plots (Fig2A). 
 
-"Figure 2. Single-cell RNA sequencing reveals intratumor TEff/EM heterogeneity (A) Independent tSNE plots of sorted by... single-cell transcriptomes obtained from 10 tumors and
-matched distant mucosa. Each dot represents a cell; each color indicates a distinct CD8+ T cell cluster.
-(B–D) TEff/EM CD8+ clusters are labeled p1–p4, and the expression of (B) effector molecules and activation markers, (C) transcription factors, and (D) proliferation markers in the tumor TEFF/EM clusters are shown." Christian et al. 2021 Cell Reports
+These should resemble plots in Fig2, page 5.
 
 **Fig 2A**. They are similar but have different orientations and numbers of clusters.
 ```{r}
@@ -464,9 +460,9 @@ FeaturePlot(seulist.drc[["Tem"]], features = c("Mki67")) + coord_equal()
 
 ## Differential expression
 
-"Differential expressed genes (DEGs) were identified using the Wilcoxon rank-sum test." (Christian et al. 2021 Cell Reports)
+*METHOD DETAILS, Single-cell RNA-seq analysis, page 4e*: "Differential expressed genes (DEGs) were identified using the Wilcoxon rank-sum test."
 
-### Identify Tem cluster biomarkers
+### Identify Tem cluster biomarkers (Fig2B-D)
 
 ```{r}
 tem <- seulist.drc[["Tem"]]
@@ -487,7 +483,6 @@ For the purpose of trying to reproduce the manuscript results, we will assume th
 **min.cells.group = 3** "Minimum number of cells in one of the groups" (Seurat help)
 
 **ident.2** "A second identity class for comparison; if NULL, use all other cells for comparison" (Seurat help)
-
 
 Cluster 0
 ```{r}
@@ -538,7 +533,7 @@ DoHeatmap(tem, features = topGenes$gene)
 # Cluster 5 corresponds to p4?
 ```
 
-Investigate specific genes by overlaying gene expression on top of the tSNE plot as in the Fig2 B-D plots.
+Investigate specific genes by overlaying gene expression on top of the tSNE plot as in the Fig2 B-D plots (page 5)
 ```{r}
 # remember this visualization tool from above too
 plot_grid(DimPlot(tem, reduction = "tsne"),
@@ -553,9 +548,9 @@ VlnPlot(tem, features = c("Hmgb2"), slot = "counts")
 VlnPlot(tem, features = c("Hmgb2"), slot = "counts", log = TRUE)
 ```
 
-### Name clusters based on biomarkers and study aims
+### Name clusters based on biomarkers and study aims (Fig 2)
 
-I **think** the authors decided to assign the following names to these clusters:
+I **think** the authors decided to assign the following names to these clusters, see *RESULTS, scRNA-seq dissects intratumoral TEff/EM heterogeneity, page 4-5*:
 
 p1 = Clusters 0, 1, 2 
 p2 = Cluster 3 
@@ -597,22 +592,47 @@ p4v2markers %>%
 downGenes
 ```
 
-Are these statements true...?
+### Evaluate scDE results
 
-"Elevated levels of Cxcr6 in TEff/EM p4 are associated with enhanced Pdcd1 expression, in opposition to Il7r and Il18r1 expression, which are expressed in TEff/EM p2." (Christian 2021 Cell Reports)
+#### Are these statements true from *RESULTS, scRNA-seq dissects intratumoral TEff/EM heterogeneity, page 4-5*?
+
+1. "The effector molecules Ifng and GzmB were highly expressed in p4, had heterogeneous expression in p1 and p3, but were largely absent from p2. Similar expression patterns were applied to well-known effector surface markers for cytolytic T cells such as Klrc1 and Nkg7 (Figure 2B)."
+
+2. "All four subsets highly expressed the transcription factor Runx3..., as well as Id2... "
+
+3. "Comparing p2 to p4, the density of Runx3- and Id2-expressing cells was slightly lower in p2. ...This was accompanied by an opposite pattern of Id3, a transcription factor whose expression is crucial for effector memory development (Yang et al., 2011), which is absent in p4 (Figure 2C)."
+
+4. "Bcl2, a transcription factor for T cell survival in the effector and memory phases, was abundant in most sorted TEff/EM populations except p3. "
+
+5. "After assessing the cell-cycle programs, we determined that p3 was a highly proliferative subset, as made evident by the expression of genes restrictively expressed in S and M phases, such as Ccnb2, Cdk1, and Mki67 (Figure 2D). 
+
+#### Are these statements true from *RESULTS, Tumor and distant mucosa TRMs comprise two distinct populations that resemble either TEMs or TCMs, page 5-6*?
+
+1. "As expected, the tumor and distant mucosa TRM populations showed high expression of Itgae (CD103) and low expression of S1PR1, con- firming their tendency to reside within the tissue (Figure S4)."
+
+2. "Notably, the binary expression of Lgals3 (galectin-3) could distinguish TEMs (p1 of TEff/EM) from TCMs."
+
+#### Are these statements true from *RESULTS, CXCR6 expression defines a unique subpopulation of TEff/EMs, page 9*?
+
+1. " Among all of the TEff/EM populations, S1pr1 expression was silenced in TEff/EM p4, suggesting that this may be a population that lacks the potential to egress."
+
+2. "In p4, compared to other chemokine receptors, Cxcr6 was highly expressed; compared to the other 3 populations, p4 was the only population that preferentially upregulated Cxcr6 (Figure 5A)."
+
+3. "The elevated Cxcr6 expression in p4 was associated with enhanced Pdcd1 and reduced IL7r expression, in direct opposition to p2 (Figure 5B)."
 
 ```{r}
 p4v2markers %>%
   rownames_to_column(var = "gene") %>%
   filter(gene == "Pdcd1")
 ```
+
 ```{r}
 p4v2markers %>%
   rownames_to_column(var = "gene") %>%
   filter(gene %in% c("Il7r","Il18r1"))
 ```
 
-"T cell activation markers Gzmb, Klrc1/2, and Klrd1 are upregulated in TEFF/TEM p4" (Christian 2021 Cell Reports)
+4. "We virtually sorted out these two populations of cells [p2 vs p4] and compared their gene expression at the transcriptomic level (Figure 5C). The differential expression of Nkg7 and Klrc/d family members suggested that these are highly active effector T cells, as seen in the high expression of effector molecules such as Gzmb." And from Fig 5 legend: "T cell activation markers Gzmb, Klrc1/2, and Klrd1 are upregulated in TEFF/TEM p4".
 
 ```{r}
 p4v2markers %>%
@@ -620,37 +640,9 @@ p4v2markers %>%
   filter(gene %in% c("Gzmb","Klrc1", "Klrc2","Klrd1")) 
 ```
 
+5. "...However, for T cells in TEff/EM p2, we found that the upregulation of IL7r was associated with IL18r1 (Figure 5C). 
 
-These results will be used to reproduce... 
-
-"Figure 5. CXCR6 defines a unique subpopulation of TEff/EMs ...
-(B) Elevated levels of Cxcr6 in TEff/EM p4 are associated with enhanced Pdcd1 expression, in opposition to Il7r and Il18r1 expression, which are expressed in TEff/EM p2. Classical exhaustion markers Nr4a1, Lag3, and Havcr2 were upregulated in the tumor TEff/EM p4 population.
-(C) Volcano plot of gene expression between tumor TEff/EM p2 (left) and TEff/EM p4 (right) shows that T cell activation markers Gzmb, Klrc1/2, and Klrd1 are upregulated in TEFF/TEM p4, indicating it is effector like."
-
-Fig 5B
-```{r}
-
-```
-
-Fig 5C
-```{r}
-
-```
-
-We can also extent these DE analysis to a path analysis, as the authors did (see Fig 5F).
-
-"Figure 5. CXCR6 defines a unique subpopulation of TEff/EMs ...
-(F) Gene Ontology analysis shows that the CXCR6+ population enriches many pathways involving the cell cycle, indicating that this pathway is phenotypically exhausted but highly active." (Christian et al. 2021 Cell Reports)
-
-GO path analysis
-```{r}
-
-```
-
-Fig 5F
-```{r}
-
-```
+6.  "This analysis illustrated that these CXCR6+ effector cells were quite unique: on the one hand, they could be labeled as terminally exhausted cells (Wherry et al., 2007) based on their elevated expression of Pdcd1, Nr4a1 (Liu et al., 2019), Lag3, and Havcr2 (Tim-3).." And from Fig 5 legend: "Classical exhaustion markers Nr4a1, Lag3, and Havcr2 were upregulated in the tumor TEff/EM p4 population."
 
 
 #____
