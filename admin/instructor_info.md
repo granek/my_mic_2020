@@ -22,6 +22,6 @@ For output files, We tell participants to make a subdirectory named based on the
 ```
 scratch_dir="/work"
 username=Sys.info()[["user"]]
-out_dir=file.path(scratch_dir,username,"hiv2022","rnaseq”)
+out_dir=file.path(scratch_dir,username,"mic2022")
 dir_create(out_dir)
 ```
