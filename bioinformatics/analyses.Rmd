@@ -349,7 +349,7 @@ JackStrawPlot(tem.js, dims = 1:15)
 ```
 There seems to be a drop-off in significance somewhere between PC5 and PC10 but it is difficult to tell with the colors. This suggests we should use ~10 dimensions.
 
-**option2**
+**Option 2**
 We can also just take a look at the percentage of variance explained by each additional PC. We don't want to bother including PCs that explain very little additional variance so we can look for the "elbow" where the variance explanined (or inversely, the standard deviation) levels-off. Seurat's tool, ElbowPlot() displays standard deviation on the y-axis.
 ```{r}
 ElbowPlot(tem.pVF)
