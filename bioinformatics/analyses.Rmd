@@ -492,6 +492,70 @@ cluster0.markers %>%
   head(n = 5)
 ```
 
+
+
+Try to reproduce results for "Bcl2" by doing the Wilcoxon Rank Sum test another way.
+```{r}
+# Select the gene Bcl2
+sel.gene <- "Bcl2"
+
+# subset cells in cluster 0
+tem.0 <- subset(x = tem, idents = "0")
+ncol(x = tem.0) # 317 cells
+unique(Idents(tem.0)) # check that these are all from the 0 cluster
+
+# subset cells in any other cluster
+tem.else <- subset(x = tem, idents = "0", invert = TRUE)
+ncol(x = tem.else) # 1140 cells
+unique(Idents(tem.else)) # check that these are all from clusters other than 0
+
+# extract scaled expression values
+expr.0 <- GetAssayData(object = tem.0, slot = "scale.data")
+expr.else <- GetAssayData(object = tem.else, slot = "scale.data")
+
+# Extract expression values for the gene Bcl2
+expr.0.sel <- expr.0[rownames(expr.0) == sel.gene,]
+expr.else.sel <- expr.0[rownames(expr.else) == sel.gene,]
+
+# Perform the Wilcoxon Rank Sum test 
+wilcox.test(x = expr.0.sel, 
+            y = expr.else.sel, alternative = "two.sided")
+# p-value < 2.2e-16
+
+cluster0.markers %>%
+  rownames_to_column(var = "gene_name") %>%
+  filter(gene_name == sel.gene)
+# p-value = 2.175929e-28	
+
+```
+Do this again for a gene with a less extreme p-value, e.g. Nkg7
+```{r}
+cluster0.markers %>%
+  arrange(-p_val)
+
+# Select the gene Nkg7
+sel.gene <- "Nkg7"
+
+# extract scaled expression values
+expr.0 <- GetAssayData(object = tem.0, slot = "scale.data")
+expr.else <- GetAssayData(object = tem.else, slot = "scale.data")
+
+# Extract expression values for the gene
+expr.0.sel <- expr.0[rownames(expr.0) == sel.gene,]
+expr.else.sel <- expr.0[rownames(expr.else) == sel.gene,]
+
+# Perform the Wilcoxon Rank Sum test 
+wilcox.test(x = expr.0.sel, 
+            y = expr.else.sel, alternative = "two.sided")
+# W = 50244, p-value = 1
+
+cluster0.markers %>%
+  rownames_to_column(var = "gene_name") %>%
+  filter(gene_name == sel.gene)
+# p-value = 0.51
+```
+
+
 Run FindMakers() for each cluster
 ```{r}
 all.markers <- FindAllMarkers(tem)
