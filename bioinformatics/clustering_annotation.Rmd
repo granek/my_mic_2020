@@ -1,0 +1,148 @@
+---
+title: "MIC-2022 Workshop: single-cell clustering and annotation"
+output: html_notebook
+---
+
+Before we start, we set up the R environment.
+
+```{r prereqs}
+knitr::opts_chunk$set(echo = T, message = FALSE, fig.width=12, fig.height=8, warning = FALSE)
+stdt <- date()
+
+# Libraries
+library(tidyverse)
+library(Seurat)
+library(cowplot)
+
+# Input paths
+wd <- "~/Documents/Teaching/chsi-mic-2022"
+# wd <- "/hpc/groups/chsi-mic-2022"
+intermeddir <- file.path(wd, "intermed")
+
+# Output paths
+scratchdir <- "~/Documents/Temporary/scratch"
+# scratchdir <- "/work"
+# username <- Sys.info()[["user"]]
+# outdir <- file.path(scratchdir,username,"output")
+# dir.create(outdir) # uncomment if not already there
+```
+
+## Overview
+
+**Data source:** Christian et al. 2021 Cell Reports (https://doi.org/10.1016/j.celrep.2021.109118)
+
+**Goal of this workshop:** Illustrate the clustering and cell-type annotation procedures. 
+
+Note that the Seurat - [Guided Clustering Tutorial](https://satijalab.org/seurat/articles/pbmc3k_tutorial.html) includes a lot of overlapping information.
+
+**Pre-processing and normalization:**
+
+- Pre-processing: "Raw short reads were demultiplexed, filtering and mapped to mouse genome GRCm38/mm10 using cellranger v2.02."
+- QC: "The gene count matrices from cellranger were subjected to quality control, pre-processing and clustering using the R Seurat 2.3.4 package (Butler et al., 2018). Low-quality cells that had less than 200 expressed genes and more than 5% mitochondrial genes were filtered out."
+- Normalization: "Gene counts were scaled to total gene expression and percentage of mitochondrial genes with a scaling factor of 10,000, and then log-transformed."
+
+**What's covered in this workshop:**
+
+- Highly variable gene identification
+- Dimension reduction
+- Clustering
+- Visualization
+- Cell-type specific marker gene detection
+- Cell-type annotation
+
+<p style="border:2px solid Tomato;">
+Temp: The high dimensional data for each sample were reduced by PCA and t-Distributed Stochastics Neighbor Embedding (tSNE). We used the FindCluster function to group clusters in each sample with a resolution of 0.6. Differential expressed genes (DEGs) were identified using the Wilcoxon rank-sum test.
+</p>
+
+## Load data
+
+First, we load the normalized UMI count single-cell data.
+
+```{r load data}
+seulist <- readRDS(file.path(intermeddir, "seulist_drc.rds"))
+ls()
+seulist
+tem <- seulist[["Tem"]]
+```
+
+## Highly variable gene (HVG) identification
+
+First, find the top 2000 most variable gene features. This function finds the features, stashes them inside the seurat object, then returns the seurat object.
+```{r}
+tem.vf <- FindVariableFeatures(tem, selection.method = "vst", nfeatures = 2000)
+```
+
+You can extract the variable features from the seurat object using these methods.
+```{r}
+VariableFeatures(tem.vf)[1:10] # option 1
+tem.vf@assays$RNA@var.features[1:10] # option 2
+
+# note that this slot is empty in the seurat object prior to the FindVariableFeatures() command
+tem@assays$RNA@var.features
+```
+
+In the `FindVariableFeatures()` function, we used `vst` as the selection method. Intermediate data associated with that selection method is stored inside the seurat object here:
+```{r}
+head(tem.vf@assays$RNA@meta.features)
+```
+
+Seurat has a function to generate a plot to show how variable these "variable features" are.
+```{r}
+top10 <- head(VariableFeatures(tem.vf), 10)
+plot1 <- VariableFeaturePlot(tem.vf)
+plot2 <- LabelPoints(plot = plot1, points = top10, repel = TRUE)
+plot1
+plot2
+```
+
+## Dimension reduction
+
+Before we run PCA, we need to scale the data.
+
+Specifically, shift the expression of each gene, so that the mean expression across cells is 0 and the variance across cells is 1. If we didn't do this, highly-expressed and highly-variable genes would dominate the outcome of down-stream analyses.
+
+```{r}
+all.genes <- rownames(tem.vf)
+tem.sAll <- ScaleData(tem.vf, features = all.genes) 
+tem.sVF <- ScaleData(tem.vf) 
+
+# note that if you do not specify features as all.genes, the default behavior is to only use the 2000 variable features downstream
+```
+
+Examine the scaled data.
+```{r}
+# prior to scaling
+dim(tem.vf@assays$RNA@scale.data) # empty
+
+# after scaling with all genes
+dim(tem.sAll@assays$RNA@scale.data) # 12571 features as rows and 1457 cells as columns
+
+# after scaling with the 2000 variable features
+dim(tem.sVF@assays$RNA@scale.data) # 2000 features as rows and 1457 cells as columns
+```
+
+We perform PCA on the scaled data. 
+
+```{r}
+tem.pAll <- RunPCA(tem.sAll, features = all.genes) # this takes a minute or so...
+tem.pVF <- RunPCA(tem.sVF)
+# again, note that the default behavior is to use only the variables to compute the PCA
+```
+
+
+The `RunPCA()` function automatically spits out information about how features loaded into PC space. But like most Seurat functions, you will need to look inside the object to get details.
+
+Here is where you will find detailed info about the reduction you performed
+```{r}
+tem.pVF@reductions # the seurat object keeps track of reductions you have performed here
+names(tem.pVF@commands) # more broadly, there is a log of all commands stored here
+tem.pVF@commands$RunPCA.RNA # with even more details
+```
+
+Next, we can use the visualization tools to the choose the proper number of PCs.
+
+```{r}
+VizDimLoadings(tem.pVF, dims = 1:2, reduction = "pca")
+DimPlot(tem.pVF, reduction = "pca")
+DimHeatmap(tem.pVF, dims = 1, cells = 500, balanced = TRUE)
+```
