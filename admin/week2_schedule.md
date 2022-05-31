@@ -1,27 +1,54 @@
-| Day       |        Time | Topic                                              | Links                                                                                                                                           | Instructor     |
-|-----------|-------------|----------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------|----------------|
-| Monday    | 09:00-10:15 | Journal Club                                       | [Paper](https://pubmed.ncbi.nlm.nih.gov/33597266/), [Notes](../biology/mic_journal_club.pdf)                                                    | Granek, Chan   |
-|           | 10:30-11:45 | Bulk RNA-Seq: Bioinformatics Overview              | [Overview](../bioinformatics/lecture_slides/bioinformatics_overview.pdf), [Algorithms](../bioinformatics/lecture_slides/ShortReadAlignment.pdf) | Gordan, Granek |
-|           | 13:15-14:30 | Bulk RNA-Seq: Bioinformatics Workshop I            | [TOC](../bioinformatics/2021_bioinf_toc.Rmd)                                                                                                    | Granek         |
-|           | 14:45-16:00 | Bulk RNA-Seq: Bioinformatics Workshop II           | [TOC](../bioinformatics/2021_bioinf_toc.Rmd)                                                                                                    | Granek         |
-|           |             |                                                    |                                                                                                                                                 |                |
-| Tuesday   | 09:00-10:15 | Bulk RNA-Seq: Statistical Considerations I         | [Notes](../statistics/Lectures/PS_MIC_DESeqStat.pdf)                                                                                            | Shi            |
-|           | 10:30-11:45 | Bulk RNA-Seq: Statistical Considerations II        |                                                                                                                                                 | Shi            |
-|           | 13:15-14:30 | Bulk RNA-Seq: Statistics Workshop I                |                                                                                                                                                 | Owzar          |
-|           | 14:45-16:00 | Bulk RNA-Seq: Statistics Workshop II               |                                                                                                                                                 | Owzar          |
-|           |             |                                                    |                                                                                                                                                 |                |
-| Wednesday | 09:00-10:15 | Data Analysis Workshop: STAR;                      | [TOC](../bioinformatics/2021_bioinf_toc.Rmd)                                                                                                    | Granek         |
-|           | 10:30-11:45 | Data Analysis Workshop: STAR;                      | [TOC](../bioinformatics/2021_bioinf_toc.Rmd)                                                                                                    | Granek         |
-|           | 13:15-14:30 | Bulk RNA-Seq: Pathway Analysis                     |                                                                                                                                                 | Xie            |
-|           | 14:45-16:00 | Bulk RNA-Seq: Pathway Analysis Workshop            |                                                                                                                                                 | Xie            |
-|           |             |                                                    |                                                                                                                                                 |                |
-| Thursday  | 09:00-10:15 | Data Analysis Workshop I: Bioinformatic Analysis   |                                                                                                                                                 | Granek         |
-|           | 10:30-11:45 | Data Analysis Workshop II: Bioinformatics Analysis |                                                                                                                                                 | Granek         |
-|           | 13:15-14:30 | Data Analysis Workshop III: Statistical Analysis   |                                                                                                                                                 | Owzar          |
-|           | 14:45-16:00 | Data Analysis Workshop IV: Statistical Analysis    |                                                                                                                                                 | Owzar          |
-|           |             |                                                    |                                                                                                                                                 |                |
-| Friday    | 09:00-10:15 | Presentation Preparation                           |                                                                                                                                                 |                |
-|           | 10:30-11:45 | Presentation Preparation                           |                                                                                                                                                 |                |
-|           | 13:15-14:30 | Presentations                                      |                                                                                                                                                 |                |
-|           | 14:45-16:00 | Presentations                                      |                                                                                                                                                 |                |
+| Day       |        Time | Topic                         | Links | Instructor |
+|-----------+-------------+-------------------------------+-------+------------|
+| Monday    | 09:00-10:15 | scRNA-Seq Pre-processing      |       | Granek     |
+|           | 10:30-11:45 | scRNA-Seq Pre-processing      |       | Granek     |
+|           | 13:15-14:30 | Hands-on Tutorial             |       | Owzar      |
+|           | 14:45-16:00 | Data Analysis Workshop I      |       | Owzar      |
+|           |             |                               |       |            |
+| Tuesday   | 09:00-10:15 | Clustering                    |       | Xie        |
+|           | 10:30-11:45 | Cell-type Annotation          |       | Xie        |
+|           | 13:15-14:30 | Hands-on Tutorial             |       | Xie        |
+|           | 14:45-16:00 | Data Analysis Workshop II     |       | Xie        |
+|           |             |                               |       |            |
+| Wednesday | 09:00-10:15 | Differentialy Expressed Genes |       | Owzar      |
+|           | 10:30-11:45 | Differentialy Expressed Genes |       | Owzar      |
+|           | 13:15-14:30 | Hands-on Tutorial             |       | Owzar      |
+|           | 14:45-16:00 | Data Analysis Workshop III    |       | Owzar      |
+|           |             |                               |       |            |
+| Thursday  | 09:00-10:15 | Pseudotime                    |       | Ji         |
+|           | 10:30-11:45 | Pseudotime                    |       | Ji         |
+|           | 13:15-14:30 | Hands-on Tutorial             |       | Ji         |
+|           | 14:45-16:00 | Data Analysis Workshop IV     |       | Ji         |
+|           |             |                               |       |            |
+| Friday    | 09:00-10:15 | Presentation Preparation      |       | All        |
+|           | 10:30-11:45 | Presentation Preparation      |       | All        |
+|           | 13:15-14:30 | Presentations                 |       | All        |
+|           | 14:45-16:00 | Presentations                 |       | All        |
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+         
