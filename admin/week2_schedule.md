@@ -1,5 +1,5 @@
 | Day       |        Time | Topic                         | Links | Instructor |
-|-----------+-------------+-------------------------------+-------+------------|
+|-----------|-------------|-------------------------------|-------|------------|
 | Monday    | 09:00-10:15 | scRNA-Seq Pre-processing      |       | Granek     |
 |           | 10:30-11:45 | scRNA-Seq Pre-processing      |       | Granek     |
 |           | 13:15-14:30 | Hands-on Tutorial             |       | Owzar      |

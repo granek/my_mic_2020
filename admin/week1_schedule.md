@@ -1,5 +1,5 @@
 | Day       |        Time | Topic                                             | Links | Instructor          |
-|-----------+-------------+---------------------------------------------------+-------+---------------------|
+|-----------|-------------|---------------------------------------------------|-------|---------------------|
 | Monday    | 09:00-10:15 | Welcome and Introductions (KO, CC, JG)            |       | Owzar, Chan, Granek |
 |           | 10:30-11:45 | Computing Environment (JM,JG)                     |       | McCarthy, Granek    |
 |           | 13:15-14:30 | Intro to Reproducible Analysis I (Lecture; JG,JM) |       | Granek              |
