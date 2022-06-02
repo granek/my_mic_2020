@@ -9,7 +9,7 @@ stdt <- date()
 # Libraries
 library(tidyverse)
 library(Seurat)
-library(monocle)
+library(monocle); package.version("monocle")
 
 # Paths
 wd <- "/hpc/group/chsi-mic-2022"
@@ -27,12 +27,10 @@ outdir <- file.path("/work",Sys.info()[["user"]],"output")
 - Run trajectory analysis
 - Test for DE over pseudotime
 
-Note that the Seurat - [Guided Clustering Tutorial](https://satijalab.org/seurat/articles/pbmc3k_tutorial.html) includes a lot of overlapping information.
-
 **Data source:** Christian et al. 2021 Cell Reports (https://doi.org/10.1016/j.celrep.2021.109118)
 
 **METHOD DETAILS, Single-cell RNA-seq analysis, page e4**
-- Analysis: "...."
+- Analysis: "To infer the lineage development of TEFF / EM to TCM, we used Monocle package v2.5.4 (Qiu et al., 2017). The top 2000 significant DEGs were chosen to order genes for trajectory reconstruction using the DDRTree method followed by dimension reduction, cell trajectory inference and pseudo-time measurements, which were computed via reversed graph embedding."
 
 ## Load data
 
@@ -94,61 +92,221 @@ cellname.df %>%
 
 ## 2. Create a Monocle object
 
-```{r}
-pd <- new("AnnotatedDataFrame", data = comb@meta.data)
-fd <- new("AnnotatedDataFrame", data = data.frame(gene_short_name=rownames(comb),row.names = rownames(comb)))
-cds <- newCellDataSet(comb@assays$RNA@counts, phenoData = pd, featureData = fd)
+Monocle uses a different type of object, a "CellDataSet" object, to store single-cell data. There are three data elements to a CellDataSet object:
 
+- **cellData**: expression matrix with rows as genes and columns as cells
+- **phenoData**: data frame containing attributes of individual cells
+- **featureData**: data frame containing attributes of gene features
+
+Extract the count matrix with rows as genes and columns as cells.
+```{r}
+cd <- comb@assays$RNA@counts
+dim(cd)
+rownames(cd)[1:5]
+colnames(cd)[1:5]
+```
+
+Extract the cell-level data.
+```{r}
+pd <- comb@meta.data
+dim(pd)
+rownames(pd)[1:5]
+```
+
+Extract the gene-level metadata.
+```{r}
+rownames(comb)[1:5]
+fd <- data.frame(gene_short_name = rownames(comb), 
+                 row.names = rownames(comb))
+dim(fd)
+row.names(fd)[1:5]
+```
+
+Create the CellDataSet object.
+```{r}
+pd.adf <- new("AnnotatedDataFrame", data = pd)
+fd.adf <- new("AnnotatedDataFrame", data = fd)
+
+cds <- newCellDataSet(cellData = cd, 
+                      phenoData = pd.adf, 
+                      featureData = fd.adf)
 ```
 
 ## 3. Run tranjectory analysis
 
-Prepare expression data
+Before running the trajectory analysis, the counts need to be preprocessed in the following ways.
 
+Estimate size factors. **Size factor corresponds with cell library size? Is this similar to how size factors estimated for bulk DE in DESeq? Add info?** Notice that the estimateSizeFactors() function calculates a size factor for each cell and populates the column `Size_Factor` in the phenoData dataframe.
 ```{r}
-# Estimate size factors and dispersions
-cds <- estimateSizeFactors(cds)
-cds <- estimateDispersions(cds)
-
-# Filtering low expressing genes
-cds <- detectGenes(cds, min_expr = 0.1)
-expressed_genes <- row.names(subset(fData(cds),num_cells_expressed >= 100))
+cds.es <- estimateSizeFactors(cds)
+head(pData(cds))
+head(pData(cds.es))
 ```
 
+Estimate dispersions **Add info about the purpose of this step ** Notice that the estimated dispersion data can be extracted from the CellDataSet object using the function dispersionTable().
 ```{r}
-# Selecting genes for pseudotime
-diff_test_res <- differentialGeneTest(cds[expressed_genes,],fullModelFormulaStr = "~type",cores=5)
+cds.ds <- estimateDispersions(cds.es)
+
+#head(dispersionTable(cds.es)) # if you haven't already estimated the dispersion, this will throw an error
+head(dispersionTable(cds.ds))
+```
+
+Filter out genes with low expression. 
+
+Notice that the detectGenes() function sets the expression detection threshold, calculates the number of cells that express each gene above that threshold, and adds that value to the feature dataframe.
+```{r}
+head(fData(cds.ds))
+cds.filt <- detectGenes(cds.ds, min_expr = 0.1) # set the detection threshold to 0.1
+head(fData(cds.filt))
+```
+
+Identify genes that are expressed in at least 100 cells. These genes will be retained.
+```{r}
+dim(fData(cds.filt))[1] # 13009 features in total
+fData(cds.filt) %>%
+  filter(num_cells_expressed >= 100) %>%
+  row.names() -> expressed_genes
+expressed_genes[1:5]
+length(expressed_genes) # 6543 features that are expressed in at least 100 cells
+```
+
+Select genes
+```{r}
+cds.filt # assayData: 13009 features, 2779 samples
+cds.exprs <- cds.filt[expressed_genes,] 
+cds.exprs # assayData: 6543 features, 2779 samples 
+```
+
+Test if genes are differentially expressed based on sample type **Note that I changed this to run using 2 cores because I think that is what was requested by default for the workspace**
+```{r}
+unique(pData(cds.exprs)$orig.ident)
+#diff_test_res <- differentialGeneTest(cds.exprs, fullModelFormulaStr = "~orig.ident", cores = 2)
+# since this can take some time, I saved the resulting object `diff_test_res` as an intermediate
+#saveRDS(diff_test_res, file.path(intermeddir, "diff_test_res.RData"))
+
+diff_test_res <- readRDS(file.path(intermeddir, "diff_test_res.RData"))
+```
+
+Examine DE results table. Tested genes are shown in the rows. Columns include...
+
+- **status**: What does "OK" mean?
+- **family**: What does "negbinomial.size" mean?
+- **pval** : p value associated with gene
+- **qval**: q value, aka adjusted p value?
+- **gene_short_name** : Should match rownames
+- **num_cells_expressed** : Should match values in fData
+
+```{r}
+dim(diff_test_res) # results table with rows as genes (n = 6543)
+head(diff_test_res)
+```
+
+All have status == "OK" and family == "negbinomial.size"
+```{r}
+diff_test_res %>%
+  group_by(status, family) %>%
+  summarize(n = length(gene_short_name))
+```
+
+Pull out DEG based on qval < 0.05. Use these genes to cluster/order cells. Notice that after applying setOrderingFilter(), the column "use_for_ordering" gets added to the featureData.
+```{r}
+diff_test_res %>%
+  filter(qval < 0.05) -> deg.df
+
+dim(diff_test_res)[1] # 6543 genes tested
+dim(deg.df)[1] # 2763 DEGs
+
 ordering_genes <- row.names(subset(diff_test_res, qval < 0.05))
-cds <- setOrderingFilter(cds, ordering_genes)
+cds.o <- setOrderingFilter(cds.exprs, ordering_genes)
 
-# Reduce data dimensionality
-cds <- reduceDimension(cds, max_components = 2, method = 'DDRTree')
-
-# Order cells along the trajectory
-cds <- orderCells(cds)
+head(fData(cds.o)) # now has the column "use_for_ordering"
 ```
 
+Reduce data dimensionality using Discriminative Dimensionality Reduction with Trees (DDRTree). 
+
+From reduceDimension() help: "Prior to reducing the dimensionality of the data, it usually helps to normalize it so that highly expressed or highly variable genes don't dominate the computation. The function reduceDimension() automatically transforms the data in one of several ways depending on the expressionFamily of the CellDataSet object. If the expressionFamily is negbinomial or negbinomial.size, the data are variance-stabilized." 
+
 ```{r}
-# Plot trajectory
-pdf('/hpc/group/jilab/zj/R25/monocle2/trajectory.pdf')
-plot_cell_trajectory(cds,color_by = "type")
-dev.off()
+#cds.rd <- reduceDimension(cds.o, max_components = 2, method = 'DDRTree')
+# since this can take some time, I saved the resulting object `cds.rd` as an intermediate
+#saveRDS(cds.rd, file.path(intermeddir, "cds-rd.RData"))
+
+cds.rd <- readRDS(file.path(intermeddir, "cds-rd.RData"))
+cds.rd
+```
+
+Notice that data generated by reduceDimensions() are stored inside the CellDataSet object
+```{r}
+dim(cds.rd@reducedDimS)[2] # 2779 columns, coordinates for each cell
+cds.rd@reducedDimS[1:2,1:5] # rows correspond to the dimensions, i.e. here we set max_components to 2
+```
+
+Order cells along the trajectory. 
+
+From orderCells() help: "This function takes as input a CellDataSet and returns it with two new columns: Pseudotime and State, which together encode where each cell maps to the trajectory in the reduced-dimension space. 
+
+Notice that after applying orderCells(), the columns "Pseudotime" and "State" get added to the phenoData.
+```{r}
+# cds.oc <- orderCells(cds.rd)
+# since this can take some time, I saved the resulting object `cds.oc` as an intermediate
+#saveRDS(cds.oc, file.path(intermeddir, "cds-oc.RData"))
+
+cds.oc <- readRDS(file.path(intermeddir, "cds-oc.RData"))
+cds.oc
+
+head(pData(cds.oc)) # now has the columns "Pseudotime" and "State"
+```
+
+Plot trajectory
+```{r}
+plot_cell_trajectory(cds.oc, color_by = "orig.ident")
 ```
 
 ## 4. Test for DE over psuedotime
-```{r}
-# Differential analysis for all Il genes
-marker_genes <- grep('^Il',fData(cds)$gene_short_name,value = T)
-diff_test_res <- differentialGeneTest(cds[marker_genes,],fullModelFormulaStr = "~sm.ns(Pseudotime)")
 
-# Select genes that are significant at an FDR < 5%
-sig_genes <- subset(diff_test_res, qval < 0.05)
+Pull out all "Il" genes. Subset the CellDataSet to the "Il" genes.
+```{r}
+fData(cds.oc) %>%
+  pull(gene_short_name) -> all.ordered.genes
+
+marker_genes <- grep('^Il', all.ordered.genes, value = T)
+marker_genes
+
+cds.mg <- cds.oc[marker_genes,]
+cds.mg
 ```
 
+Test whether the expression of each gene varies with pseudotime. 
+
 ```{r}
-# Plot individual genes
-pdf('/hpc/group/jilab/zj/R25/monocle2/Ilexpression.pdf')
-plot_genes_in_pseudotime(cds[sig_genes$gene_short_name,],ncol=3)
-dev.off()
-save.image('/hpc/group/jilab/zj/R25/monocle2/image.rda')
+diff_test_res2 <- differentialGeneTest(cds.mg, fullModelFormulaStr = "~sm.ns(Pseudotime)")
+diff_test_res2
+```
+
+
+Notice how the model formula is specified. The term "Pseudotime" refers to the column in phenoData. 
+```{r}
+head(pData(cds.mg))
+```
+
+Then, `Pseudotime` is surrounded by the function `sm.ns()`, which is defined in the R package VGAM. 
+It is a "smart" version of splines::ns() that specifies the model as a spline regression.
+```{r}
+?sm.ns()
+?ns()
+```
+
+Select genes that are significant at an FDR < 5%
+```{r}
+diff_test_res2 %>%
+  filter(qval < 0.05) -> sig_genes
+sig_genes
+
+cds.mg1 <- cds.mg[sig_genes$gene_short_name,]
+cds.mg1
+```
+
+Plot individual genes
+```{r}
+plot_genes_in_pseudotime(cds.mg1, ncol=3)
 ```
