@@ -221,88 +221,183 @@ pre code {
 <!-- rnb-text-begin -->
 <!-- rnb-text-end -->
 <!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxua25pdHI6Om9wdHNfY2h1bmskc2V0KGVjaG8gPSBULCBtZXNzYWdlID0gRkFMU0UsIHdhcm5pbmcgPSBGQUxTRSlcbnN0ZHQ8LWRhdGUoKVxuYGBgIn0= -->
-<pre class="r"><code>knitr::opts_chunk$set(echo = T, message = FALSE, warning = FALSE)
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuYGBgclxua25pdHI6Om9wdHNfY2h1bmskc2V0KGVjaG8gPSBULCBtZXNzYWdlID0gRkFMU0UsIHdhcm5pbmcgPSBGQUxTRSlcbnN0ZHQ8LWRhdGUoKVxuYGBgXG5gYGAifQ== -->
+<pre class="r"><code>```r
+knitr::opts_chunk$set(echo = T, message = FALSE, warning = FALSE)
 stdt&lt;-date()</code></pre>
-<!-- rnb-source-end -->
-<!-- rnb-chunk-end -->
-<!-- rnb-text-begin -->
-<div id="navigate-to-data-directory" class="section level1">
-<h1>Navigate to data directory</h1>
-<!-- rnb-text-end -->
-<!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgYmFzaFxuREFUQURJUj0vaHBjL2dyb3VwL2Noc2ktbWljLTIwMjIvZGF0YVxuY2QgJHtEQVRBRElSfVxucHdkXG5scyAtbFxuYGBgIn0= -->
-<pre class="bash"><code>DATADIR=/hpc/group/chsi-mic-2022/data
+<pre><code>
+&lt;!-- rnb-source-end --&gt;
+
+&lt;!-- rnb-chunk-end --&gt;
+
+
+&lt;!-- rnb-text-begin --&gt;
+
+
+**Goal of this workshop:** Learn how to preprocess scRNAseq data using cellranger
+
+**What&#39;s covered in this workshop:**
+- Transform BCL files into fastq files
+- Map reads and count genes
+
+**Data source:** 
+scRNA-seq dataset of 8K human peripheral blood mononuclear cells (PBMCs) freely available from 10X Genomics (https://support.10xgenomics.com/single-cell-gene-expression/datasets/2.1.0/pbmc8k)
+
+
+# Navigate to data directory
+
+&lt;!-- rnb-text-end --&gt;
+
+
+&lt;!-- rnb-chunk-begin --&gt;
+
+
+&lt;!-- rnb-source-begin eyJkYXRhIjoiYGBgYmFzaFxuYGBgYmFzaFxuREFUQURJUj0vaHBjL2dyb3VwL2Noc2ktbWljLTIwMjIvZGF0YVxuY2QgJHtEQVRBRElSfVxucHdkXG5scyAtbFxuYGBgXG5gYGAifQ== --&gt;
+
+```bash
+```bash
+DATADIR=/hpc/group/chsi-mic-2022/data
 cd ${DATADIR}
 pwd
 ls -l</code></pre>
-<!-- rnb-source-end -->
-<!-- rnb-output-begin eyJkYXRhIjoiL2hwYy9ncm91cC9jaHNpLW1pYy0yMDIyL2RhdGFcbnRvdGFsIDM2XG5kcnd4ci1zci14LiA2IG1ybDE3IGNoc2ktbWljLTIwMjIgMzQ2IE1heSAyMCAxMzozNyBDaHJpc3RpYW4yMDIxQ2VsbFJlcG9ydHNcbmRyd3hyLXMtLS0uIDQgbXJsMTcgY2hzaS1taWMtMjAyMiAgODMgTWF5IDIwIDEzOjU0IHBibWM4a1xuIn0= -->
-<pre><code>/hpc/group/chsi-mic-2022/data
-total 36
-drwxr-sr-x. 6 mrl17 chsi-mic-2022 346 May 20 13:37 Christian2021CellReports
-drwxr-s---. 4 mrl17 chsi-mic-2022  83 May 20 13:54 pbmc8k</code></pre>
-<!-- rnb-output-end -->
-<!-- rnb-chunk-end -->
-<!-- rnb-text-begin -->
-</div>
-<div id="bcl-files" class="section level1">
-<h1>BCL files</h1>
-<p>Get tar of bcl files and unzip them</p>
-<!-- rnb-text-end -->
-<!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgYmFzaFxuI3dnZXQgLVAgL2hwYy9ncm91cC9jaHNpLW1pYy0yMDIyL2RhdGEgaHR0cHM6Ly9jZi4xMHhnZW5vbWljcy5jb20vc3VwcC9jZWxsLWV4cC9jZWxscmFuZ2VyLXRpbnktYmNsLTEuMi4wLnRhci5nelxcXG4jdGFyIC16eHZmIC9ocGMvZ3JvdXAvY2hzaS1taWMtMjAyMi9kYXRhL2NlbGxyYW5nZXItdGlueS1iY2wtMS4yLjAudGFyLmd6XG5gYGAifQ== -->
-<pre class="bash"><code>#wget -P /hpc/group/chsi-mic-2022/data https://cf.10xgenomics.com/supp/cell-exp/cellranger-tiny-bcl-1.2.0.tar.gz\
+<pre><code>
+&lt;!-- rnb-source-end --&gt;
+
+&lt;!-- rnb-output-begin eyJkYXRhIjoiL2hwYy9ncm91cC9jaHNpLW1pYy0yMDIyL2RhdGFcbnRvdGFsIDM2XG5kcnd4ci1zci14LiA2IG1ybDE3IGNoc2ktbWljLTIwMjIgMzQ2IE1heSAyMCAxMzozNyBDaHJpc3RpYW4yMDIxQ2VsbFJlcG9ydHNcbmRyd3hyLXMtLS0uIDQgbXJsMTcgY2hzaS1taWMtMjAyMiAgODMgTWF5IDIwIDEzOjU0IHBibWM4a1xuIn0= --&gt;
+</code></pre>
+<p>/hpc/group/chsi-mic-2022/data total 36 drwxr-sr-x. 6 mrl17 chsi-mic-2022 346 May 20 13:37 Christian2021CellReports drwxr-s—. 4 mrl17 chsi-mic-2022 83 May 20 13:54 pbmc8k</p>
+<pre><code>
+
+
+&lt;!-- rnb-output-end --&gt;
+
+&lt;!-- rnb-chunk-end --&gt;
+
+
+&lt;!-- rnb-text-begin --&gt;
+
+
+# BCL files
+
+Get tar of bcl files and unzip them
+
+&lt;!-- rnb-text-end --&gt;
+
+
+&lt;!-- rnb-chunk-begin --&gt;
+
+
+&lt;!-- rnb-source-begin eyJkYXRhIjoiYGBgYmFzaFxuYGBgYmFzaFxuI3dnZXQgLVAgL2hwYy9ncm91cC9jaHNpLW1pYy0yMDIyL2RhdGEgaHR0cHM6Ly9jZi4xMHhnZW5vbWljcy5jb20vc3VwcC9jZWxsLWV4cC9jZWxscmFuZ2VyLXRpbnktYmNsLTEuMi4wLnRhci5nelxcXG4jdGFyIC16eHZmIC9ocGMvZ3JvdXAvY2hzaS1taWMtMjAyMi9kYXRhL2NlbGxyYW5nZXItdGlueS1iY2wtMS4yLjAudGFyLmd6XG5gYGBcbmBgYCJ9 --&gt;
+
+```bash
+```bash
+#wget -P /hpc/group/chsi-mic-2022/data https://cf.10xgenomics.com/supp/cell-exp/cellranger-tiny-bcl-1.2.0.tar.gz\
 #tar -zxvf /hpc/group/chsi-mic-2022/data/cellranger-tiny-bcl-1.2.0.tar.gz</code></pre>
-<!-- rnb-source-end -->
-<!-- rnb-chunk-end -->
-<!-- rnb-text-begin -->
-</div>
-<div id="get-sample-sheet" class="section level1">
-<h1>Get sample sheet</h1>
-<!-- rnb-text-end -->
-<!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgYmFzaFxuI21rZGlyIGNlbGxyYW5nZXItdGlueS1jc3YtMS4yLjAvXG4jd2dldCAtLWRpcmVjdG9yeS1wcmVmaXg9Y2VsbHJhbmdlci10aW55LWNzdi0xLjIuMC8gaHR0cHM6Ly9jZi4xMHhnZW5vbWljcy5jb20vc3VwcC9jZWxsLWV4cC9jZWxscmFuZ2VyLXRpbnktYmNsLXNpbXBsZS0xLjIuMC5jc3ZcbmBgYCJ9 -->
-<pre class="bash"><code>#mkdir cellranger-tiny-csv-1.2.0/
+<pre><code>
+&lt;!-- rnb-source-end --&gt;
+
+&lt;!-- rnb-chunk-end --&gt;
+
+
+&lt;!-- rnb-text-begin --&gt;
+
+
+# Get sample sheet
+
+&lt;!-- rnb-text-end --&gt;
+
+
+&lt;!-- rnb-chunk-begin --&gt;
+
+
+&lt;!-- rnb-source-begin eyJkYXRhIjoiYGBgYmFzaFxuYGBgYmFzaFxuI21rZGlyIGNlbGxyYW5nZXItdGlueS1jc3YtMS4yLjAvXG4jd2dldCAtLWRpcmVjdG9yeS1wcmVmaXg9Y2VsbHJhbmdlci10aW55LWNzdi0xLjIuMC8gaHR0cHM6Ly9jZi4xMHhnZW5vbWljcy5jb20vc3VwcC9jZWxsLWV4cC9jZWxscmFuZ2VyLXRpbnktYmNsLXNpbXBsZS0xLjIuMC5jc3ZcbmBgYFxuYGBgIn0= --&gt;
+
+```bash
+```bash
+#mkdir cellranger-tiny-csv-1.2.0/
 #wget --directory-prefix=cellranger-tiny-csv-1.2.0/ https://cf.10xgenomics.com/supp/cell-exp/cellranger-tiny-bcl-simple-1.2.0.csv</code></pre>
-<!-- rnb-source-end -->
-<!-- rnb-chunk-end -->
-<!-- rnb-text-begin -->
-</div>
-<div id="get-fastqs-for-the-pbmc8k-dataset" class="section level1">
-<h1>Get fastqs for the pbmc8k dataset</h1>
-<!-- rnb-text-end -->
-<!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgYmFzaFxuI21rZGlyIHBibWM4a1xuI3dnZXQgLS1kaXJlY3RvcnktcHJlZml4PXBibWM4ay8gaHR0cDovL3MzLXVzLXdlc3QtMi5hbWF6b25hd3MuY29tLzEweC5maWxlcy9zYW1wbGVzL2NlbGwtZXhwLzIuMS4wL3BibWM4ay9wYm1jOGtfZmFzdHFzLnRhclxuYGBgIn0= -->
-<pre class="bash"><code>#mkdir pbmc8k
+<pre><code>
+&lt;!-- rnb-source-end --&gt;
+
+&lt;!-- rnb-chunk-end --&gt;
+
+
+&lt;!-- rnb-text-begin --&gt;
+
+
+# Get fastqs for the pbmc8k dataset
+
+&lt;!-- rnb-text-end --&gt;
+
+
+&lt;!-- rnb-chunk-begin --&gt;
+
+
+&lt;!-- rnb-source-begin eyJkYXRhIjoiYGBgYmFzaFxuYGBgYmFzaFxuI21rZGlyIHBibWM4a1xuI3dnZXQgLS1kaXJlY3RvcnktcHJlZml4PXBibWM4ay8gaHR0cDovL3MzLXVzLXdlc3QtMi5hbWF6b25hd3MuY29tLzEweC5maWxlcy9zYW1wbGVzL2NlbGwtZXhwLzIuMS4wL3BibWM4ay9wYm1jOGtfZmFzdHFzLnRhclxuYGBgXG5gYGAifQ== --&gt;
+
+```bash
+```bash
+#mkdir pbmc8k
 #wget --directory-prefix=pbmc8k/ http://s3-us-west-2.amazonaws.com/10x.files/samples/cell-exp/2.1.0/pbmc8k/pbmc8k_fastqs.tar</code></pre>
-<!-- rnb-source-end -->
-<!-- rnb-chunk-end -->
-<!-- rnb-text-begin -->
-</div>
-<div id="run-cellranger" class="section level1">
-<h1>Run Cellranger</h1>
-<p>Make sure that the cellranger works from within the course singularity container</p>
-<!-- rnb-text-end -->
-<!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgYmFzaFxuY2VsbHJhbmdlciAtLXZlcnNpb25cbmBgYCJ9 -->
-<pre class="bash"><code>cellranger --version</code></pre>
-<!-- rnb-source-end -->
-<!-- rnb-output-begin eyJkYXRhIjoiY2VsbHJhbmdlciBjZWxscmFuZ2VyLTYuMS4yXG4ifQ== -->
-<pre><code>cellranger cellranger-6.1.2</code></pre>
-<!-- rnb-output-end -->
-<!-- rnb-chunk-end -->
-<!-- rnb-text-begin -->
-<p><strong>NOTE!</strong></p>
-<ul>
-<li>I haven’t actually run the cellranger commands in the course workspace, I just copied /outs from plp server and updated the paths above</li>
-<li>We would need to a copy #ANNO=/mnt/data2/Annotation/CellRanger/refdata-gex-GRCh38-2020-A/ to the workspace</li>
-</ul>
-<p>Run cellranger’s mkfastq command to reformat BCL files into fastqs</p>
-<!-- rnb-text-end -->
-<!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjpbIkRBVEFESVI9L2hwYy9ncm91cC9jaHNpLW1pYy0yMDIyL2RhdGEiLCJCQ0xTPSR7REFUQURJUn0vY2VsbHJhbmdlci10aW55LWJjbC0xLjIuMCIsIlNBTVA9JHtCQ0xTfS9jZWxscmFuZ2VyLXRpbnktYmNsLXNpbXBsZS0xLjIuMC5jc3YiLCJGQVNUUT0ke0RBVEFESVJ9L3BibWM4ay9mYXN0cSIsImNlbGxyYW5nZXIgbWtmYXN0cSBcXCIsIiAgICAtLXJ1bj0ke0JDTFN9IFxcIiwiICAgIC0tY3N2PSR7U0FNUH0gXFwiLCIgICAgLS1vdXRwdXQtZGlyPSR7RkFTVFF9Il19 -->
-<pre class="r"><code>DATADIR=/hpc/group/chsi-mic-2022/data
+<pre><code>
+&lt;!-- rnb-source-end --&gt;
+
+&lt;!-- rnb-chunk-end --&gt;
+
+
+&lt;!-- rnb-text-begin --&gt;
+
+
+# Run Cellranger
+
+Make sure that the cellranger works from within the course singularity container
+
+&lt;!-- rnb-text-end --&gt;
+
+
+&lt;!-- rnb-chunk-begin --&gt;
+
+
+&lt;!-- rnb-source-begin eyJkYXRhIjoiYGBgYmFzaFxuYGBgYmFzaFxuY2VsbHJhbmdlciAtLXZlcnNpb25cbmBgYFxuYGBgIn0= --&gt;
+
+```bash
+```bash
+cellranger --version</code></pre>
+<pre><code>
+&lt;!-- rnb-source-end --&gt;
+
+&lt;!-- rnb-output-begin eyJkYXRhIjoiY2VsbHJhbmdlciBjZWxscmFuZ2VyLTYuMS4yXG4ifQ== --&gt;
+</code></pre>
+<p>cellranger cellranger-6.1.2</p>
+<pre><code>
+
+
+&lt;!-- rnb-output-end --&gt;
+
+&lt;!-- rnb-chunk-end --&gt;
+
+
+&lt;!-- rnb-text-begin --&gt;
+
+
+**NOTE!**
+
+- I haven&#39;t actually run the cellranger commands in the course workspace, I just copied /outs from plp server and updated the paths above
+- We would need to a copy #ANNO=/mnt/data2/Annotation/CellRanger/refdata-gex-GRCh38-2020-A/ to the workspace
+
+
+Run cellranger&#39;s mkfastq command to reformat BCL files into fastqs
+
+&lt;!-- rnb-text-end --&gt;
+
+
+&lt;!-- rnb-chunk-begin --&gt;
+
+
+&lt;!-- rnb-source-begin eyJkYXRhIjpbIkRBVEFESVI9L2hwYy9ncm91cC9jaHNpLW1pYy0yMDIyL2RhdGEiLCJCQ0xTPSR7REFUQURJUn0vY2VsbHJhbmdlci10aW55LWJjbC0xLjIuMCIsIlNBTVA9JHtCQ0xTfS9jZWxscmFuZ2VyLXRpbnktYmNsLXNpbXBsZS0xLjIuMC5jc3YiLCJGQVNUUT0ke0RBVEFESVJ9L3BibWM4ay9mYXN0cSIsImNlbGxyYW5nZXIgbWtmYXN0cSBcXCIsIiAgICAtLXJ1bj0ke0JDTFN9IFxcIiwiICAgIC0tY3N2PSR7U0FNUH0gXFwiLCIgICAgLS1vdXRwdXQtZGlyPSR7RkFTVFF9Il19 --&gt;
+
+```r
+DATADIR=/hpc/group/chsi-mic-2022/data
 BCLS=${DATADIR}/cellranger-tiny-bcl-1.2.0
 SAMP=${BCLS}/cellranger-tiny-bcl-simple-1.2.0.csv
 FASTQ=${DATADIR}/pbmc8k/fastq
@@ -326,9 +421,8 @@ cellranger count \
     --localcores 20</code></pre>
 <!-- rnb-source-end -->
 <!-- rnb-chunk-end -->
-</div>
 
-<div id="rmd-source-code">LS0tCnRpdGxlOiAiQ2VsbHJhbmdlciBEZW1vIgpvdXRwdXQ6IGh0bWxfbm90ZWJvb2sKLS0tCmBgYHtyfQprbml0cjo6b3B0c19jaHVuayRzZXQoZWNobyA9IFQsIG1lc3NhZ2UgPSBGQUxTRSwgd2FybmluZyA9IEZBTFNFKQpzdGR0PC1kYXRlKCkKYGBgCgojIE5hdmlnYXRlIHRvIGRhdGEgZGlyZWN0b3J5CmBgYHtiYXNofQpEQVRBRElSPS9ocGMvZ3JvdXAvY2hzaS1taWMtMjAyMi9kYXRhCmNkICR7REFUQURJUn0KcHdkCmxzIC1sCmBgYAoKIyBCQ0wgZmlsZXMKCkdldCB0YXIgb2YgYmNsIGZpbGVzIGFuZCB1bnppcCB0aGVtCmBgYHtiYXNofQojd2dldCAtUCAvaHBjL2dyb3VwL2Noc2ktbWljLTIwMjIvZGF0YSBodHRwczovL2NmLjEweGdlbm9taWNzLmNvbS9zdXBwL2NlbGwtZXhwL2NlbGxyYW5nZXItdGlueS1iY2wtMS4yLjAudGFyLmd6XAojdGFyIC16eHZmIC9ocGMvZ3JvdXAvY2hzaS1taWMtMjAyMi9kYXRhL2NlbGxyYW5nZXItdGlueS1iY2wtMS4yLjAudGFyLmd6CmBgYAoKIyBHZXQgc2FtcGxlIHNoZWV0CmBgYHtiYXNofQojbWtkaXIgY2VsbHJhbmdlci10aW55LWNzdi0xLjIuMC8KI3dnZXQgLS1kaXJlY3RvcnktcHJlZml4PWNlbGxyYW5nZXItdGlueS1jc3YtMS4yLjAvIGh0dHBzOi8vY2YuMTB4Z2Vub21pY3MuY29tL3N1cHAvY2VsbC1leHAvY2VsbHJhbmdlci10aW55LWJjbC1zaW1wbGUtMS4yLjAuY3N2CmBgYAoKIyBHZXQgZmFzdHFzIGZvciB0aGUgcGJtYzhrIGRhdGFzZXQKYGBge2Jhc2h9CiNta2RpciBwYm1jOGsKI3dnZXQgLS1kaXJlY3RvcnktcHJlZml4PXBibWM4ay8gaHR0cDovL3MzLXVzLXdlc3QtMi5hbWF6b25hd3MuY29tLzEweC5maWxlcy9zYW1wbGVzL2NlbGwtZXhwLzIuMS4wL3BibWM4ay9wYm1jOGtfZmFzdHFzLnRhcgpgYGAKCiMgUnVuIENlbGxyYW5nZXIKCk1ha2Ugc3VyZSB0aGF0IHRoZSBjZWxscmFuZ2VyIHdvcmtzIGZyb20gd2l0aGluIHRoZSBjb3Vyc2Ugc2luZ3VsYXJpdHkgY29udGFpbmVyCmBgYHtiYXNofQpjZWxscmFuZ2VyIC0tdmVyc2lvbgpgYGAKCioqTk9URSEqKgoKLSBJIGhhdmVuJ3QgYWN0dWFsbHkgcnVuIHRoZSBjZWxscmFuZ2VyIGNvbW1hbmRzIGluIHRoZSBjb3Vyc2Ugd29ya3NwYWNlLCBJIGp1c3QgY29waWVkIC9vdXRzIGZyb20gcGxwIHNlcnZlciBhbmQgdXBkYXRlZCB0aGUgcGF0aHMgYWJvdmUKLSBXZSB3b3VsZCBuZWVkIHRvIGEgY29weSAjQU5OTz0vbW50L2RhdGEyL0Fubm90YXRpb24vQ2VsbFJhbmdlci9yZWZkYXRhLWdleC1HUkNoMzgtMjAyMC1BLyB0byB0aGUgd29ya3NwYWNlCgoKUnVuIGNlbGxyYW5nZXIncyBta2Zhc3RxIGNvbW1hbmQgdG8gcmVmb3JtYXQgQkNMIGZpbGVzIGludG8gZmFzdHFzCmBgYHtiYXNoIGV2YWwgPSBGQUxTRX0KREFUQURJUj0vaHBjL2dyb3VwL2Noc2ktbWljLTIwMjIvZGF0YQpCQ0xTPSR7REFUQURJUn0vY2VsbHJhbmdlci10aW55LWJjbC0xLjIuMApTQU1QPSR7QkNMU30vY2VsbHJhbmdlci10aW55LWJjbC1zaW1wbGUtMS4yLjAuY3N2CkZBU1RRPSR7REFUQURJUn0vcGJtYzhrL2Zhc3RxCmNlbGxyYW5nZXIgbWtmYXN0cSBcCiAgICAtLXJ1bj0ke0JDTFN9IFwKICAgIC0tY3N2PSR7U0FNUH0gXAogICAgLS1vdXRwdXQtZGlyPSR7RkFTVFF9CmBgYAoKUnVuIGNlbGxyYW5nZXIncyBjb3VudCBjb21tYW5kIHRvIG1hcCByZWFkcyB0byB0aGUgcmVmZXJlbmNlIHRyYW5zY3JpcHRvbWUgYW5kIGNvdW50IHRoZSByZWFkcyBwZXIgZmVhdHVyZQpgYGB7YmFzaCBldmFsPUZBTFNFfQojQU5OTz0vbW50L2RhdGEyL0Fubm90YXRpb24vQ2VsbFJhbmdlci9yZWZkYXRhLWdleC1HUkNoMzgtMjAyMC1BLwpjZWxscmFuZ2VyIGNvdW50IFwKICAgIC0taWQ9cGJtYzhrIFwKICAgIC0tc2FtcGxlPXBibWM4ayBcCiAgICAtLWZhc3RxcyAke0ZBU1RRfSBcCiAgICAtLXRyYW5zY3JpcHRvbWU9JHtBTk5PfSBcCiAgICAtLWxvY2FsY29yZXMgMjAKYGBgCg==</div>
+<div id="rmd-source-code">LS0tCnRpdGxlOiAiQ2VsbHJhbmdlciBEZW1vIgpvdXRwdXQ6IGh0bWxfbm90ZWJvb2sKLS0tCmBgYHtyfQprbml0cjo6b3B0c19jaHVuayRzZXQoZWNobyA9IFQsIG1lc3NhZ2UgPSBGQUxTRSwgd2FybmluZyA9IEZBTFNFKQpzdGR0PC1kYXRlKCkKYGBgCgoqKkdvYWwgb2YgdGhpcyB3b3Jrc2hvcDoqKiBMZWFybiBob3cgdG8gcHJlcHJvY2VzcyBzY1JOQXNlcSBkYXRhIHVzaW5nIGNlbGxyYW5nZXIKCioqV2hhdCdzIGNvdmVyZWQgaW4gdGhpcyB3b3Jrc2hvcDoqKgotIFRyYW5zZm9ybSBCQ0wgZmlsZXMgaW50byBmYXN0cSBmaWxlcwotIE1hcCByZWFkcyBhbmQgY291bnQgZ2VuZXMKCioqRGF0YSBzb3VyY2U6KiogCnNjUk5BLXNlcSBkYXRhc2V0IG9mIDhLIGh1bWFuIHBlcmlwaGVyYWwgYmxvb2QgbW9ub251Y2xlYXIgY2VsbHMgKFBCTUNzKSBmcmVlbHkgYXZhaWxhYmxlIGZyb20gMTBYIEdlbm9taWNzIChodHRwczovL3N1cHBvcnQuMTB4Z2Vub21pY3MuY29tL3NpbmdsZS1jZWxsLWdlbmUtZXhwcmVzc2lvbi9kYXRhc2V0cy8yLjEuMC9wYm1jOGspCgoKIyBOYXZpZ2F0ZSB0byBkYXRhIGRpcmVjdG9yeQpgYGB7YmFzaH0KREFUQURJUj0vaHBjL2dyb3VwL2Noc2ktbWljLTIwMjIvZGF0YQpjZCAke0RBVEFESVJ9CnB3ZApscyAtbApgYGAKCiMgQkNMIGZpbGVzCgpHZXQgdGFyIG9mIGJjbCBmaWxlcyBhbmQgdW56aXAgdGhlbQpgYGB7YmFzaH0KI3dnZXQgLVAgL2hwYy9ncm91cC9jaHNpLW1pYy0yMDIyL2RhdGEgaHR0cHM6Ly9jZi4xMHhnZW5vbWljcy5jb20vc3VwcC9jZWxsLWV4cC9jZWxscmFuZ2VyLXRpbnktYmNsLTEuMi4wLnRhci5nelwKI3RhciAtenh2ZiAvaHBjL2dyb3VwL2Noc2ktbWljLTIwMjIvZGF0YS9jZWxscmFuZ2VyLXRpbnktYmNsLTEuMi4wLnRhci5negpgYGAKCiMgR2V0IHNhbXBsZSBzaGVldApgYGB7YmFzaH0KI21rZGlyIGNlbGxyYW5nZXItdGlueS1jc3YtMS4yLjAvCiN3Z2V0IC0tZGlyZWN0b3J5LXByZWZpeD1jZWxscmFuZ2VyLXRpbnktY3N2LTEuMi4wLyBodHRwczovL2NmLjEweGdlbm9taWNzLmNvbS9zdXBwL2NlbGwtZXhwL2NlbGxyYW5nZXItdGlueS1iY2wtc2ltcGxlLTEuMi4wLmNzdgpgYGAKCiMgR2V0IGZhc3RxcyBmb3IgdGhlIHBibWM4ayBkYXRhc2V0CmBgYHtiYXNofQojbWtkaXIgcGJtYzhrCiN3Z2V0IC0tZGlyZWN0b3J5LXByZWZpeD1wYm1jOGsvIGh0dHA6Ly9zMy11cy13ZXN0LTIuYW1hem9uYXdzLmNvbS8xMHguZmlsZXMvc2FtcGxlcy9jZWxsLWV4cC8yLjEuMC9wYm1jOGsvcGJtYzhrX2Zhc3Rxcy50YXIKYGBgCgojIFJ1biBDZWxscmFuZ2VyCgpNYWtlIHN1cmUgdGhhdCB0aGUgY2VsbHJhbmdlciB3b3JrcyBmcm9tIHdpdGhpbiB0aGUgY291cnNlIHNpbmd1bGFyaXR5IGNvbnRhaW5lcgpgYGB7YmFzaH0KY2VsbHJhbmdlciAtLXZlcnNpb24KYGBgCgoqKk5PVEUhKioKCi0gSSBoYXZlbid0IGFjdHVhbGx5IHJ1biB0aGUgY2VsbHJhbmdlciBjb21tYW5kcyBpbiB0aGUgY291cnNlIHdvcmtzcGFjZSwgSSBqdXN0IGNvcGllZCAvb3V0cyBmcm9tIHBscCBzZXJ2ZXIgYW5kIHVwZGF0ZWQgdGhlIHBhdGhzIGFib3ZlCi0gV2Ugd291bGQgbmVlZCB0byBhIGNvcHkgI0FOTk89L21udC9kYXRhMi9Bbm5vdGF0aW9uL0NlbGxSYW5nZXIvcmVmZGF0YS1nZXgtR1JDaDM4LTIwMjAtQS8gdG8gdGhlIHdvcmtzcGFjZQoKClJ1biBjZWxscmFuZ2VyJ3MgbWtmYXN0cSBjb21tYW5kIHRvIHJlZm9ybWF0IEJDTCBmaWxlcyBpbnRvIGZhc3RxcwpgYGB7YmFzaCBldmFsID0gRkFMU0V9CkRBVEFESVI9L2hwYy9ncm91cC9jaHNpLW1pYy0yMDIyL2RhdGEKQkNMUz0ke0RBVEFESVJ9L2NlbGxyYW5nZXItdGlueS1iY2wtMS4yLjAKU0FNUD0ke0JDTFN9L2NlbGxyYW5nZXItdGlueS1iY2wtc2ltcGxlLTEuMi4wLmNzdgpGQVNUUT0ke0RBVEFESVJ9L3BibWM4ay9mYXN0cQpjZWxscmFuZ2VyIG1rZmFzdHEgXAogICAgLS1ydW49JHtCQ0xTfSBcCiAgICAtLWNzdj0ke1NBTVB9IFwKICAgIC0tb3V0cHV0LWRpcj0ke0ZBU1RRfQpgYGAKClJ1biBjZWxscmFuZ2VyJ3MgY291bnQgY29tbWFuZCB0byBtYXAgcmVhZHMgdG8gdGhlIHJlZmVyZW5jZSB0cmFuc2NyaXB0b21lIGFuZCBjb3VudCB0aGUgcmVhZHMgcGVyIGZlYXR1cmUKYGBge2Jhc2ggZXZhbD1GQUxTRX0KI0FOTk89L21udC9kYXRhMi9Bbm5vdGF0aW9uL0NlbGxSYW5nZXIvcmVmZGF0YS1nZXgtR1JDaDM4LTIwMjAtQS8KY2VsbHJhbmdlciBjb3VudCBcCiAgICAtLWlkPXBibWM4ayBcCiAgICAtLXNhbXBsZT1wYm1jOGsgXAogICAgLS1mYXN0cXMgJHtGQVNUUX0gXAogICAgLS10cmFuc2NyaXB0b21lPSR7QU5OT30gXAogICAgLS1sb2NhbGNvcmVzIDIwCmBgYAo=</div>
 
 
 

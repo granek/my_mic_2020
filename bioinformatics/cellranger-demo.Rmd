@@ -7,6 +7,16 @@ knitr::opts_chunk$set(echo = T, message = FALSE, warning = FALSE)
 stdt<-date()
 ```
 
+**Goal of this workshop:** Learn how to preprocess scRNAseq data using cellranger
+
+**What's covered in this workshop:**
+- Transform BCL files into fastq files
+- Map reads and count genes
+
+**Data source:** 
+scRNA-seq dataset of 8K human peripheral blood mononuclear cells (PBMCs) freely available from 10X Genomics (https://support.10xgenomics.com/single-cell-gene-expression/datasets/2.1.0/pbmc8k)
+
+
 # Navigate to data directory
 ```{bash}
 DATADIR=/hpc/group/chsi-mic-2022/data
