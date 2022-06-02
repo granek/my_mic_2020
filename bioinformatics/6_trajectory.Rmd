@@ -1,0 +1,100 @@
+---
+title: "Trajectory analysis with monocle"
+output: html_notebook
+---
+```{r prereqs}
+knitr::opts_chunk$set(echo = T, message = FALSE, warning = FALSE)
+stdt <- date()
+
+# Libraries
+library(tidyverse)
+library(Seurat)
+library(cowplot)
+
+# Input paths
+wd <- "~/Documents/Teaching/chsi-mic-2022"
+# wd <- "/hpc/groups/chsi-mic-2022"
+intermeddir <- file.path(wd, "intermed")
+
+# Output paths
+scratchdir <- "~/Documents/Temporary/scratch"
+# scratchdir <- "/work"
+# username <- Sys.info()[["user"]]
+# outdir <- file.path(scratchdir,username,"output")
+# dir.create(outdir) # uncomment if not already there
+```
+
+**Goal of this workshop:** Learn to analyze cell trajectories with monocle
+
+**What's covered in this workshop:**
+- Add text
+
+Note that the Seurat - [Guided Clustering Tutorial](https://satijalab.org/seurat/articles/pbmc3k_tutorial.html) includes a lot of overlapping information.
+
+**Data source:** Christian et al. 2021 Cell Reports (https://doi.org/10.1016/j.celrep.2021.109118)
+
+**METHOD DETAILS, Single-cell RNA-seq analysis, page e4**
+- Analysis: "...."
+
+## Load data
+
+```{r}
+library(Seurat)
+library(monocle)
+trm <- readRDS('/hpc/group/jilab/zj/R25/data/Figure2_scRNAdata/TumorTrm.rds')
+trm <- RenameCells(trm,add.cell.id='Trm')
+disttrm <- readRDS('/hpc/group/jilab/zj/R25/data/Figure2_scRNAdata/DistantMucosaTrm.rds')
+disttrm <- RenameCells(disttrm,add.cell.id='MucosalTrm')
+tem <- readRDS('/hpc/group/jilab/zj/R25/data/Figure2_scRNAdata/TumorTem.rds')
+tem <- RenameCells(tem,add.cell.id='Tem')
+
+comb <- merge(trm,disttrm)
+comb <- merge(comb,tem)
+
+comb@meta.data$type <- sub('_.*','',rownames(comb@meta.data))
+
+# Create a new Monocle object
+pd <- new("AnnotatedDataFrame", data = comb@meta.data)
+fd <- new("AnnotatedDataFrame", data = data.frame(gene_short_name=rownames(comb),row.names = rownames(comb)))
+cds <- newCellDataSet(comb@assays$RNA@counts, phenoData = pd, featureData = fd)
+
+# Estimate size factors and dispersions
+cds <- estimateSizeFactors(cds)
+cds <- estimateDispersions(cds)
+
+# Filtering low expressing genes
+cds <- detectGenes(cds, min_expr = 0.1)
+expressed_genes <- row.names(subset(fData(cds),num_cells_expressed >= 100))
+
+# Selecting genes for pseudotime
+diff_test_res <- differentialGeneTest(cds[expressed_genes,],fullModelFormulaStr = "~type",cores=5)
+ordering_genes <- row.names(subset(diff_test_res, qval < 0.05))
+cds <- setOrderingFilter(cds, ordering_genes)
+
+# Reduce data dimensionality
+cds <- reduceDimension(cds, max_components = 2,method = 'DDRTree')
+
+# Order cells along the trajectory
+cds <- orderCells(cds)
+
+# Plot trajectory
+pdf('/hpc/group/jilab/zj/R25/monocle2/trajectory.pdf')
+plot_cell_trajectory(cds,color_by = "type")
+dev.off()
+
+# Differential analysis for all Il genes
+marker_genes <- grep('^Il',fData(cds)$gene_short_name,value = T)
+diff_test_res <- differentialGeneTest(cds[marker_genes,],fullModelFormulaStr = "~sm.ns(Pseudotime)")
+
+# Select genes that are significant at an FDR < 5%
+sig_genes <- subset(diff_test_res, qval < 0.05)
+
+# Plot individual genes
+pdf('/hpc/group/jilab/zj/R25/monocle2/Ilexpression.pdf')
+plot_genes_in_pseudotime(cds[sig_genes$gene_short_name,],ncol=3)
+dev.off()
+save.image('/hpc/group/jilab/zj/R25/monocle2/image.rda')
+
+
+
+```

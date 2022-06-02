@@ -17,7 +17,7 @@ stdt<-date()
 scRNA-seq dataset of 8K human peripheral blood mononuclear cells (PBMCs) freely available from 10X Genomics (https://support.10xgenomics.com/single-cell-gene-expression/datasets/2.1.0/pbmc8k)
 
 
-# Navigate to data directory
+## Data set up
 ```{bash}
 DATADIR=/hpc/group/chsi-mic-2022/data
 cd ${DATADIR}
@@ -25,7 +25,7 @@ pwd
 ls -l
 ```
 
-# BCL files
+Locate BCL files
 
 Get tar of bcl files and unzip them
 ```{bash}
@@ -33,19 +33,17 @@ Get tar of bcl files and unzip them
 #tar -zxvf /hpc/group/chsi-mic-2022/data/cellranger-tiny-bcl-1.2.0.tar.gz
 ```
 
-# Get sample sheet
+Locate sample sheet
 ```{bash}
 #mkdir cellranger-tiny-csv-1.2.0/
 #wget --directory-prefix=cellranger-tiny-csv-1.2.0/ https://cf.10xgenomics.com/supp/cell-exp/cellranger-tiny-bcl-simple-1.2.0.csv
 ```
 
-# Get fastqs for the pbmc8k dataset
+Get fastqs for the pbmc8k dataset
 ```{bash}
 #mkdir pbmc8k
 #wget --directory-prefix=pbmc8k/ http://s3-us-west-2.amazonaws.com/10x.files/samples/cell-exp/2.1.0/pbmc8k/pbmc8k_fastqs.tar
 ```
-
-# Run Cellranger
 
 Make sure that the cellranger works from within the course singularity container
 ```{bash}
@@ -57,6 +55,7 @@ cellranger --version
 - I haven't actually run the cellranger commands in the course workspace, I just copied /outs from plp server and updated the paths above
 - We would need to a copy #ANNO=/mnt/data2/Annotation/CellRanger/refdata-gex-GRCh38-2020-A/ to the workspace
 
+## 1. Transform BCL files into fastq files
 
 Run cellranger's mkfastq command to reformat BCL files into fastqs
 ```{bash eval = FALSE}
@@ -69,6 +68,8 @@ cellranger mkfastq \
     --csv=${SAMP} \
     --output-dir=${FASTQ}
 ```
+
+## 2. Map reads and count genes
 
 Run cellranger's count command to map reads to the reference transcriptome and count the reads per feature
 ```{bash eval=FALSE}

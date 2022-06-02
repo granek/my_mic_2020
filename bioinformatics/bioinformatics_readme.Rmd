@@ -4,7 +4,7 @@ output: html_notebook
 ---
 
 
-# 1. cellranger-demo.Rmd
+# 1_cellranger-demo.Rmd
 
 **Goal of this workshop:** Learn how to preprocess scRNAseq data using cellranger
 
@@ -12,7 +12,7 @@ output: html_notebook
 - Transform BCL files into fastq files
 - Map reads and count genes
 
-# 2. qc.Rmd
+# 2_qc.Rmd
 
 **Goal of this workshop:** Learn how to QC scRNAseq data
 
@@ -22,7 +22,7 @@ output: html_notebook
 - Learn data quality attributes
 - Exclude data from low-quality cells
 
-# 3. load_transformCounts.Rmd
+# 3_load_transformCounts.Rmd
 
 **Goal of this workshop:** Learn how to load cellranger output into R and prepare QC'd data for downstream analyses
 
@@ -31,7 +31,7 @@ output: html_notebook
 - Verify that the data have been QC'd
 - Transform gene counts
 
-# 4. clustering_annotation.Rmd
+# 4_clustering_annotation.Rmd
 
 **Goal of this workshop:** Illustrate the clustering and cell-type annotation procedures. 
 
@@ -42,7 +42,7 @@ output: html_notebook
 - Cell-type specific marker gene detection
 - How to generate the figures for the paper?
 
-# 5. de.Rmd
+# 5_de.Rmd
 
 **Goal of this workshop:** Learn how to test differential expression between cells
 
@@ -51,10 +51,14 @@ output: html_notebook
 - Re-name clusters
 - Verify manuscript DE results
 
-# 6. trajectory.Rmd
+# 6_trajectory.Rmd
 
-- Analyze cell trajectories with monocle2
+**Goal of this workshop:** Learn to analyze cell trajectories with monocle
 
+**What's covered in this workshop:**
+- Add text
+
+---
 
 # Data sources
 
