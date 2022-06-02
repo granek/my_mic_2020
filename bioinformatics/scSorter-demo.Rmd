@@ -1,0 +1,120 @@
+---
+title: "scSorter demonstration"
+output: html_notebook
+---
+```{r prereqs}
+knitr::opts_chunk$set(echo = T, message = FALSE, warning = FALSE)
+stdt<-date()
+
+# Libraries
+library(tidyverse)
+library(Seurat)
+library(scSorter)
+
+# Paths
+wd <- "/hpc/group/chsi-mic-2022"
+intermeddir <- file.path(wd, "intermed")
+sigfile = "/hpc/group/chsi-mic-2022/data/cellAssignSig.csv"
+```
+
+**Goal:** Show how to use the R package scSorter to classify cells into cells types using gene expression and a signature matrix.
+
+**Data source:** 
+Christian et al. 2021 Cell Reports (https://doi.org/10.1016/j.celrep.2021.109118)
+
+
+## Load data
+
+```{r}
+seulist <- readRDS(file.path(intermeddir, "seulist_drc.rds"))
+```
+
+## Load signature matrix
+
+See the script `make-cellAssignSig.R` for details on how this file was generated.
+```{r}
+sigobj <- read.csv(file = sigfile)
+head(sigobj)
+```
+
+Translate marker genes symbols to gene names used in Seurat objects
+```{r}
+seulist %>%
+  map(~rownames(Seurat::GetAssayData(.x))) %>%
+  unlist() %>%
+  unique() -> seulist.genes
+
+seulist.genes[1:5]
+
+data.frame(gene =  seulist.genes, 
+           upper.gene = toupper(seulist.genes)) -> gene.indx
+
+length(unique(sigobj$Marker)) #39 markers
+sum(gene.indx$gene %in% sigobj$Marker) # 0 matches
+sum(gene.indx$upper.gene %in% sigobj$Marker) # 27 matches
+
+gene.indx$Marker <- gene.indx$upper.gene
+sigobj %>%
+  left_join(gene.indx) %>%
+  dplyr::select(-c(Marker, upper.gene)) %>%
+  dplyr::select('Type'='Group', 'Marker'='gene',Weight) -> sigobj.t
+
+```
+
+## Classify cells
+
+Function to ...
+
+- 1. Find variable features in Seurat Object
+- 2. Find genes from the signature matrix that are also variable genes
+- 3. Extract expression matrix for those genes
+- 4. Get predicted cell types using expression matrix and signiture matrix
+- 5. Add cell types as metadata to the seurat object
+
+```{r}
+celltypefun <- function(cobj, sigobj) {
+
+  # Find variable features
+  cobj <- FindVariableFeatures(cobj)
+  #VariableFeatures(cobj)
+  
+  #' Use the union of variable genes an marker genes 
+  union(
+    Seurat::VariableFeatures(cobj), sigobj$Marker
+  ) -> topgenes
+
+  #' get expression matrix
+  as.matrix(Seurat::GetAssayData(cobj)[topgenes,]) -> exprmat
+  #dim(exprmat)
+  
+  #' Get cell type prediction
+  print(paste0("scSorter started", Sys.time()))
+  scSorter::scSorter(
+    expr = exprmat,
+    anno = sigobj
+  ) -> ctpred
+  print(paste0("scSorter finished", Sys.time()))
+  
+  #' Add inferred cell types as meta data
+  Seurat::AddMetaData(
+    object = cobj,
+    metadata = stats::setNames(ctpred$Pred_Type, colnames(cobj)),
+    col.name = "scSorter"
+  ) -> cobj
+
+  return(cobj)
+}
+```
+
+Apply the function across the list of seurat objects
+```{r}
+names(seulist)
+
+seulist %>%
+  map(~celltypefun(cobj = .x, sigobj = sigobj.t)) -> seulist.out
+
+seulist.out
+
+```
+
+
