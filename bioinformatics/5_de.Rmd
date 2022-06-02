@@ -38,6 +38,11 @@ Note that the Seurat - Guided Clustering Tutorial (https://satijalab.org/seurat/
 
 - Analysis: "Gene counts were scaled to total gene expression and percentage of mitochondrial genes with a scaling factor of 10,000, and then log-transformed. The high dimensional data for each sample were reduced by PCA and t-Distributed Stochastics Neighbor Embedding (tSNE). We used the FindCluster function to group clusters in each sample with a resolution of 0.6. Differential expressed genes (DEGs) were identified using the Wilcoxon rank-sum test."
 
+## Load data
+
+```{r}
+seulist.drc <- readRDS(file.path(intermeddir, "seulist_drc.rds"))
+```
 
 ## 1. Identify DEGs between clusters
 

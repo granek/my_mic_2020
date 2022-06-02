@@ -58,7 +58,10 @@
 
 **What's covered in this workshop:**
 
-- Add text
+- Merge Seurat objects
+- Create a Monocle object
+- Run trajectory analysis
+- Test for DE over pseudotime
 
 ---
 
