@@ -11,17 +11,11 @@ library(tidyverse)
 library(Seurat)
 library(cowplot)
 
-# Input paths
-wd <- "~/Documents/Teaching/chsi-mic-2022"
-# wd <- "/hpc/groups/chsi-mic-2022"
+# Paths
+wd <- "/hpc/group/chsi-mic-2022"
 intermeddir <- file.path(wd, "intermed")
-
-# Output paths
-scratchdir <- "~/Documents/Temporary/scratch"
-# scratchdir <- "/work"
-# username <- Sys.info()[["user"]]
-# outdir <- file.path(scratchdir,username,"output")
-# dir.create(outdir) # uncomment if not already there
+outdir <- file.path("/work",Sys.info()[["user"]],"output")
+outdir
 ```
 
 **Goal of this workshop:** Learn to analyze cell trajectories with monocle

@@ -11,18 +11,11 @@ library(tidyverse)
 library(Seurat)
 library(cowplot)
 
-# Input paths
+# Paths
 wd <- "/hpc/group/chsi-mic-2022"
-datadirs <- list.files(path = file.path(wd, "data","Christian2021CellReports"), 
-                       pattern = "_10x", full.names = T)
-datadirs <- datadirs[!grepl(".h5", datadirs)]
 intermeddir <- file.path(wd, "intermed")
-
-# Output paths
-scratchdir <- "/work"
-username <- Sys.info()[["user"]]
-outdir <- file.path(scratchdir,username,"output")
-#dir.create(outdir) # uncomment if not already there
+outdir <- file.path("/work",Sys.info()[["user"]],"output")
+outdir
 ```
 
 **Goal of this workshop:** Learn how to test differential expression between cells

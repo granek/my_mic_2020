@@ -12,15 +12,9 @@ stdt<-date()
 library(tidyverse)
 library(Seurat)
 
-# Input paths
+# Paths
 cr.outs <- "/hpc/group/chsi-mic-2022/data/pbmc8k/pbmc8k/outs"
 intermeddir <- "/hpc/group/chsi-mic-2022/intermed"
-
-# Output paths
-scratchdir <- "/work"
-username <- Sys.info()[["user"]]
-outdir <- file.path(scratchdir,username,"output")
-#dir.create(outdir) # uncomment if not already there
 ```
 
 **Goal of this workshop:** Learn how to QC scRNAseq data
