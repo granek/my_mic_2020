@@ -1,0 +1,290 @@
+---
+title: "R tricks used in bioinformatics scripts"
+output: html_notebook
+---
+```{r prereqs}
+knitr::opts_chunk$set(echo = T, message = FALSE, warning = FALSE)
+library(tidyverse)
+library(Seurat)
+cr.outs <- "/hpc/group/chsi-mic-2022/data/pbmc8k/pbmc8k/outs"
+datadirs <- list.files(path = file.path(wd, "data","Christian2021CellReports"), pattern = "_10x", full.names = T)
+datadirs <- datadirs[!grepl(".h5", datadirs)]
+intermeddir <- "/hpc/group/chsi-mic-2022/intermed"
+```
+
+Here are a collection of R "tricks" that I've pulled out from the notebooks in the 'bioinformatics' folder. I suspect some of these might get updated/changed depending on the tastes of the person leading the workshop, but this is a start! I have them organized by the script they came from.
+
+Warning: some of these code chunks don't run. For those that don't, I've tried to reference the line from the original script so you can see it in context.
+
+## 1_cellranger-demo.Rmd
+
+## 2_qc.Rmd
+
+Use file.path() to paste paths together
+```{r}
+file.path(cr.outs, "filtered_feature_bc_matrix.h5")
+```
+
+Use pipes to link together functions
+```{r}
+Seurat::Read10X_h5(file.path(cr.outs, "filtered_feature_bc_matrix.h5")) %>% 
+  Seurat::CreateSeuratObject() -> pbmc8k
+```
+
+Use head() to see the first few lines of a dataframe
+```{r}
+head(pbmc8k@meta.data)
+```
+
+Pull out elements buried in complex data structures
+```{r}
+curr.count <- pbmc8k@assays$RNA@counts
+```
+
+Look at row names
+```{r}
+rownames(curr.count)[1:10]
+```
+
+Search for text matches with grepl()
+```{r}
+grepl("^MT-", rownames(curr.count))[1:3]
+```
+
+ggplot elements
+```{r}
+pbmc8k@meta.data %>%
+  ggplot(aes(x = orig.ident, y = nCount_RNA))+
+	geom_jitter(shape = 16, position = position_jitter(0.2))+
+	geom_violin(trim = F, alpha = 0.7) +
+  labs(x = "Group", y = "nCount") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 30, hjust=1),
+        strip.text = element_text(size = 6))
+```
+
+Summarize data in a dataframe
+```{r}
+v <- 1000
+pbmc8k@meta.data %>%
+    summarize(threshold = v, 
+              ncells_filtered = sum(nCount_RNA < v),
+              ncells_kept = sum(nCount_RNA >= v))
+```
+
+Count the number of rows
+```{r}
+nrow(pbmc8k@meta.data)
+```
+
+Subset a Seurat object based on metadata criteria
+```{r}
+cl <- 6 # min number of total reads per cell (nCount is analogous to library size or total number of reads)
+ch <- 11 # max number of total reads per cell
+fl <- 5.5 # min number of gene features per cell
+seuobj_filt <- subset(seuobj, 
+         nCount_RNA > exp(cl) & 
+         nCount_RNA < exp(ch) &
+         nFeature_RNA > exp(fl))
+```
+
+## 3_load_transformCounts.Rmd
+
+Use basename()
+```{r}
+datadirs
+basename(datadirs)
+```
+
+Use gsub()
+```{r}
+sampleNames <- gsub("_10x","", basename(datadirs))
+sampleNames
+```
+
+For-loops
+```{r}
+seulist <- list()
+for(i in 1:length(sampleNames)){
+  seulist[[i]] <- readin_10x_to_SO(sample = sampleNames[i], path = datadirs[i])
+}
+names(seulist) <- sampleNames
+seulist
+```
+
+Make a function
+```{r}
+add_mt <- function(so){
+  so[["percent.mt"]] <- PercentageFeatureSet(so, pattern = "^mt-")
+  return(so)
+}
+
+```
+
+Map a function over a list
+```{r}
+seulist %>%
+  map(~add_mt(.x)) -> seulist.mt
+
+seulist.mt %>%
+  map(~head(.x@meta.data))
+```
+
+Group and then summarize data in a dataframe
+```{r}
+seulist %>%
+  map_dfr(~.x@meta.data, .id = "seuobj") %>%
+  group_by(seuobj) %>%
+  summarize(min = min(nFeature_RNA),
+            mean = mean(nFeature_RNA),
+            max = max(nFeature_RNA))
+```
+
+FYI, there is info about how Seurat objects are structured in this script, e.g. see line 159
+
+Use dim() and create a dataframe
+```{r}
+curr.counts <- tem@assays$RNA@counts
+dim(curr.counts) # 12571 features as rows and 1457 cells as columns
+curr.data <- tem@assays$RNA@data
+df <- data.frame(count = curr.counts[,i], data = curr.data[,i], feature = row.names(curr.counts), row.names = NULL)
+head(df)
+```
+
+## 4_clustering_annotation.Rmd
+
+Read in R objects (and save them)
+```{r}
+seulist <- readRDS(file.path(intermeddir, "seulist_drc.rds"))
+```
+
+Index elements of a list
+```{r}
+tem <- seulist[["Tem"]]
+```
+
+Use coord_equal() ... line 238
+```{r}
+#DimPlot(seulist.drc[["Trm"]], reduction = "tsne") + ggtitle("Trm") + coord_equal()
+```
+
+Use pull() and unique()... line 283
+```{r}
+# tem@meta.data %>%
+#   pull(seurat_clusters) %>% unique()
+```
+
+Use arrange()... line 305
+```{r}
+# cluster0.markers %>%
+#   arrange(-avg_log2FC) %>%
+#   head(n = 5)
+```
+
+## 5_de.Rmd
+
+Put ggplots together with cowplot... line 189
+```{r}
+# library(cowplot)
+# plot_grid(DimPlot(tem, reduction = "tsne"),
+#           FeaturePlot(tem, features = c("Hmgb2")))
+```
+
+Use ncol() ... line 90
+```{r}
+#ncol(x = tem.0) # 317 cells
+```
+
+Use slice_max()... line 151
+```{r}
+# all.markers %>%
+#   group_by(cluster) %>%
+#   slice_max(n = 3, order_by = avg_log2FC) %>%
+#   arrange(cluster, -avg_log2FC)
+# # note that this uses slice_max() and avg_log2FC is arranged from high to low with "-"
+```
+
+Use slice_min()... line 160
+```{r}
+# all.markers %>%
+#   group_by(cluster) %>%
+#   slice_min(n = 3, order_by = avg_log2FC) %>%
+#   arrange(cluster, avg_log2FC)
+# # note that this uses slice_min() and avg_log2FC is arranged from low to high
+```
+
+Use bind_rows()... line 176
+```{r}
+# upGenes %>%
+#   bind_rows(downGenes) -> topGenes
+```
+
+Use rownames_to_column() ... line 276
+```{r}
+# p4v2markers %>%
+#   rownames_to_column(var = "gene") %>%
+#   filter(gene == "Pdcd1")
+```
+
+
+
+## 6_trajectory.Rmd
+
+Use package.version()
+```{r}
+library(monocle); package.version("monocle")
+```
+
+Merge Seurat objects... line 65
+```{r}
+# comb <- merge(trm.rn, disttrm.rn)
+```
+
+Use Cells() to get cell names from a Seurat object...line 83
+Use str_split()
+Use map_dfr()
+Use mutate()
+```{r}
+# Cells(comb) %>%
+#   str_split("_") %>%
+#   map_dfr(~data.frame(prefix = .x[1], orig.cellname = .x[2])) %>%
+#   mutate(new.cellname = Cells(comb)) -> cellname.df
+```
+
+Other data structures, e.g. AnnotatedDataFrame... line 127
+```{r}
+# pd.adf <- new("AnnotatedDataFrame", data = pd)
+```
+
+FYI, there is info about how CellDataSet (monocle) objects are structured in this script, e.g. see line 130
+
+R package monocle imports BiocGenerics::estimateSizeFactors()... line 141
+```{r}
+# cds.es <- estimateSizeFactors(cds)
+```
+
+Model formula strings, e.g. ~orig.ident... line 183
+```{r}
+# diff_test_res <- differentialGeneTest(cds.exprs, fullModelFormulaStr = "~orig.ident", cores = 2)
+```
+
+More grepl-ing... line 272
+```{r}
+# marker_genes <- grep('^Il', all.ordered.genes, value = T)
+```
+
+Index with rownames... line 275
+```{r}
+# cds.mg <- cds.oc[marker_genes,]
+# cds.mg
+```
+
+More model formula strings... line 281
+```{r}
+# diff_test_res2 <- differentialGeneTest(cds.mg, fullModelFormulaStr = "~sm.ns(Pseudotime)")
+```
+
+
+
+
+
