@@ -38,27 +38,40 @@ head(sigobj)
 ```
 
 Translate marker genes symbols to gene names used in Seurat objects
+
+First, extract gene names from Seurat objects
 ```{r}
+# extract genes from seurat objects
 seulist %>%
   map(~rownames(Seurat::GetAssayData(.x))) %>%
   unlist() %>%
   unique() -> seulist.genes
-
+length(seulist.genes) #13430 genes in total
 seulist.genes[1:5]
+```
 
+If we transform these into uppercase, do they match markers? Of the 39 markers, 27 have matches. 
+```{r}
 data.frame(gene =  seulist.genes, 
            upper.gene = toupper(seulist.genes)) -> gene.indx
 
+# how many marker matches?
 length(unique(sigobj$Marker)) #39 markers
-sum(gene.indx$gene %in% sigobj$Marker) # 0 matches
-sum(gene.indx$upper.gene %in% sigobj$Marker) # 27 matches
+sum(unique(sigobj$Marker) %in% gene.indx$gene) # 0 matches
+sum(unique(sigobj$Marker) %in% gene.indx$upper.gene) # 27 matches
+```
 
-gene.indx$Marker <- gene.indx$upper.gene
+Which markers do not have matches?
+```{r}
+unique(sigobj$Marker)[!unique(sigobj$Marker) %in% gene.indx$upper.gene]
+```
+
+Recode the signature matrix so that the marker names will match the gene names in the seurat objects
+```{r}
 sigobj %>%
-  left_join(gene.indx) %>%
-  dplyr::select(-c(Marker, upper.gene)) %>%
-  dplyr::select('Type'='Group', 'Marker'='gene',Weight) -> sigobj.t
-
+  left_join(gene.indx, by = c("Marker"="upper.gene")) %>%
+  dplyr::select('Type'='Group', 'Marker'='gene', Weight, 'orig.Marker'='Marker') %>%
+  filter(!is.na(Marker)) -> sigobj.t
 ```
 
 ## Classify cells
@@ -72,49 +85,92 @@ Function to ...
 - 5. Add cell types as metadata to the seurat object
 
 ```{r}
-celltypefun <- function(cobj, sigobj) {
-
-  # Find variable features
-  cobj <- FindVariableFeatures(cobj)
-  #VariableFeatures(cobj)
+celltypefun <- function(cobj, sigobj.t) {
   
-  #' Use the union of variable genes an marker genes 
+  # Find variable features
+  cobj.vf <- FindVariableFeatures(cobj)
+  
+  #' Use the union of variable genes and marker genes 
   union(
-    Seurat::VariableFeatures(cobj), sigobj$Marker
+    Seurat::VariableFeatures(cobj.vf), sigobj.t$Marker
   ) -> topgenes
-
+  #topgenes
+  
   #' get expression matrix
-  as.matrix(Seurat::GetAssayData(cobj)[topgenes,]) -> exprmat
-  #dim(exprmat)
+  dat <- Seurat::GetAssayData(cobj.vf)
+  exprmat <- as.matrix(dat[row.names(dat) %in% topgenes,])
+  print(dim(exprmat))
   
   #' Get cell type prediction
   print(paste0("scSorter started", Sys.time()))
   scSorter::scSorter(
     expr = exprmat,
-    anno = sigobj
+    anno = sigobj.t
   ) -> ctpred
   print(paste0("scSorter finished", Sys.time()))
   
   #' Add inferred cell types as meta data
   Seurat::AddMetaData(
-    object = cobj,
-    metadata = stats::setNames(ctpred$Pred_Type, colnames(cobj)),
+    object = cobj.vf,
+    metadata = stats::setNames(ctpred$Pred_Type, colnames(cobj.vf)),
     col.name = "scSorter"
-  ) -> cobj
+  ) -> cobj.vf
 
-  return(cobj)
+  return(cobj.vf)
 }
 ```
 
-Apply the function across the list of seurat objects
+Apply the function to each seurat object...
+
+### disTrm
 ```{r}
-names(seulist)
+seulist[["disTrm"]]
+distrm.out <- celltypefun(cobj = seulist[["disTrm"]], 
+                          sigobj.t = sigobj.t)
 
-seulist %>%
-  map(~celltypefun(cobj = .x, sigobj = sigobj.t)) -> seulist.out
-
-seulist.out
-
+distrm.out@meta.data %>%
+  group_by(orig.ident, scSorter) %>%
+  summarize(ncells = length(orig.ident))
+```
+### Tcm
+```{r}
+seulist[["Tcm"]]
+tcm.out <- celltypefun(cobj = seulist[["Tcm"]], 
+                          sigobj.t = sigobj.t)
+tcm.out@meta.data %>%
+  group_by(orig.ident, scSorter) %>%
+  summarize(ncells = length(orig.ident))
 ```
 
 
+### Tem
+```{r}
+seulist[["Tem"]]
+tem.out <- celltypefun(cobj = seulist[["Tem"]], 
+                          sigobj.t = sigobj.t)
+tem.out@meta.data %>%
+  group_by(orig.ident, scSorter) %>%
+  summarize(ncells = length(orig.ident))
+```
+
+ 
+### Trm
+```{r}
+seulist[["Trm"]]
+trm.out <- celltypefun(cobj = seulist[["Trm"]], 
+                          sigobj.t = sigobj.t)
+trm.out@meta.data %>%
+  group_by(orig.ident, scSorter) %>%
+  summarize(ncells = length(orig.ident))
+```
+
+  
+### Save
+```{r}
+names(seulist)
+seulist.sc <- list(distrm.out, tcm.out, tem.out, trm.out)
+names(seulist.sc) <- names(seulist)
+seulist.sc
+
+saveRDS(seulist.sc, file.path(intermeddir, "seulist_sc.rds"))
+```
