@@ -46,5 +46,5 @@ sinfo -O "NodeList,StateLong,CPUsState,Memory,AllocMem,Gres,GresUsed" -p chsi-gp
 
 ## Using DCC OOD
 
-[Using RStudio on Duke Compute Cluster Open OnDemand](dcc_ood_rstudio.Rmd)
+[Using RStudio on Duke Compute Cluster Open OnDemand](dcc_ood_rstudio.md)
 

@@ -29,4 +29,4 @@
 ## Using DCC OOD
 
 [Using RStudio on Duke Compute Cluster Open
-OnDemand](dcc_ood_rstudio.Rmd)
+OnDemand](dcc_ood_rstudio.md)
