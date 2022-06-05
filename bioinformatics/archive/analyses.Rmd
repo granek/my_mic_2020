@@ -1,0 +1,734 @@
+---
+title: "Analyses scRNAseq"
+output: html_notebook
+---
+```{r prereqs}
+knitr::opts_chunk$set(echo = T, message = FALSE, warning = FALSE)
+stdt<-date()
+
+# Libraries
+library(tidyverse)
+library(Seurat)
+library(cowplot)
+
+# Input paths
+wd <- "/hpc/group/chsi-mic-2022"
+datadirs <- list.files(path = file.path(wd, "data","Christian2021CellReports"), 
+                       pattern = "_10x", full.names = T)
+datadirs <- datadirs[!grepl(".h5", datadirs)]
+intermeddir <- file.path(wd, "intermed")
+
+# Output paths
+scratchdir <- "/work"
+username <- Sys.info()[["user"]]
+outdir <- file.path(scratchdir,username,"output")
+#dir.create(outdir) # uncomment if not already there
+```
+
+**Data source:** 
+Christian et al. 2021 Cell Reports (https://doi.org/10.1016/j.celrep.2021.109118)
+
+**Goals of this script:** 
+
+Covered in "load_transformCounts.Rmd"
+(1) Load data into R as a Seurat object
+(2) Verify that the data have been QC'd
+(3) Transform gene counts
+
+Covered in "clustering_annotation.Rmd"
+(4) Cluster cells
+
+Covered in "DEanalyses.Rmd"
+(5) Test differential expression
+(6) Re-name clusters
+(7) Verify manuscript DE results
+
+
+Note that the Seurat - Guided Clustering Tutorial (https://satijalab.org/seurat/articles/pbmc3k_tutorial.html) includes a lot of overlapping information.
+
+**METHOD DETAILS, Single-cell RNA-seq analysis, page e4**
+
+- Pre-processing: "Raw short reads were demultiplexed, filtering and mapped to mouse genome GRCm38/mm10 using cellranger v2.02."
+
+- QC: "The gene count matrices from cellranger were subjected to quality control, pre-processing and clustering using the R Seurat 2.3.4 package (Butler et al., 2018). Low-quality cells that had less than 200 expressed genes and more than 5% mitochondrial genes were filtered out."
+
+- Analysis: "Gene counts were scaled to total gene expression and percentage of mitochondrial genes with a scaling factor of 10,000, and then log-transformed. The high dimensional data for each sample were reduced by PCA and t-Distributed Stochastics Neighbor Embedding (tSNE). We used the FindCluster function to group clusters in each sample with a resolution of 0.6. Differential expressed genes (DEGs) were identified using the Wilcoxon rank-sum test."
+
+
+# 1. Load data into R as a Seurat object
+
+We can use code like this to load the cell ranger output and store it in a Seurat object.
+
+```{r}
+readin_10x_to_SO <- function(sample, path, min.cells = 0, min.genes = 0){
+  Seurat::Read10X(data.dir = path) %>%
+    Seurat::CreateSeuratObject(project = sample, 
+                               min.cells=min.cells, min.genes=min.genes) -> seu.obj
+  return(seu.obj)
+}
+```
+
+Load the four 10x datasets that correspond to T cells sampled in and outside of the tumor. See Fig 2A for tSNE plots of each sample type.
+
+- Tem = effector memory in tumor
+- Tcm = central memory in tumor
+- Trm = resident memory in tumor
+- disTrm = resident memory T-cells outside of the tumor 
+
+```{r}
+sampleNames <- gsub("_10x","", basename(datadirs))
+sampleNames
+
+seulist <- list()
+for(i in 1:length(sampleNames)){
+  seulist[[i]] <- readin_10x_to_SO(sample = sampleNames[i], path = datadirs[i])
+}
+names(seulist) <- sampleNames
+seulist
+```
+
+# 2. Verify data have been QC'd
+
+*METHOD DETAILS, Single-cell RNA-seq analysis, page e4*: "Low-quality cells that had less than 200 expressed genes and more than 5% mitochondrial genes were filtered out."
+
+The rownames are gene symbols. Investigating the names a bit more, the mitochondrial genes can be identified by the prefix "mt-"
+```{r}
+tem <- seulist$Tem
+curr.count <- tem@assays$RNA@counts
+rownames(curr.count)[1:10]
+rownames(curr.count)[grepl("^mt-", rownames(curr.count))] # these look like mitochondrial genes!
+```
+
+Add the mitochondrial percentage for all seurat objects in our list
+```{r}
+add_mt <- function(so){
+  so[["percent.mt"]] <- PercentageFeatureSet(so, pattern = "^mt-")
+  return(so)
+}
+
+seulist %>%
+  map(~add_mt(.x)) -> seulist.mt
+
+seulist.mt %>%
+  map(~head(.x@meta.data))
+
+seulist <- seulist.mt
+```
+
+Examine the distribution of nFeature and nCount for each dataset
+```{r}
+seulist %>%
+  map_dfr(~.x@meta.data, .id = "seuobj") %>%
+  ggplot(aes(x = nCount_RNA, y = nFeature_RNA, 
+                color = percent.mt))+
+	geom_point(size = 1)+
+	facet_wrap(~ seuobj, nrow = 2)+
+	labs(x = "nCount", y = "nFeature", color = "MT%") +
+  theme_classic() +
+  geom_hline(yintercept = 200, linetype = 2)
+```
+Are there any cells with less than 200 expressed genes?
+```{r}
+seulist %>%
+  map_dfr(~.x@meta.data, .id = "seuobj") %>%
+  ggplot(aes(x = nFeature_RNA))+
+	geom_histogram() +
+	facet_wrap(~ seuobj, nrow = 2)+
+  theme_classic() +
+  geom_vline(xintercept = 200, linetype = 2)
+```
+Summarize as a table
+```{r}
+seulist %>%
+  map_dfr(~.x@meta.data, .id = "seuobj") %>%
+  group_by(seuobj) %>%
+  summarize(min = min(nFeature_RNA),
+            mean = mean(nFeature_RNA),
+            max = max(nFeature_RNA))
+```
+
+Are there any cells with more than 5% mitochondrial genes?
+```{r}
+seulist %>%
+  map_dfr(~.x@meta.data, .id = "seuobj") %>%
+  ggplot(aes(x = percent.mt))+
+	geom_histogram() +
+	facet_wrap(~ seuobj, nrow = 2)+
+  theme_classic() +
+  geom_vline(xintercept = 5, linetype = 2)
+```
+Summarize as a table
+```{r}
+seulist %>%
+  map_dfr(~.x@meta.data, .id = "seuobj") %>%
+  group_by(seuobj) %>%
+  summarize(min = min(percent.mt),
+            mean = mean(percent.mt),
+            max = max(percent.mt))
+```
+
+# 3. Transform gene counts
+
+*METHOD DETAILS, Single-cell RNA-seq analysis, page e4*: "Gene counts were scaled to total gene expression and percentage of mitochondrial genes with a scaling factor of 10,000, and then log-transformed."
+
+First, take a look at how data are structured inside the filtered seurat object
+```{r}
+tem <- seulist$Tem
+
+Assays(tem)
+tem@assays
+```
+
+There is 1 assay called "RNA". Inside this, there are 3 slots for matrices named "counts", "data", and "scale.data". Each matrix consists of rows = features and columns = cells.
+```{r}
+curr.counts <- tem@assays$RNA@counts
+dim(curr.counts) # 12571 features as rows and 1457 cells as columns
+colnames(curr.counts)[1:10]
+rownames(curr.counts)[1:10]
+
+curr.data <- tem@assays$RNA@data
+dim(curr.data) # 12571 features as rows and 1457 cells as columns
+colnames(curr.data)[1:10]
+rownames(curr.data)[1:10]
+
+curr.scale.data <- tem@assays$RNA@scale.data
+dim(curr.scale.data) # empty
+```
+
+Compare how the "counts" and "data" values differ. Pull out values for a single cell and plot.
+```{r}
+i <- 1
+colnames(curr.counts)[i] # cell identifier
+df <- data.frame(count = curr.counts[,i], data = curr.data[,i], feature = row.names(curr.counts), row.names = NULL)
+head(df)
+
+ggplot(df, aes(x = count, y = data)) +
+  geom_point() +
+  geom_abline(slope = 1, intercept = 0, linetype = 2, color = "grey")
+```
+
+Normalize the counts and re-examine the data slots. Note that only the values in the "data" slot have changed.
+```{r}
+tem.s <- NormalizeData(object = tem, normalization.method = "LogNormalize", scale.factor = 10000)
+
+s.counts <- tem.s@assays$RNA@counts
+dim(s.counts) # 12571 features as rows and 1457 cells as columns
+s.counts[1:10,1:10]
+#colnames(s.counts)[1:10]
+#rownames(s.counts)[1:10]
+
+s.data <- tem.s@assays$RNA@data
+dim(s.data) # 12571 features as rows and 1457 cells as columns
+s.data[1:10,1:10]
+#colnames(s.data)[1:10]
+#rownames(s.data)[1:10]
+
+s.scale.data <- tem.s@assays$RNA@scale.data
+dim(s.scale.data) # empty
+
+## plot
+i <- 1
+colnames(s.counts)[i] # cell identifier
+df <- data.frame(count = s.counts[,i], data = s.data[,i], feature = row.names(s.counts), row.names = NULL)
+ggplot(df, aes(x = count, y = data)) +
+  geom_point() +
+  geom_abline(slope = 1, intercept = 0, linetype = 2, color = "grey")
+```
+
+Normalize each of the seurat objects in the list.
+
+Here is an example of how to do this with a for-loop
+```{r}
+sampleNames <- names(seulist)
+seulist.n <- list()
+for(i in 1:length(sampleNames)){
+  seulist.n[[i]] <- NormalizeData(object = seulist[[i]], normalization.method = "LogNormalize", 
+                                  scale.factor = 10000)
+}
+names(seulist.n) <- sampleNames
+```
+
+Here is an example of how to this using purrr::map and pipes
+```{r}
+# seulist %>%
+#   map(~NormalizeData(object = .x, normalization.method = "LogNormalize", scale.factor = 10000)) -> seulist.n
+```
+
+
+# 4. Cluster cells
+
+As above, we will use 1 seurat object for demonstration and then operate on the list of seurat objects at the very end.
+```{r}
+names(seulist.n)
+tem <- seulist.n[["Tem"]]
+```
+
+*METHOD DETAILS, Single-cell RNA-seq analysis, page e4*: "The high dimensional data for each sample were reduced by PCA..."
+
+## Find variable genes
+
+**First, find the top 2000 most variable gene features.** This function finds the features, stashes them inside the seurat object, then returns the seurat object.
+```{r}
+tem.vf <- FindVariableFeatures(tem, selection.method = "vst", nfeatures = 2000)
+```
+
+You can extract the variable features from the seurat object using these methods
+```{r}
+VariableFeatures(tem.vf)[1:10] # option 1
+tem.vf@assays$RNA@var.features[1:10] # option 2
+
+# note that this slot is empty in the seurat object prior to the FindVariableFeatures() command
+tem@assays$RNA@var.features
+```
+
+In the FindVariableFeatures() function, we used "vst" as the selection method. Intermediate data associated with that selection method is stored inside the seurat object here:
+```{r}
+head(tem.vf@assays$RNA@meta.features)
+```
+
+Seurat has a function to generate a plot to show how variable these "variable features" are.
+```{r}
+top10 <- head(VariableFeatures(tem.vf), 10)
+plot1 <- VariableFeaturePlot(tem.vf)
+plot2 <- LabelPoints(plot = plot1, points = top10, repel = TRUE)
+plot2
+```
+
+## Scale
+
+**Second, scale the data.** Specifically, shift the expression of each gene, so that the mean expression across cells is 0 and the variance across cells is 1. If we didn't do this, highly-expressed and highly-variable genes would dominate the outcome of down-stream analyses.
+```{r}
+all.genes <- rownames(tem.vf)
+tem.sAll <- ScaleData(tem.vf, features = all.genes) 
+tem.sVF <- ScaleData(tem.vf) 
+
+# note that if you do not specify features as all.genes, the default behavior is to only use the 2000 variable features downstream
+```
+
+Examine the scaled data.
+```{r}
+# prior to scaling
+dim(tem.vf@assays$RNA@scale.data) # empty
+
+# after scaling with all genes
+dim(tem.sAll@assays$RNA@scale.data) # 12571 features as rows and 1457 cells as columns
+
+# after scaling with the 2000 variable features
+dim(tem.sVF@assays$RNA@scale.data) # 2000 features as rows and 1457 cells as columns
+```
+
+## PCA
+
+**Third, perform dimension reduction with PCA.** 
+```{r}
+tem.pAll <- RunPCA(tem.sAll, features = all.genes) # this takes a minute or so...
+tem.pVF <- RunPCA(tem.sVF)
+# again, note that the default behavior is to use only the variables to compute the PCA
+```
+
+The RunPCA() function automatically spits out information about how features loaded into PC space. But like most Seurat functions, you will need to look inside the object to get details.
+
+Here is where you will find detailed info about the reduction you performed
+```{r}
+tem.pVF@reductions # the seurat object keeps track of reductions you have performed here
+names(tem.pVF@commands) # more broadly, there is a log of all commands stored here
+tem.pVF@commands$RunPCA.RNA # with even more details
+```
+
+Here is where you can find the PCA scores and loadings
+```{r}
+dim(tem.pVF@reductions$pca@cell.embeddings) # 1457 cells as rows, 50 dimensions as columns
+dim(tem.pVF@reductions$pca@feature.loadings) # 2000 features as rows, 50 dimensions as columns
+#str(tem.pVF@reductions$pca)
+```
+
+Seurat has a few visualization tools to see how your features loaded into PC space.
+```{r}
+VizDimLoadings(tem.pVF, dims = 1:2, reduction = "pca")
+DimPlot(tem.pVF, reduction = "pca")
+DimHeatmap(tem.pVF, dims = 1, cells = 500, balanced = TRUE)
+```
+
+To refine the number of dimensions, we can use...
+
+**option1**
+A resampling test inspired by the JackStraw procedure developed by the Seurat authors. The idea is.."to permute a subset of the data (1% by default) and rerun PCA, constructing a ‘null distribution’ of feature scores, and repeat this procedure. We identify ‘significant’ PCs as those who have a strong enrichment of low p-value features....The JackStrawPlot() function provides a visualization tool for comparing the distribution of p-values for each PC with a uniform distribution (dashed line). ‘Significant’ PCs will show a strong enrichment of features with low p-values (solid curve above the dashed line)."(https://satijalab.org/seurat/articles/pbmc3k_tutorial.html).
+
+```{r}
+#tem.js <- JackStraw(tem.pVF, num.replicate = 100) # this takes a minute or two, so we can just load a version that we previously created, cooking-show style.
+
+# Students will not be able to run the saveRDS command because 
+# everything the data/ and intermed/ folders will need to be write-protected
+#saveRDS(tem.js, file = file.path(intermeddir, "tem_js.rds"))
+tem.js <- readRDS(file.path(intermeddir, "tem_js.rds"))
+
+tem.js <- ScoreJackStraw(tem.js, dims = 1:20)
+JackStrawPlot(tem.js, dims = 1:15)
+```
+There seems to be a drop-off in significance somewhere between PC5 and PC10 but it is difficult to tell with the colors. This suggests we should use ~10 dimensions.
+
+**Option 2**
+We can also just take a look at the percentage of variance explained by each additional PC. We don't want to bother including PCs that explain very little additional variance so we can look for the "elbow" where the variance explanined (or inversely, the standard deviation) levels-off. Seurat's tool, ElbowPlot() displays standard deviation on the y-axis.
+```{r}
+ElbowPlot(tem.pVF)
+```
+Here we can see an "elbow" that forms around PC10 to PC15, suggesting that we should to use at least that many dimensions and, beyond that, we start seeing diminishing returns.
+
+## Cluster
+
+*METHOD DETAILS, Single-cell RNA-seq analysis, page 4e*: " ..and t-Distributed Stochastics Neighbor Embedding (tSNE). We used the FindCluster function to group clusters in each sample with a resolution of 0.6."
+
+```{r}
+tem.pVF <- FindNeighbors(tem.pVF, dims = 1:10)
+tem.pVF <- FindClusters(tem.pVF, resolution = 0.6)
+```
+
+The cluster IDs are stored here
+```{r}
+Idents(tem.pVF)[1:10]
+```
+
+After finding clusters, project into 2D for visualization using tSNE.
+```{r}
+tem.pVf.tsne <- RunTSNE(tem.pVF, dims = 1:10) 
+# note that the seurat authors suggest using the same PCs as input to the clustering analysis
+DimPlot(tem.pVf.tsne, reduction = "tsne") + coord_equal()
+```
+
+Another option is to do this with UMAP instead of tSNE. They should look pretty similar.
+```{r}
+tem.pVf.umap <- RunUMAP(tem.pVF, dims = 1:10)
+DimPlot(tem.pVf.umap, reduction = "umap") + coord_equal()
+```
+
+## Apply across a list
+
+Make a function that contains that takes a seurat object as input, does all the operations we want, then returned the updated seurat object.
+```{r}
+dimRed_and_cluster <- function(seuobj){
+  
+  #seuobj <- FindVariableFeatures(seuobj, selection.method = "vst", nfeatures = 2000)
+  all.genes <- rownames(seuobj)
+  seuobj <- ScaleData(seuobj, features = all.genes) 
+  seuobj <- RunPCA(seuobj, features = all.genes)
+  seuobj <- FindNeighbors(seuobj, dims = 1:10)
+  seuobj <- FindClusters(seuobj, resolution = 0.6)
+  seuobj <- RunTSNE(seuobj, dims = 1:10)
+  
+  return(seuobj)
+
+}
+```
+
+Apply that function to each seurat object in the list of objects that we normalized
+```{r}
+#seulist.n %>%
+#  map(~dimRed_and_cluster(.x)) -> seulist.drc
+# this takes a minute or two, so we can just load a version that we previously created, cooking-show style.
+
+# Students will not be able to run the saveRDS command because 
+# everything the data/ and intermed/ folders will need to be write-protected
+#saveRDS(seulist.drc, file = file.path(intermeddir, "seulist_drc.rds"))
+seulist.drc <- readRDS(file.path(intermeddir, "seulist_drc.rds"))
+```
+
+
+## Visualize
+
+Examine the tSNE plots; these should resemble plots in Fig2, page 5.
+
+**Fig 2A**. They are similar but have different orientations and numbers of clusters.
+```{r}
+DimPlot(seulist.drc[["Tem"]], reduction = "tsne") + ggtitle("Tem") + coord_equal()
+# Clusters 0, 1, 3 correspond to p1?
+# Cluster 3 corresponds to p2?
+# Cluster 4 corresponds to p3?
+# Cluster 5 corresponds to p4?
+
+DimPlot(seulist.drc[["Tcm"]], reduction = "tsne") + ggtitle("Tcm") + coord_equal()
+
+DimPlot(seulist.drc[["Trm"]], reduction = "tsne") + ggtitle("Trm") + coord_equal()
+
+DimPlot(seulist.drc[["disTrm"]], reduction = "tsne") + ggtitle("disTrm") + coord_equal()
+```
+
+Overlay the expression of 1 gene on top of the Tem cells in tSNE space as shown in **Fig 2B**.
+```{r}
+FeaturePlot(seulist.drc[["Tem"]], features = c("Ifng")) + coord_equal()
+#FeaturePlot(seulist.drc[["Tem"]], features = c("GzmB"))
+#The following requested variables were not found: GzmB????
+FeaturePlot(seulist.drc[["Tem"]], features = c("Klrc1")) + coord_equal()
+FeaturePlot(seulist.drc[["Tem"]], features = c("Nkg7")) + coord_equal()
+```
+
+Overlay ... as shown in **Fig 2C**.
+```{r}
+FeaturePlot(seulist.drc[["Tem"]], features = c("Runx3")) + coord_equal()
+FeaturePlot(seulist.drc[["Tem"]], features = c("Id2")) + coord_equal()
+FeaturePlot(seulist.drc[["Tem"]], features = c("Id3")) + coord_equal()
+FeaturePlot(seulist.drc[["Tem"]], features = c("Bcl2")) + coord_equal()
+```
+
+Overlay ... as shown in **Fig 2D**.
+```{r}
+FeaturePlot(seulist.drc[["Tem"]], features = c("Ccnb2")) + coord_equal()
+FeaturePlot(seulist.drc[["Tem"]], features = c("Cdk1")) + coord_equal()
+FeaturePlot(seulist.drc[["Tem"]], features = c("Mki67")) + coord_equal()
+```
+
+
+# 5. Identify DEGs between clusters
+
+*METHOD DETAILS, Single-cell RNA-seq analysis, page 4e*: "Differential expressed genes (DEGs) were identified using the Wilcoxon rank-sum test."
+
+Identify Tem cluster biomarkers (Fig2B-D)
+
+```{r}
+tem <- seulist.drc[["Tem"]]
+tem@meta.data %>%
+  pull(seurat_clusters) %>% unique()
+```
+
+For the purpose of trying to reproduce the manuscript results, we will assume that the authors use defaults. Here are a few default arguments to be aware of:
+
+**min.pct = 0.1** : Do not test genes that make up fewer than 0.1 fraction (10% ?) of the total reads in either of the populations tested. Meant to speed up the function by not testing genes that are very infrequently expressed. Default is 0.1 -- **NOTE: Marissa tried to re-write this so that it is clearer, please check**
+
+**max.cells.per.ident = Inf** : "This will downsample each identity class to have no more cells than whatever this is set to. While there is generally going to be a loss in power, the speed increases can be significant and the most highly differentially expressed features will likely still rise to the top" (https://satijalab.org/seurat/articles/pbmc3k_tutorial.html)
+
+**logfc.threshold = 0.25** "Limit testing to genes which show, on average, at least X-fold difference (log-scale) between the two groups of cells. Default is 0.25 Increasing logfc.threshold speeds up the function, but can miss weaker signals." (Seurat help)
+
+**test.use = "wilcox** Denotes which test to use; see Seurat help for alternatives.
+
+**min.cells.group = 3** "Minimum number of cells in one of the groups" (Seurat help)
+
+**ident.2** "A second identity class for comparison; if NULL, use all other cells for comparison" (Seurat help)
+
+### Find DEGs that identify "Cluster 0"
+```{r}
+cluster0.markers <- FindMarkers(tem, ident.1 = 0)
+cluster0.markers %>%
+  arrange(-avg_log2FC) %>%
+  head(n = 5)
+```
+
+**Examine Wilcoxon Rank Sum test** -- NOTE: Needs attention!
+
+Try to reproduce results for "Bcl2" by doing the Wilcoxon Rank Sum test another way.
+```{r}
+# Select the gene Bcl2
+sel.gene <- "Bcl2"
+
+# subset cells in cluster 0
+tem.0 <- subset(x = tem, idents = "0")
+ncol(x = tem.0) # 317 cells
+unique(Idents(tem.0)) # check that these are all from the 0 cluster
+
+# subset cells in any other cluster
+tem.else <- subset(x = tem, idents = "0", invert = TRUE)
+ncol(x = tem.else) # 1140 cells
+unique(Idents(tem.else)) # check that these are all from clusters other than 0
+
+# extract scaled expression values
+expr.0 <- GetAssayData(object = tem.0, slot = "scale.data")
+expr.else <- GetAssayData(object = tem.else, slot = "scale.data")
+
+# Extract expression values for the gene Bcl2
+expr.0.sel <- expr.0[rownames(expr.0) == sel.gene,]
+expr.else.sel <- expr.0[rownames(expr.else) == sel.gene,]
+
+# Perform the Wilcoxon Rank Sum test 
+wilcox.test(x = expr.0.sel, 
+            y = expr.else.sel, alternative = "two.sided")
+# p-value < 2.2e-16
+
+cluster0.markers %>%
+  rownames_to_column(var = "gene_name") %>%
+  filter(gene_name == sel.gene)
+# p-value = 2.175929e-28	
+
+```
+
+Do this again for a gene with a less extreme p-value, e.g. Nkg7
+```{r}
+cluster0.markers %>%
+  arrange(-p_val)
+
+# Select the gene Nkg7
+sel.gene <- "Nkg7"
+
+# extract scaled expression values
+expr.0 <- GetAssayData(object = tem.0, slot = "scale.data")
+expr.else <- GetAssayData(object = tem.else, slot = "scale.data")
+
+# Extract expression values for the gene
+expr.0.sel <- expr.0[rownames(expr.0) == sel.gene,]
+expr.else.sel <- expr.0[rownames(expr.else) == sel.gene,]
+
+# Perform the Wilcoxon Rank Sum test 
+wilcox.test(x = expr.0.sel, 
+            y = expr.else.sel, alternative = "two.sided")
+# W = 50244, p-value = 1
+
+cluster0.markers %>%
+  rownames_to_column(var = "gene_name") %>%
+  filter(gene_name == sel.gene)
+# p-value = 0.51
+```
+
+### Run FindMakers() for each cluster
+```{r}
+all.markers <- FindAllMarkers(tem)
+```
+
+Show the top 5 up-regulated genes in each cluster
+```{r}
+all.markers %>%
+  group_by(cluster) %>%
+  slice_max(n = 3, order_by = avg_log2FC) %>%
+  arrange(cluster, -avg_log2FC)
+# note that this uses slice_max() and avg_log2FC is arranged from high to low with "-"
+```
+
+Show the top 5 down-regulated genes in each cluster
+```{r}
+all.markers %>%
+  group_by(cluster) %>%
+  slice_min(n = 3, order_by = avg_log2FC) %>%
+  arrange(cluster, avg_log2FC)
+# note that this uses slice_min() and avg_log2FC is arranged from low to high
+```
+
+Visualize the top 5 up- and down-regulated genes in a heatmap
+```{r}
+all.markers %>%
+    group_by(cluster) %>%
+    slice_max(n = 5, order_by = avg_log2FC) -> upGenes
+all.markers %>%
+    group_by(cluster) %>%
+    slice_min(n = 5, order_by = avg_log2FC) -> downGenes
+upGenes %>%
+  bind_rows(downGenes) -> topGenes
+
+DoHeatmap(tem, features = topGenes$gene)
+# Clusters 0, 1, 2 correspond to p1?
+# Cluster 3 corresponds to p2?
+# Cluster 4 corresponds to p3?
+# Cluster 5 corresponds to p4?
+```
+
+Investigate specific genes by overlaying gene expression on top of the tSNE plot as in the Fig2 B-D plots (page 5)
+```{r}
+# remember this visualization tool from above too
+plot_grid(DimPlot(tem, reduction = "tsne"),
+          FeaturePlot(tem, features = c("Hmgb2")))
+```
+
+Investigate specific genes by generating violin plots. By default, the "expression level" is based on values in the "data" slot. Alternatively, you can plot counts from the "counts" slot instead.
+```{r}
+VlnPlot(tem, features = c("Hmgb2"), split.by = "seurat_clusters")
+# you can plot raw counts as well
+VlnPlot(tem, features = c("Hmgb2"), slot = "counts")
+VlnPlot(tem, features = c("Hmgb2"), slot = "counts", log = TRUE)
+```
+
+# 6. Re-name clusters
+
+Name clusters based on biomarkers and study aims (Fig 2)
+
+I **think** the authors decided to assign the following names to these clusters, see *RESULTS, scRNA-seq dissects intratumoral TEff/EM heterogeneity, page 4-5*:
+
+p1 = Clusters 0, 1, 2 
+p2 = Cluster 3 
+p3 = Cluster 4
+p4 = Cluster 5
+
+We can add this information to the tem seurat object metadata
+```{r}
+new.cluster.ids <- c("p1", "p1", "p1", 
+                     "p2", 
+                     "p3", 
+                     "p4")
+levels(tem)
+names(new.cluster.ids) <- levels(tem)
+tem <- RenameIdents(tem, new.cluster.ids)
+```
+
+Based on these updated classifications, we can re-color the tSNE plot
+```{r}
+DimPlot(tem, reduction = "tsne", label = TRUE, pt.size = 0.5)
+```
+
+We can also perform DE analyses between p4 and p2. 
+```{r}
+p4v2markers <- FindMarkers(tem, ident.1 = "p4", ident.2 = "p2", min.pct = 0.25)
+```
+Examine up-regulated genes in p4 as compared to p2
+```{r}
+p4v2markers %>%
+  slice_max(n = 5, order_by = avg_log2FC) %>%
+  arrange(-avg_log2FC) -> upGenes
+upGenes
+```
+Examine down-regulated genes in p4 as compared to p2
+```{r}
+p4v2markers %>%
+  slice_min(n = 5, order_by = avg_log2FC) %>%
+  arrange(avg_log2FC) -> downGenes
+downGenes
+```
+
+# 7. Verify manuscript DE results
+
+#### Are these statements true from *RESULTS, scRNA-seq dissects intratumoral TEff/EM heterogeneity, page 4-5*?
+
+1. "The effector molecules Ifng and GzmB were highly expressed in p4, had heterogeneous expression in p1 and p3, but were largely absent from p2. Similar expression patterns were applied to well-known effector surface markers for cytolytic T cells such as Klrc1 and Nkg7 (Figure 2B)."
+
+2. "All four subsets highly expressed the transcription factor Runx3..., as well as Id2... "
+
+3. "Comparing p2 to p4, the density of Runx3- and Id2-expressing cells was slightly lower in p2. ...This was accompanied by an opposite pattern of Id3, a transcription factor whose expression is crucial for effector memory development (Yang et al., 2011), which is absent in p4 (Figure 2C)."
+
+4. "Bcl2, a transcription factor for T cell survival in the effector and memory phases, was abundant in most sorted TEff/EM populations except p3. "
+
+5. "After assessing the cell-cycle programs, we determined that p3 was a highly proliferative subset, as made evident by the expression of genes restrictively expressed in S and M phases, such as Ccnb2, Cdk1, and Mki67 (Figure 2D). 
+
+#### Are these statements true from *RESULTS, Tumor and distant mucosa TRMs comprise two distinct populations that resemble either TEMs or TCMs, page 5-6*?
+
+1. "As expected, the tumor and distant mucosa TRM populations showed high expression of Itgae (CD103) and low expression of S1PR1, con- firming their tendency to reside within the tissue (Figure S4)."
+
+2. "Notably, the binary expression of Lgals3 (galectin-3) could distinguish TEMs (p1 of TEff/EM) from TCMs."
+
+#### Are these statements true from *RESULTS, CXCR6 expression defines a unique subpopulation of TEff/EMs, page 9*?
+
+1. " Among all of the TEff/EM populations, S1pr1 expression was silenced in TEff/EM p4, suggesting that this may be a population that lacks the potential to egress."
+
+2. "In p4, compared to other chemokine receptors, Cxcr6 was highly expressed; compared to the other 3 populations, p4 was the only population that preferentially upregulated Cxcr6 (Figure 5A)."
+
+3. "The elevated Cxcr6 expression in p4 was associated with enhanced Pdcd1 and reduced IL7r expression, in direct opposition to p2 (Figure 5B)."
+
+```{r}
+p4v2markers %>%
+  rownames_to_column(var = "gene") %>%
+  filter(gene == "Pdcd1")
+```
+
+```{r}
+p4v2markers %>%
+  rownames_to_column(var = "gene") %>%
+  filter(gene %in% c("Il7r","Il18r1"))
+```
+
+4. "We virtually sorted out these two populations of cells [p2 vs p4] and compared their gene expression at the transcriptomic level (Figure 5C). The differential expression of Nkg7 and Klrc/d family members suggested that these are highly active effector T cells, as seen in the high expression of effector molecules such as Gzmb." And from Fig 5 legend: "T cell activation markers Gzmb, Klrc1/2, and Klrd1 are upregulated in TEFF/TEM p4".
+
+```{r}
+p4v2markers %>%
+  rownames_to_column(var = "gene") %>%
+  filter(gene %in% c("Gzmb","Klrc1", "Klrc2","Klrd1")) 
+```
+
+5. "...However, for T cells in TEff/EM p2, we found that the upregulation of IL7r was associated with IL18r1 (Figure 5C). 
+
+6.  "This analysis illustrated that these CXCR6+ effector cells were quite unique: on the one hand, they could be labeled as terminally exhausted cells (Wherry et al., 2007) based on their elevated expression of Pdcd1, Nr4a1 (Liu et al., 2019), Lag3, and Havcr2 (Tim-3).." And from Fig 5 legend: "Classical exhaustion markers Nr4a1, Lag3, and Havcr2 were upregulated in the tumor TEff/EM p4 population."
+
+**Don't know how to reproduce Fig 3 yet**
+"Figure 3. Two distinct subsets that resemble either TEMs or TCMs comprise tumor and distant mucosa TRMs...
+(B) Heatmap of top 100 DEGs between the tumor TEff/EM and tumor TCMs shows the global gene expression pattern between these circulating memory T cells and active and quiescent TRMs....(E) A global enrichment of ribosome genes associates with tumor TCM and quiescent TRM subsets." (Christian et al. 2021 Cell Reports) **Note** In order to make Fig3, need to (1) be able to distinguish between active and quiesent Trm and disTrm cells. This depends on Monocle2 analysis. We also need (2) to integrate the Tem and Tcm datasets which they did using ...?
