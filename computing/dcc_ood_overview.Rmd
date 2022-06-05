@@ -1,5 +1,5 @@
 ---
-title: "Introduction to\nDuke Compute Cluster\nOpen OnDemand"
+title: "Introduction to <br> Duke Compute Cluster <br> Open OnDemand"
 output:
   ioslides_presentation: default
   md_document:
@@ -46,5 +46,5 @@ sinfo -O "NodeList,StateLong,CPUsState,Memory,AllocMem,Gres,GresUsed" -p chsi-gp
 
 ## Using DCC OOD
 
-[Using RStudio on Duke Compute Cluster Open OnDemand](https://gitlab.oit.duke.edu/mic-course/2022-mic/-/tree/main/computing/dcc_ood_rstudio.Rmd)
+[Using RStudio on Duke Compute Cluster Open OnDemand](dcc_ood_rstudio.Rmd)
 

@@ -29,4 +29,4 @@
 ## Using DCC OOD
 
 [Using RStudio on Duke Compute Cluster Open
-OnDemand](https://gitlab.oit.duke.edu/mic-course/2022-mic/-/tree/main/computing/dcc_ood_rstudio.Rmd)
+OnDemand](dcc_ood_rstudio.Rmd)
