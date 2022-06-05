@@ -1,4 +1,6 @@
-# 2021 MIC Course Content
+Shortened URL: https://duke.is/g2ahs
+
+# 2022 MIC Course Content
 ## Schedule
 - [Week 1 Schedule](admin/week1_schedule.md)
 - [Week 2 Schedule](admin/week2_schedule.md)
