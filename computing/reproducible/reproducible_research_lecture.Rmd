@@ -2,10 +2,10 @@
 title: "Reproducible Analysis"
 author: "Josh Granek"
 output:
-  ioslides_presentation: default
-  beamer_presentation: default
   md_document:
     variant: markdown_github
+  beamer_presentation: default
+  ioslides_presentation: default
 ---
 
 ```{r setup, include=FALSE}
@@ -42,10 +42,8 @@ https://pollev.com/joshg964
 
 ### Who is "anyone"
 > - Labmates
-> - Collaborators
-> - Competitors
-> - Everyone else interested in your work
-> - Someone who wants to apply your analysis to their own data
+> - Collaborators & Competitors
+> - Anyone else interested in your work
 > - You, 6 months from now
 
 ## Not Covered Here
@@ -179,16 +177,18 @@ rm -rf $RAWDATA_DIR
 
     
 ## Archiving Data @ Duke
-- [Duke Data Service](https://dataservice.duke.edu/)
-    - [DukeDSClient](https://github.com/Duke-GCB/DukeDSClient)
+- ~~[Duke Data Service](https://dataservice.duke.edu/)~~
 
 ## Archiving Raw Sequence Data @ NCBI
   - [GEO: Gene "Expression" Data](https://www.ncbi.nlm.nih.gov/geo/)
     - GEO: Gene Expression Omnibus
         - RNA-Seq
         - ChIP-Seq
-  - [SRA: Everything else](https://www.ncbi.nlm.nih.gov/sra)
+  - [SRA: Almost Everything Else](https://www.ncbi.nlm.nih.gov/sra)
     - SRA: Sequence Read Archive
+  - [dbGaP: Protected Human Data](https://www.ncbi.nlm.nih.gov/gap/)
+    - dbGaP: database of Genotypes and Phenotypes (dbGaP)
+
     
 ## "Archive First" Movement
   - Free Backup
