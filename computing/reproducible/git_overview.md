@@ -1,14 +1,3 @@
----
-title: "Git Overview"
-output:
-  md_document:
-    variant: markdown_github
-    toc: true
-  html_document:
-    toc: true
-    toc_float: true
----
-
 # Why Version Control
 * [R and version control for the solo data analyst](https://stackoverflow.com/questions/2712421/r-and-version-control-for-the-solo-data-analyst)
 
@@ -196,8 +185,6 @@ RStudio makes this pretty easy to do:
 
 Now let's work through the challenges at the end of [Version Control with Git: 6. Ignoring Things](https://swcarpentry.github.io/git-novice/06-ignore/index.html)
 
-# STOPPED HERE 5/13/2021
-
 # Remote Git Repository
 
 ## Why a Remote Repository
@@ -240,8 +227,6 @@ Do the following challenges from the bottom of [Version Control with Git: 7. Rem
 
   * GitHub GUI
   * Push vs. Commit
-
-# STOPPED HERE 6/12/2021. Covered: SSH key, making a repo on Github first, and making a local repo first
 
 ## Collaborating
 
@@ -287,21 +272,6 @@ Now the Collaborator (i.e. not the owner) can now make a change in the clone of 
 
 > It is better to make many commits with smaller changes rather than of one commit with massive changes: small commits are easier to read and review.
 
-#### Challenges
-##### Review Changes
-The Owner push commits to the repository without giving any information to the Collaborator. How can the Collaborator find out what has changed with Rstudio? And on GitHub?
-
-##### Comment Changes in GitHub
-
-The Collaborator has some questions about one line change made by the Owner and has some suggestions to propose.
-
-With GitHub, it is possible to comment the diff of a commit. Over the line of code to comment, a blue comment icon appears to open a comment window.
-
-The Collaborator posts its comments and suggestions using GitHub interface.
-
-##### Version History, Backup, and Version Control
-
-Some backup software can keep a history of the versions of your files. They also allows you to recover specific versions. How is this functionality different from version control? What are some of the benifits of using version control, Git and GitHub?
 
 # References
 The bulk of this set of lessons is a translation from Unix command line to RStudio GUI of the The Software Carpentry module [Version Control with Git](http://swcarpentry.github.io/git-novice/), specifically:
