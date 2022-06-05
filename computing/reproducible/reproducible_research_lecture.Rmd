@@ -28,7 +28,7 @@ tmux new -s reproducible_demo
 mkdir -p /work/$USER/reproducible_demo/project_repo /work/$USER/reproducible_demo/workspace /work/$USER/tmp
 cd /work/$USER/reproducible_demo/project_repo
 curl -O https://raw.githubusercontent.com/ibiem-2020/ibiem_2020_material/master/content/misc/reproducibility_demo_slurm.sh
-bash reproducibility_demo_slurm.sh /work/$USER/reproducible_demo/workspace '-A chsi-hivr25-interns-2022 -p chsi'
+bash reproducibility_demo_slurm.sh /work/$USER/reproducible_demo/workspace '-A chsi-mic-2022 -p chsi-high'
 ```
 
 # Overview

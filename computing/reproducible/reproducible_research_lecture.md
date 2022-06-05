@@ -12,7 +12,7 @@
     mkdir -p /work/$USER/reproducible_demo/project_repo /work/$USER/reproducible_demo/workspace /work/$USER/tmp
     cd /work/$USER/reproducible_demo/project_repo
     curl -O https://raw.githubusercontent.com/ibiem-2020/ibiem_2020_material/master/content/misc/reproducibility_demo_slurm.sh
-    bash reproducibility_demo_slurm.sh /work/$USER/reproducible_demo/workspace '-A chsi-hivr25-interns-2022 -p chsi'
+    bash reproducibility_demo_slurm.sh /work/$USER/reproducible_demo/workspace '-A chsi-mic-2022 -p chsi-high'
 
 # Overview
 
@@ -147,11 +147,11 @@ ls -ld $RAWDATA_DIR
 ls -ltr $RAWDATA_DIR
 ```
 
-    ## drwxr-xr-x. 2 josh dukeusers 62 Jun  5 17:26 /tmp/Rtmp5RKxdF/rr_raw_data
+    ## drwxr-xr-x. 2 josh dukeusers 62 Jun  5 17:39 /tmp/RtmpiZ1Gsj/rr_raw_data
     ## total 12
-    ## -rw-r--r--. 1 josh dukeusers 14 Jun  5 17:26 data1.csv
-    ## -rw-r--r--. 1 josh dukeusers 88 Jun  5 17:26 mydata_md5.txt
-    ## -rw-r--r--. 1 josh dukeusers 14 Jun  5 17:26 data2.csv
+    ## -rw-r--r--. 1 josh dukeusers 14 Jun  5 17:39 data1.csv
+    ## -rw-r--r--. 1 josh dukeusers 88 Jun  5 17:39 mydata_md5.txt
+    ## -rw-r--r--. 1 josh dukeusers 14 Jun  5 17:39 data2.csv
 
 ``` bash
 chmod -R a-w $RAWDATA_DIR
@@ -159,11 +159,11 @@ ls -ld $RAWDATA_DIR
 ls -ltr $RAWDATA_DIR
 ```
 
-    ## dr-xr-xr-x. 2 josh dukeusers 62 Jun  5 17:26 /tmp/Rtmp5RKxdF/rr_raw_data
+    ## dr-xr-xr-x. 2 josh dukeusers 62 Jun  5 17:39 /tmp/RtmpiZ1Gsj/rr_raw_data
     ## total 12
-    ## -r--r--r--. 1 josh dukeusers 14 Jun  5 17:26 data1.csv
-    ## -r--r--r--. 1 josh dukeusers 88 Jun  5 17:26 mydata_md5.txt
-    ## -r--r--r--. 1 josh dukeusers 14 Jun  5 17:26 data2.csv
+    ## -r--r--r--. 1 josh dukeusers 14 Jun  5 17:39 data1.csv
+    ## -r--r--r--. 1 josh dukeusers 88 Jun  5 17:39 mydata_md5.txt
+    ## -r--r--r--. 1 josh dukeusers 14 Jun  5 17:39 data2.csv
 
 ## Preventing Modification
 
@@ -171,13 +171,13 @@ ls -ltr $RAWDATA_DIR
 echo "This is not the data you are looking for" > $DATA2
 ```
 
-    ## bash: /tmp/Rtmp5RKxdF/rr_raw_data/data2.csv: Permission denied
+    ## bash: /tmp/RtmpiZ1Gsj/rr_raw_data/data2.csv: Permission denied
 
 ``` bash
 sed s/7/3/ -i $DATA2
 ```
 
-    ## sed: couldn't open temporary file /tmp/Rtmp5RKxdF/rr_raw_data/sed87W1IZ: Permission denied
+    ## sed: couldn't open temporary file /tmp/RtmpiZ1Gsj/rr_raw_data/sed2KyqJF: Permission denied
 
 ## Preventing Deletion
 
@@ -185,9 +185,9 @@ sed s/7/3/ -i $DATA2
 rm -rf $RAWDATA_DIR
 ```
 
-    ## rm: cannot remove '/tmp/Rtmp5RKxdF/rr_raw_data/data1.csv': Permission denied
-    ## rm: cannot remove '/tmp/Rtmp5RKxdF/rr_raw_data/data2.csv': Permission denied
-    ## rm: cannot remove '/tmp/Rtmp5RKxdF/rr_raw_data/mydata_md5.txt': Permission denied
+    ## rm: cannot remove '/tmp/RtmpiZ1Gsj/rr_raw_data/data1.csv': Permission denied
+    ## rm: cannot remove '/tmp/RtmpiZ1Gsj/rr_raw_data/data2.csv': Permission denied
+    ## rm: cannot remove '/tmp/RtmpiZ1Gsj/rr_raw_data/mydata_md5.txt': Permission denied
 
 ## Care and Handling of Raw Data
 
