@@ -1,1 +1,0 @@
-This is a placeholder. Remove once material is placed in this directory

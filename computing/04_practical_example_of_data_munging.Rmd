@@ -1,0 +1,211 @@
+---
+title: "MIC Course"
+subtitle: "Practical Data Munging - HIV Example"
+author: "Cliburn Chan, Janice McCarthy"
+date: "June 9, 2022"
+output: html_document
+---
+
+# Practical Data Munging
+
+
+```{r}
+library("tidyverse")
+library("readxl")
+```
+
+## Objective
+
+Suppose we want to visualize the change in deaths of PWH over time for transmission risk factors.
+
+## Get data and try to understand it
+
+
+```{r}
+df<- read_excel('Cliburn/deaths-of-persons-diagnosed-with-hiv-aids.xlsx')
+```
+
+
+```{r}
+df  %>% dim
+```
+
+
+```{r}
+df %>% head(2)
+```
+
+
+```{r}
+df %>% tail(2)
+```
+
+
+```{r}
+df  %>% summary
+```
+
+
+```{r}
+df %>% str
+```
+
+## Pull out the transmission categories into separate data frames
+
+
+```{r}
+df  %>% select(Category) %>% distinct
+```
+
+
+```{r}
+df %>%
+filter(Category == "Transmission Category: Male Adult or Adolescent")  %>% 
+select(Year, -Category, "Transmission Category: Male Adult or Adolescent"=Group, Count) -> df_male
+```
+
+
+```{r}
+df_male %>% head(3)
+```
+
+
+```{r}
+df %>%
+filter(Category == "Transmission Category: Female Adult or Adolescent")  %>% 
+    select(Year, -Category, "Transmission Category: Female Adult or Adolescent"=Group, Count) -> df_female
+```
+
+
+```{r}
+df_female %>% head(3)
+```
+
+
+```{r}
+df %>%
+   filter(Category == "Transmission Category: Child (<12 Years Old at the End of Year)")  %>% 
+   select(Year, -Category, "Transmission Category: Child (<12 Years Old at the End of Year)"=Group, Count) -> df_child
+```
+
+## Combine the transmission categories
+
+
+```{r}
+df_child %>% 
+     pivot_wider(names_from = "Transmission Category: Child (<12 Years Old at the End of Year)", values_from = Count) %>% 
+     mutate(Category="Child") -> df_child_wide
+```
+
+
+```{r}
+df_female  %>% 
+    pivot_wider(names_from = "Transmission Category: Female Adult or Adolescent", values_from = Count) %>%
+    mutate(Category="Female") -> df_female_wide
+```
+
+
+```{r}
+df_male  %>% 
+   distinct %>%
+   pivot_wider(names_from = `Transmission Category: Male Adult or Adolescent`, values_from = Count) %>% 
+   mutate(Category="Male") -> df_male_wide
+```
+
+
+```{r}
+bind_rows(df_male_wide, df_female_wide, df_male_wide) -> df_transmission
+```
+
+
+```{r}
+df_transmission %>% head(3)
+```
+
+## Use `pivot_longer` to make the transmission data tidy
+
+
+```{r}
+df_transmission %>% 
+  pivot_longer(cols = c(-Year, -Category), names_to = "Transmission", values_to = "Count")
+```
+
+There are NA's in some rows, we'll remove those
+
+```{r}
+df_transmission %>% 
+  pivot_longer(cols = c(-Year, -Category), names_to = "Transmission", values_to = "Count") %>% 
+  na.omit(Count) -> df_transmission_tall
+```
+
+```{r}
+df_transmission_tall  %>% head
+```
+
+## Create a summary table
+
+
+```{r}
+df_transmission_tall %>% 
+   group_by(Transmission) %>% 
+   summarize(Deaths=sum(Count))
+```
+
+## Plot example 1
+
+
+```{r}
+df_transmission_tall %>%
+   ggplot(aes(x=Transmission, y=Count, fill=Transmission)) +
+   facet_grid(Year ~ Category) +
+   geom_bar(stat='Identity') +
+   theme(axis.text.x=element_blank(),
+      axis.ticks.x=element_blank())
+```
+
+## Plot example 2
+
+
+```{r}
+df_transmission_tall %>%
+    ggplot(aes(x=Year, y=Count, fill=Transmission)) +
+    facet_wrap(.~Transmission, ncol=1, scales="free_y") +
+    geom_point() +
+    geom_smooth() +
+    guides(fill="none") -> g
+```
+
+
+```{r, fig.height= 15, fig.width= 5}
+suppressWarnings(print(g))
+```
+
+## Exercises
+
+**1**. Read the file `Cliburn/persons-living-with-hiv-aids.xlsx` into a data frame.
+
+
+```{r}
+
+```
+
+**2**. How many rows and columns are there?
+
+
+```{r}
+
+```
+
+**3**. Is the number of Asians with HIV growing over time? Do this using a bar plot.
+
+
+```{r}
+
+```
+
+**4**. Make a horizontal bar chart of the total number of PWH over all years for each ethnic group. There should be a single Asian group. The bar chart should display the names of each ethnic group on the y-axis, and the number of deaths on the x-axis, where the ethnic groups are ordered from fewest (top) to most (bottom) deaths.
+
+
+```{r}
+
+```

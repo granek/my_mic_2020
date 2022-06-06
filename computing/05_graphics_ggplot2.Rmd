@@ -1,0 +1,333 @@
+---
+title: "Quantitative Methods for HIV Researchers"
+subtitle: "Graphics with ggplot2"
+author: "Janice M. McCarthy"
+date: "November 12, 2020"
+output: html_document
+---
+
+# R Graphics
+
+
+```{r}
+library(tidyverse)
+setwd("~/hiv-workshop-2020-2021/data_science/graphics/")
+```
+
+
+```{r}
+options.orig <- options(repr.plot.width=6, repr.plot.height=4)
+```
+
+## Simulate some data for plotting
+
+
+```{r}
+n <- 100
+x <- sort(runif(n))
+y <- x^2 + x + 3 + 0.2*rnorm(n)
+z <- x^2
+g <- as.factor(sample(1:4, n, replace=T))
+df <- tibble(x=x, y=y, z=z, g=g)
+
+df
+```
+
+## Grammar of Graphics
+
+`ggplot2` uses a Grammar of Graphics convention to define plots. See [The fundamentals of `gggplot2` explained](https://www.aridhia.com/technical-tutorials/the-fundamentals-of-ggplot-explained/) for a simple explanation.
+
+The main concents are
+
+- **data source** a data frame or tibble
+- **map** data elements to visual characteristics (aes)
+- **type of visual elements** in plot (geom)
+- **layers** (+)
+- **facet** to automatically show "group by" plots
+- **scale** to controls how the mapping is made
+- **statistics** to add summary data to the plot
+- **themes** to define the look and feel of the plot
+
+```{r}
+g0 <- ggplot(df, aes(x=x, y=y)) 
+
+g0
+```
+
+
+Here we see just an empty plot with axes for $x$ and $y$. This is because we have only told `ggplot` what mappings we want to use (i.e. x axis is the 'x' column in our data frame and y axis is the 'y' column.)
+
+We have to add a `geom` (or a `stat`) in order to see somthing on the plot:
+
+```{r}
+g1 <- g0 +
+      geom_point()
+
+g1
+```
+
+```{r}
+g2 <- g1 +
+      geom_smooth(method='lm', 
+              formula=y ~ poly(x, 2, raw=TRUE)) # this is a polynomial fit (quadratic because it's degree 2)
+
+g2
+```
+
+We can add another 'dimension' with color:
+
+```{r}
+
+g3 <- g2 +
+      geom_point(aes(color = z)) 
+
+g3
+```
+
+
+We can annote the plot with the `labs` function:
+
+```{r}
+
+
+g4 <- g3 + 
+   labs(title="ggplot2", 
+        subtitle="Graphics example",
+        caption="HIV R Workshop 2019",
+        x="x-coordinate",
+        y="y-coordinate")
+
+g4
+```
+
+We can get rid of the color legend using `guides`.
+
+```{r}
+g5 <- g4 +
+   guides(col=FALSE)
+
+g5
+```
+
+
+### Themes
+
+Themes are functions that affect the overall look of the plot:
+
+```{r}
+g4 + theme_minimal()
+```
+
+
+```{r}
+g4 + theme_linedraw()
+```
+
+
+```{r}
+g4 + theme_dark()
+```
+
+### Facets
+
+Facets allow for creating parallel plots across categorical varibales:
+
+```{r}
+g4 + facet_wrap(facets='g', nrow = 2)
+```
+
+
+```{r}
+g4 + facet_grid(~ g)
+```
+
+
+```{r}
+g4 + facet_grid(g ~ .)
+```
+
+### Scales
+
+```{r}
+g4 <- ggplot(df, aes(x=x, y=y, col=as.factor(g)) ) +
+geom_point() +
+geom_smooth(method='lm', 
+            formula=y ~ poly(x, 2, raw=TRUE)) +
+labs(title="ggplot2", 
+     subtitle="Graphics example",
+     caption="HIV R Workshop 2019",
+     x="x-coordinate",
+     y="y-coordinate") +
+facet_grid(~ g) +
+guides(col=FALSE)
+
+g4
+```
+
+#### Colors
+
+
+```{r}
+g4
+```
+
+
+```{r}
+g4 + scale_color_brewer()
+```
+
+
+```{r}
+g4 + scale_color_brewer(type = 'seq', palette = 'Reds')
+```
+
+
+```{r}
+g4 + scale_color_brewer(type = 'qual', palette = 2)
+```
+
+```{r}
+g4 + scale_color_brewer(type = 'div', palette = 2)
+```
+
+#### Palettes available from `brewer`
+
+The 3 plots show color maps that are
+
+1. Sequential
+2. Qualitiative
+3. Divergent
+
+
+```{r}
+library(RColorBrewer)
+```
+
+
+```{r}
+options.orig <- options(repr.plot.width=6, repr.plot.height=12)
+display.brewer.all() 
+```
+
+
+```{r}
+options.orig <- options(repr.plot.width=6, repr.plot.height=4)
+```
+
+#### Scales can be used for changing the mapping of `color`, `fill`, `hue`, `size`, `coordinates` ...
+
+Here we scale the y-coordinate to show log values.
+
+
+```{r}
+g4 + scale_y_log10()
+```
+
+### Geoms
+
+
+```{r}
+g0 + geom_point()
+```
+
+
+```{r}
+g0 + geom_line()
+```
+
+
+```{r}
+ggplot(df, aes(x=z, fill=g)) + 
+geom_density(aes(alpha=0.1)) +
+guides(alpha=F)
+```
+
+
+```{r}
+g0 + 
+geom_density_2d() + 
+geom_rug()
+```
+
+
+```{r}
+head(df)
+```
+
+#### `geom_bar` shows counts by default
+
+
+```{r}
+ggplot(df, aes(x=g)) + 
+geom_bar() +
+labs(y="Sum of y") 
+```
+
+#### Specify `weight` parameter to sum over a column by group
+
+
+```{r}
+ggplot(df, aes(x=g, weight=y) )+ 
+geom_bar() +
+labs(y="Sum of y") 
+```
+
+#### If you already have counts, specify `stat=identity`
+
+
+```{r}
+df_ <- tibble(x=c('A', 'B', 'C'), y=c(10, 14, 18))
+```
+
+
+```{r}
+head(df_)
+```
+
+
+```{r}
+ggplot(df_, aes(x=x, y=y, fill=x)) + 
+geom_bar(stat='identity') + 
+guides(fill=F)
+```
+
+
+```{r}
+ggplot(df, aes(x=g, y=z, fill=g)) + 
+geom_boxplot() +
+geom_jitter(width=0.2)  + 
+guides(fill=FALSE)
+```
+
+
+```{r}
+ggplot(df, aes(x=g, y=z, fill=g)) + 
+geom_boxplot() +
+geom_jitter(width=0.2) +
+coord_flip() +
+guides(fill=FALSE)
+```
+
+## Saving plots
+
+
+```{r}
+ggsave('figs/box.png')
+```
+
+
+```{r}
+ggsave('figs/g3.pdf', g3)
+```
+
+### Retrieve saved files
+
+
+
+```{r}
+#<img src="figs/box.png" alt="drawing" width="200px"/>
+
+#<img src="figs/g3.pdf" alt="drawing" width="200px"/>
+
+
+```
