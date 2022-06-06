@@ -249,7 +249,7 @@ cds.rd@reducedDimS[1:2,1:5] # rows correspond to the dimensions, i.e. here we se
 
 Order cells along the trajectory. 
 
-From orderCells() help: "This function takes as input a CellDataSet and returns it with two new columns: Pseudotime and State, which together encode where each cell maps to the trajectory in the reduced-dimension space. 
+From orderCells() help: "Learns a "trajectory" describing the biological process the cells are going through, and calculates where each cell falls within that trajectory. ...This function takes as input a CellDataSet and returns it with two new columns: Pseudotime and State, which together encode where each cell maps to the trajectory in the reduced-dimension space. 
 
 Notice that after applying orderCells(), the columns "Pseudotime" and "State" get added to the phenoData.
 ```{r}
@@ -316,3 +316,203 @@ Plot individual genes
 ```{r}
 plot_genes_in_pseudotime(cds.mg1, ncol=3)
 ```
+
+## 5. Using Monocle3
+
+Major updates in Monocle 3: https://cole-trapnell-lab.github.io/monocle3/docs/updates/
+
+Most of the algorithmic details in Monocle 3 are described in Cao & Spielmann et al.
+https://www.nature.com/articles/s41586-019-0969-x
+
+The following is based on "Constructing Single-cell trajectories" http://cole-trapnell-lab.github.io/monocle-release/docs/#constructing-single-cell-trajectories"
+
+```{r}
+#detach(package:monocle,unload=TRUE)
+
+library(monocle3)
+package.version("monocle3")
+```
+
+### i. Create the data object
+
+Notice that the cell_metadata and gene_metadata (formerly phenoData and featureData) no longer need to be in the AnnotatedDataFrame structure.
+
+```{r}
+# Monocle 2
+# cds <- newCellDataSet(cellData = cd, 
+#                       phenoData = pd.adf, 
+#                       featureData = fd.adf)
+#cds
+
+# Monocle 3
+cds.m3 <- new_cell_data_set(expression_data = cd,
+                            cell_metadata = pd,
+                            gene_metadata = fd)
+cds.m3
+```
+
+### ii. Normalize and pre-process the data
+
+The default pre-processing steps look very different. The monocle3 preprocessing default is to log-normalize and PCA to reduce the dimensions of the expression matrix. Filtering genes based on a detection threshold is not included.
+```{r}
+# Monocle 2
+# cds.es <- estimateSizeFactors(cds)
+# cds.ds <- estimateDispersions(cds.es)
+# cds.filt <- detectGenes(cds.ds, min_expr = 0.1)
+# fData(cds.filt) %>%
+#   filter(num_cells_expressed >= 100) %>%
+#   row.names() -> expressed_genes
+# cds.exprs <- cds.filt[expressed_genes,] 
+
+# Monocle 3
+cds.m3.preproc <- preprocess_cds(cds.m3, 
+                                 norm_method = "log",
+                                 method = "PCA",
+                                 num_dim = 100) 
+```
+
+### iii. Reduce the dimensions using UMAP.
+
+Is DDRTree no longer recommended? It is not included in the list of "reduction_method" options.
+
+```{r}
+# Monocle 2
+#cds.rd <- reduceDimension(cds.o, max_components = 2, method = 'DDRTree')
+
+# Monocle 3
+cds.m3.rd <- reduce_dimension(cds.m3.preproc,
+                              reduction_method = "UMAP",
+                              max_components = 2)
+plot_cells(cds.m3.rd, color_cells_by = "orig.ident")
+```
+
+### iv. Cluster the cells
+
+This step was not previously performed, correct?
+```{r}
+# Monocle 2
+#??
+
+# Monocle 3
+cds.m3.cl <- cluster_cells(cds.m3.rd)
+plot_cells(cds.m3.cl, color_cells_by = "partition")
+```
+
+### v. Learn a graph
+
+This step was not explictly included in the previous procedure, correct?
+
+Is use_partition=F necessary to have all cells included in the trajectory rather then fit trajectories by cluster?
+
+```{r}
+# Monocle 2
+#??
+
+# Monocle 3
+cds.m3.lg <- learn_graph(cds.m3.cl, 
+                         use_partition = F)
+#When use_partition = FALSE, a single graph is learned across all partitions.
+plot_cells(cds.m3.lg,
+           color_cells_by = "orig.ident",
+           label_groups_by_cluster=FALSE,
+           label_leaves=FALSE,
+           label_branch_points=FALSE)
+```
+
+### vi. Order cells
+
+In this version, we must indicate a root state to specify the start of the trajectory. How was this determined in monocle2?
+
+```{r}
+# Monocle 2
+# cds.oc <- orderCells(cds.rd)
+
+# Monocle 3
+cds.m3.oc <- order_cells(cds.m3.lg,
+                   reduction_method = "UMAP")
+#  order_cells() optionally takes "root" state(s) in the form of cell or principal graph node IDs, which you can use to specify the start of the trajectory. If you don't provide a root state, an plot will be generated where you can choose the root state(s) interactively. The trajectory will be composed of segments.
+plot_cells(cds.m3.oc,
+           color_cells_by = "pseudotime",
+           label_cell_groups=FALSE,
+           label_leaves=FALSE,
+           label_branch_points=FALSE,
+           graph_label_size=1.5)
+```
+
+From Monocle 3 tutorial: "It's often desirable to specify the root of the trajectory programmatically, rather than manually picking it. The function below does so by first grouping the cells according to which trajectory graph node they are nearest to. Then, it calculates what fraction of the cells at each node come from the earliest time point. Then it picks the node that is most heavily occupied by early cells and returns that as the root."
+
+**I am not sure how this could be altered to reproduce the trajectory from monocle2 above without manually specifying the root**
+```{r}
+# a helper function to identify the root principal points:
+get_earliest_principal_node <- function(cds, time_bin="130-170"){
+  
+  cell_ids <- which(colData(cds)[, "embryo.time.bin"] == time_bin)
+  
+  closest_vertex <-
+  cds@principal_graph_aux[["UMAP"]]$pr_graph_cell_proj_closest_vertex
+  closest_vertex <- as.matrix(closest_vertex[colnames(cds), ])
+  root_pr_nodes <-
+  igraph::V(principal_graph(cds)[["UMAP"]])$name[as.numeric(names
+  (which.max(table(closest_vertex[cell_ids,]))))]
+  
+  return(root_pr_nodes)
+}
+cds.m3.oc.pr <- order_cells(cds.m3.lg, root_pr_nodes=get_earliest_principal_node(cds.m3.lg))
+
+```
+
+### vii. Plot cell trajectory
+
+```{r}
+# Monocle 2
+#plot_cell_trajectory(cds.oc, color_by = "orig.ident")
+
+# Monocle 3
+plot_cells(cds.m3.oc, color_cells_by = "orig.ident",   
+           min_expr = 0.1)
+```
+### viii. Pull out Il genes
+
+```{r}
+# Monocle 2
+# fData(cds.oc) %>%
+#   pull(gene_short_name) -> all.ordered.genes
+# marker_genes <- grep('^Il', all.ordered.genes, value = T)
+# cds.mg <- cds.oc[marker_genes,]
+# cds.mg
+
+
+# Monocle 3
+all.ordered.genes.m3 <- fData(cds.m3.oc)[,"gene_short_name"]
+marker_genes.m3 <- grep('^Il', all.ordered.genes.m3, value = T)
+cds.m3.mg <- cds.m3.oc[marker_genes.m3,]
+cds.m3.mg
+```
+
+# ix. Examine how gene expression changes through pseudotime
+
+```{r}
+# Monocle 2
+# diff_test_res2 <- differentialGeneTest(cds.mg, fullModelFormulaStr = "~sm.ns(Pseudotime)")
+# diff_test_res2 %>%
+#   filter(qval < 0.05) -> sig_genes
+# sig_genes
+# cds.mg1 <- cds.mg[sig_genes$gene_short_name,]
+# cds.mg1
+# plot_genes_in_pseudotime(cds.mg1, ncol=3)
+
+# Monocle 3
+# instead of regression use graph_test?
+test_res <- graph_test(cds.m3.mg, neighbor_graph="principal_graph", cores=4)
+test_res
+pr_deg_ids <- row.names(subset(test_res, q_value < 0.05))
+pr_deg_ids
+
+
+row.sel <- rowData(cds.m3.mg)$gene_short_name %in% c("Il17f","Il1r2")
+#colData(cds.m3.mg)
+lineage_cds <- cds.m3.mg[row.sel,]
+plot_genes_in_pseudotime(lineage_cds)
+```
+#Error in cds_subset@expressionFamily@vfamily %in% c("negbinomial", "negbinomial.size") : no slot of name "expressionFamily" for this object of class "cell_data_set"
+
