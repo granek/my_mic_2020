@@ -1,13 +1,3 @@
----
-title: "Using RStudio on Duke Compute Cluster Open OnDemand"
-output:
-  md_document:
-    variant: markdown_github
----
-
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE)
-```
 
 # Starting up RStudio on DCC OnDemand
 1. Go to [DCC OnDemand](https://dcc-ondemand-01.oit.duke.edu/)
