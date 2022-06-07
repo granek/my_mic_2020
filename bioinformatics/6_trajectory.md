@@ -3,6 +3,7 @@
 -   [2. Create a Monocle object](#create-a-monocle-object)
 -   [3. Run tranjectory analysis](#run-tranjectory-analysis)
 -   [4. Test for DE over psuedotime](#test-for-de-over-psuedotime)
+-   [5. Additional resources](#additional-resources)
 
 ``` r
 knitr::opts_chunk$set(echo = T, message = FALSE, warning = FALSE)
@@ -113,6 +114,7 @@ monocle
 -   Create a Monocle object
 -   Run trajectory analysis
 -   Test for DE over pseudotime
+-   Additional resources
 
 **Data source:** Christian et al. 2021 Cell Reports
 (<https://doi.org/10.1016/j.celrep.2021.109118>)
@@ -637,10 +639,12 @@ cds.rd@reducedDimS[1:2,1:5] # rows correspond to the dimensions, i.e. here we se
 
 Order cells along the trajectory.
 
-From orderCells() help: “This function takes as input a CellDataSet and
-returns it with two new columns: Pseudotime and State, which together
-encode where each cell maps to the trajectory in the reduced-dimension
-space.
+From orderCells() help: “Learns a”trajectory” describing the biological
+process the cells are going through, and calculates where each cell
+falls within that trajectory. …This function takes as input a
+CellDataSet and returns it with two new columns: Pseudotime and State,
+which together encode where each cell maps to the trajectory in the
+reduced-dimension space.
 
 Notice that after applying orderCells(), the columns “Pseudotime” and
 “State” get added to the phenoData.
@@ -905,3 +909,9 @@ plot_genes_in_pseudotime(cds.mg1, ncol=3)
 ```
 
 ![](6_trajectory_files/figure-markdown_github/unnamed-chunk-28-1.png)
+
+## 5. Additional resources
+
+Developers of Monocle, are releasing a new package version: Monocle3.
+This still in beta phase, so use with caution.
+<https://cole-trapnell-lab.github.io/monocle3/docs/updates/>
