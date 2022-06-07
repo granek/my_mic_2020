@@ -1,352 +1,175 @@
-# Using `dplyr` for data manipulation
+---
+title: "Quantitative Methods for HIV Researchers"
+subtitle: "Dplyr"
+author: "Janice M. McCarthy"
+date: "November 5, 2020"
+output: html_document
+---
 
-**Description**
-
-```
-dplyr provides a flexible grammar of data manipulation. It’s the next iteration of plyr, focused on tools for working with data frames (hence the d in the name).
-```
-
-If you look at [`dplyr` docs](https://cran.r-project.org/web/packages/dplyr/dplyr.pdf), there is a rich collection of data manipulation verbs provided. However, most common tasks can be accomplished with just 6 verbs that we will cover in this session:
-
-```
-select
-filter
-mutate 
-arrange
-summarize
-group_by
-```
-
-We will also see how to construct data manipulation "sentences" by using these verbs together with `pipes`.
-
-
-```R
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
+setwd("~/hiv-workshop-2020-2021/data_science/tidyverse/")
 ```
+# Manipulating data frames with `dplyr`
 
-## Data
+Once we have our data into a tidy format, we can use the functions in the `dplyr` packages to manipulate the rows and columns, get summaries or perform other operations on the data.
 
+## Select
 
-```R
-path='../data/hts_2018_data/2018_pilot_metadata_anon.tsv'
+The `select` function extracts columns from the data frame. It can be used with explicit column names or 'helper' functions.
+
+```{r}
+starwars %>% head()
+
+starwars %>%
+select(name, birth_year, species) %>%
+head(3)
+
+starwars %>%
+select(name, age=birth_year, species) %>%
+head(3)
+
+starwars %>% 
+select(-name, -birth_year, -species) %>% 
+head(3)
+
+starwars%>% 
+select(starts_with('s')) %>%
+head(3)
+
+starwars%>% 
+select(matches("[aeiou]{2,}")) %>%
+head(3)
+
+starwars%>% 
+select(name, age=birth_year, mass) %>%
+arrange(age) %>%
+head(3)
+
+starwars%>% 
+select(name, age=birth_year, mass) %>%
+arrange(desc(age)) %>%
+head(3)
+
+starwars%>% 
+select(name, age=birth_year, mass) %>%
+arrange(age) %>%
+head(5)
+
+starwars%>% 
+select(name, age=birth_year, mass) %>%
+arrange(age, mass) %>%
+head(5)
+
+starwars%>% 
+select(name, age=birth_year, mass) %>%
+top_n(age, n=3)
 ```
+### Exercises
 
+Use the built-in data set `diamonds` to do the following:
 
-```R
-getwd()
-```
+1. Select only the `x, y` and `z` columns
+2. Select all columns except `price`
+3. Find the top 5 most expensive diamonds
+4. Find the 5 most least expensive diamonds and print only their carat, cut, color and clarity
+5. Find the 10 most expensive diamonds with the largest carat size
 
+## Filter 
 
-```R
-df <- read_tsv(path)
-```
+The `filter` function selects rows of a data frame according to a given criteria.
 
+```{r}
+starwars %>%
+filter(birth_year > 100)
 
-```R
-names(df)
-```
+starwars %>%
+filter((birth_year >= 600) | (name == 'Dooku'))
 
-### Fix names to be consistent
+starwars %>%
+filter((birth_year >= 600) | (name == 'Dooku')) %>%
+select(name, age=birth_year, homeworld)
 
-Note that some names use spaces between words and others use underscores. Le'ts fix this.
+starwars %>%
+filter(birth_year > 100 , sex=='male')
 
-
-```R
-names(df) <- str_replace_all(names(df), c('[:space:]+' = '_'))
-```
-
-
-```R
-names(df)
-```
-
-
-```R
-dim(df)
-```
-
-Note: Drop some columns so table fits in browser
-
-
-```R
-df <- df[, c(2:5, 8:15)]
-```
-
-
-```R
-dim(df)
-```
-
-
-```R
-sample_n(df, 3)
-```
-
-
-```R
-summary(df)
-```
-
-### Fixing fake numeric columns
-
-Note that `RNA_sample_num`, `Replicate` and `library#` are really discrete `factors` rather than numbrs.  As `#` is not allowed in an R variable name, we need to use backticks for `library#`. (Alternatively, we cna reame to something like `library_num`). 
-
-
-```R
-df %>% mutate(
-    RNA_sample_num=factor(RNA_sample_num), 
-    Replicate=factor(Replicate),
-    `library#`=factor(`library#`)
-) %>% 
-select_if(is.factor) %>%
-names
-```
-
-After checking that the transformation worked, we can save the transformed data.frame.
-
-
-```R
-df <- df %>% mutate(
-    RNA_sample_num=factor(RNA_sample_num), 
-    Replicate=factor(Replicate),
-    `library#`=factor(`library#`)
-)
-```
-
-## 0. Pipe
-
-
-```R
-df %>% head(10) %>% tail(3)
-```
-
-Note that the above result can also be achieved with `slice`
-
-
-```R
-df %>% slice(8:10)
-```
-
-## 1. Select columns
-
-
-```R
-df %>% select(1:3) %>% head(3)
-```
-
-
-```R
-df %>% select(c(1,3,5)) %>% head(3)
-```
-
-
-```R
-df %>% select(c('RNA_sample_num', 'Media')) %>% head(3)
-```
-
-### Dropping columns
-
-
-```R
-df %>% select(-((1:10))) %>% head(3)
-```
-
-### Selecting using string operations
-
-
-```R
-df %>% select(ends_with('person')) %>% head(3)
-```
-
-
-```R
-df %>% select(starts_with('i')) %>% head(3)
-```
-
-
-```R
-df %>% select(contains('primer')) %>% head(3)
-```
-
-
-```R
-df %>% select(matches('.*_.*')) %>% head(3)
-```
-
-### Renaming columns with select
-
-
-```R
-df %>% 
-select(c('method' = 'enrichment_method', 
-         'fold.change' =  'concentration_fold_difference')) %>% 
+starwars %>%
+filter(str_detect(homeworld, "in")) %>%
+select(name, homeworld) %>%
 head(3)
 ```
+### Exercises
+Use the `diamonds` data set to do the following:
 
-### Scoped variants
+1. Find all diamonds whose cut is "Ideal"
+2. Find all diamonds with carat > 2
+3. Find all diamonds with carat > 2 and cut "Premiun" or "Ideal"
+4. Find all diamonds with cut better than "Fair"
+5. Use `filter` with `str_detect` to select all diamonds whose cut is 'Good' or 'Very Good'
 
+## Mutate and transmutate
 
-```R
-df %>% select_if(is.numeric) %>% head(3)
-```
+These functions perform operations across columns.
 
+```{r}
+starwars%>% 
+select(name, age=birth_year, height, mass) %>%
+head(3)
 
-```R
-df %>% 
-select_at(c('enrichment_method', 
-            'concentration_fold_difference'), toupper) %>%
+starwars%>% 
+select(name, age=birth_year, height, mass) %>%
+mutate(bmi=mass/(height/100)^2, obese=bmi>30) %>%
+head(3)
+
+starwars%>% 
+select(name, age=birth_year, height, mass) %>%
+transmute(bmi=mass/(height/100)^2, obese=bmi>30) %>%
+head(3)
+
+starwars %>%
+transmute_if(is_character, str_to_upper) %>%
+head(3)
+
+starwars %>%
+select_at(c("birth_year", "height", "mass")) %>%
+head(3)
+
+starwars %>%
+transmute_at(c("birth_year", "height", "mass"), ~ . + 1) %>%
 head(3)
 ```
+### Exercises
 
+1. Add a new column to the `diamonds` data frame called "Class" that is 1 if the cut is "Ideal" or "Premium" **and** the carat is larger than 2, 0 if not.
 
-```R
-df %>% select_all(tolower) %>% head(3)
-```
+## Group by and summarize
 
-## 2. Filter rows
+```{r}
+starwars %>%
+summarize(avg_mass = mean(mass, na.rm=TRUE),
+          median_age=median(birth_year, na.rm=TRUE))
 
+starwars %>%
+summarize_if(is.numeric, mean, na.rm=TRUE)
 
-```R
-unique(df$Media)
-```
+starwars %>%
+summarize_if(is.numeric, list(mean, median), na.rm=TRUE)
 
-### Equality and inequality conditions
-
-
-```R
-df %>% filter(Media == 'TC') %>% head(3)
-```
-
-
-```R
-df %>% filter(concentration_fold_difference > 3) %>% head(3)
-```
-
-### Combining conditions
-
-
-```R
-df %>% 
-filter(Media != 'TC', 
-       concentration_fold_difference > 3) %>%
+starwars %>%
+group_by(homeworld) %>%
+summarize(avg_mass=mean(mass, na.rm=T)) %>%
 head(3)
-```
 
-
-```R
-df %>% 
-filter(Media == 'TC' |
-       concentration_fold_difference > 3) %>%
+starwars %>%
+group_by(homeworld) %>%
+summarize(avg_mass=mean(mass, na.rm=T)) %>%
+filter(!is.na(homeworld)) %>%
 head(3)
+
 ```
 
-### Filtering on string conditions
+### Exercises
 
-
-```R
-df %>% filter(str_length(Media) == 3) %>% head(3)
-```
-
-
-```R
-df %>% filter(str_detect(i7_index, '^A.+')) %>% head(3)
-```
-
-## 3. Arrange in ascending or descening order
-
-
-```R
-df %>% arrange(concentration_fold_difference) %>% head(3)
-```
-
-
-```R
-df %>% arrange(desc(concentration_fold_difference)) %>% head(3)
-```
-
-
-```R
-df %>% 
-arrange(Replicate, 
-        desc(concentration_fold_difference))%>% 
-head(3)
-```
-
-### Using `top_n`
-
-
-```R
-df %>% top_n(3, concentration_fold_difference)
-```
-
-
-```R
-df %>% top_n(3, desc(concentration_fold_difference))
-```
-
-## 4. Mutate values
-
-
-```R
-df %>% 
-select(RNA_sample_num, concentration_fold_difference) %>%
-mutate(concentration_difference=2^concentration_fold_difference) %>%
-head(3)
-```
-
-
-```R
-df %>%
-transmute(concentration_difference=2^concentration_fold_difference) %>% 
-head(3)
-```
-
-## 5. Summarize
-
-
-```R
-df %>% summarize(avg_fold_change=mean(concentration_fold_difference),
-                 min_fold_change=min(concentration_fold_difference),
-                 max_fold_change=max(concentration_fold_difference))
-```
-
-
-```R
-df %>% summarize_if(is.numeric, mean)
-```
-
-## Group_by
-
-`summariz`e is most useful when used with `group_by`
-
-
-```R
-df %>% 
-group_by(Media, Strain, enrichment_method) %>%
-summarize(mean_fold_diff=mean(concentration_fold_difference))
-```
-
-
-```R
-df %>% 
-group_by(Media, Strain, enrichment_method) %>%
-summarize_if(is.numeric, mean) 
-```
-
-
-```R
-df %>% 
-group_by(Media, Strain) %>%
-summarize_if(is.numeric, funs(mean, sd))
-```
-
-What experimental conditions produced the greatest mean fold change?
-
-
-```R
-df %>% 
-group_by(Media, Strain, enrichment_method) %>%
-summarize(mean_fold_diff=mean(concentration_fold_difference)) %>%
-arrange(desc(mean_fold_diff)) %>%
-head(1)
-```
+1. Group the diamonds by cut and find the mean in each category.
+2. Count the number of diamonds of each color.
