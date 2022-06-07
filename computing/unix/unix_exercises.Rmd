@@ -1,0 +1,114 @@
+# Unix capstone exercise
+
+Ths capstone exercise covers essentially all of the Unix commands you need to develop your bioinformatics pipelines. If you can do this exercise without too much difficulty, you are ready to process raw RNA-seq data!
+
+But don't be discouraged if you find this difficult - unless you have quite a lot of previous programming experience, this exercise is likely to be challenging.
+
+General hints:
+
+- Use `pwd` liberally to check that you are in the right directory
+- Each command should execute almost instantly - if not, something is probably wrong with your command
+- Commands in Jupyter can appear to "hang" when there is an error - try the command in a terminal to see what's wrong
+- Remember to configure so that you get a warning with unbound variables
+- Use variables liberally - if a name is used more than once, it should probably be assigned to a variable
+- There is no restriction on using any search engine or reviewing previous notebooks
+
+1. Make two directories `data` and `results`. Check that the directories were created.
+
+Hint:
+
+- You can list just directories with `ls -d */`
+
+
+```{bash}
+
+
+
+
+```
+
+2. In `data`, create the files `expt-1`, `expt-2`, `epxt-3`, each with 5 rows of 3 random numbers between 0 and 9 (inclusive) separated by tabs. When done, display the contents of each file.
+
+
+Hint: 
+
+- Create 3 for loops 
+    - the first to create a file
+    - the next to append a row of numbers, and add a newline
+    - and the third to generate the numbers in the row.
+- You can generate random integers in Unix by repeatedly capturing the value of the special variable `$RANDOM`.
+- Initialize the `RANDOM` variable with the seed `42`.
+- The arithmetic modulo opertor is `%` (gives remainder after division)
+- The tab character is represented by the string `\t`
+- The argument `-ne` to `echo` means do not emit a newline, evaluate special characaters like `\t`
+- You can generate sequences of numbers using brace expansion or `seq`
+- Arithmetic operations are evaluated like this $((1+2))
+
+
+```{bash}
+
+
+
+
+```
+
+3. Create an `MD5SUM` file containing the checksums of the contents within `expt-1`, `expt-2`, and `epxt-3`. Show the contents of the `MD5SUM` file.
+
+Hint:
+
+- `md5sum` needs a list of files as arguments
+
+
+```{bash}
+
+
+
+
+```
+
+4. Create a `data.tar.gz` file containing all the contents of the `data` directory
+
+
+```{bash}
+
+
+
+
+```
+
+5. Move `data.tar.gz` to the `results` directory and recreate the original files
+
+
+```{bash}
+
+
+
+
+```
+
+6. Create a new file `expt-sum.txt` in `results` with 3 lines showing the sum of the numbers in the 1st, 2nd and 3rd columns over all 3 `expt-x` files. That is, the first row of `expt-sum.txt` contains the sum of the 1st column of `expt-1`, `expt-2`, and `expt-3` and so on. Use globbing to get the files `expt-1`, `expt-2`, and `expt-3`.
+
+Hint:
+
+- Remember the `cut` command
+- Use a double for loop
+    - The outer loop selects a file
+    - The inner loop sums up the numbers in the appropriate column of the file
+
+
+```{bash}
+
+
+
+
+```
+
+7. Delete the `data` and `results` directory recursively
+
+
+```{bash}
+
+
+
+
+```
