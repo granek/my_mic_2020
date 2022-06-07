@@ -22,7 +22,7 @@ Suppose we want to visualize the change in deaths of PWH over time for transmiss
 
 
 ```{r}
-df<- read_excel('Cliburn/deaths-of-persons-diagnosed-with-hiv-aids.xlsx')
+df<- read_excel('files/deaths-of-persons-diagnosed-with-hiv-aids.xlsx')
 ```
 
 
@@ -182,7 +182,7 @@ suppressWarnings(print(g))
 
 ## Exercises
 
-**1**. Read the file `Cliburn/persons-living-with-hiv-aids.xlsx` into a data frame.
+**1**. Read the file `files/persons-living-with-hiv-aids.xlsx` into a data frame.
 
 
 ```{r}

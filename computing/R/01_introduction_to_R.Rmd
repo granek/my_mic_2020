@@ -116,11 +116,11 @@ The following sections introduce some basic programming concepts within the cont
     
 ### Style
 
-Programming style (how to name things, how much blank space to use, etc.) is an important part of creating a readable program. It's beyond our scope to cover this in detail, but it would be a good idea to review an R style guide if you plan to write a lot of R code. Different people have slightly different conventions, but [this] (http://adv-r.had.co.nz/Style.html) guide by Hadley Wickham is pretty widely used:
+Programming style (how to name things, how much blank space to use, etc.) is an important part of creating a readable program. It's beyond our scope to cover this in detail, but it would be a good idea to review an R style guide if you plan to write a lot of R code. Different people have slightly different conventions, but [this](http://adv-r.had.co.nz/Style.html) guide by Hadley Wickham is pretty widely used.
 
 
 
-It's 'based' on [Google's R style guide](https://google.github.io/styleguide/Rguide.xml), but some of the recommendations are in direchttp://adv-r.had.co.nz/Style.htmlt conflict. The most important thing is to try to be *consistent*. 
+It's 'based' on [Google's R style guide](https://google.github.io/styleguide/Rguide.xml), but some of the recommendations are in direct conflict. The most important thing is to try to be *consistent*. 
 
 ### Variable Assignment
 

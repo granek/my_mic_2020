@@ -9,7 +9,7 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
-setwd("~/hiv-workshop-2020-2021/data_science/tidyverse/")
+setwd("~/2022-mic/computing/R")
 ```
 # Manipulating data frames with `dplyr`
 

@@ -2,7 +2,7 @@
 title: "Quantitative Methods for HIV Researchers"
 subtitle: "Graphics with ggplot2"
 author: "Janice M. McCarthy"
-date: "November 12, 2020"
+date: "June 9, 2022"
 output: html_document
 ---
 
@@ -11,7 +11,6 @@ output: html_document
 
 ```{r}
 library(tidyverse)
-setwd("~/hiv-workshop-2020-2021/data_science/graphics/")
 ```
 
 
@@ -93,7 +92,7 @@ We can annote the plot with the `labs` function:
 g4 <- g3 + 
    labs(title="ggplot2", 
         subtitle="Graphics example",
-        caption="HIV R Workshop 2019",
+        caption="MIC Workshop 2022",
         x="x-coordinate",
         y="y-coordinate")
 
@@ -155,7 +154,7 @@ geom_smooth(method='lm',
             formula=y ~ poly(x, 2, raw=TRUE)) +
 labs(title="ggplot2", 
      subtitle="Graphics example",
-     caption="HIV R Workshop 2019",
+     caption="MIC Workshop 2022",
      x="x-coordinate",
      y="y-coordinate") +
 facet_grid(~ g) +
