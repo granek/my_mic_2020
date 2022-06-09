@@ -187,18 +187,19 @@ pbmc8k@meta.data %>%
 ### MT%
 
 ```{r}
-tmp <- lapply(seq(1, 40, 1), function(v){
-  
+find_ncells_mt.thres <- function(v){
   pbmc8k@meta.data %>%
-    group_by(orig.ident) %>%
+    mutate(type = ifelse(percent.mt < v, "kept", 
+                         ifelse(percent.mt >= v, "filtered", NA))) %>%
+    group_by(orig.ident, type) %>%
     summarize(threshold = v, 
-              ncells_kept = sum(percent.mt < v),
-              ncells_filtered = sum(percent.mt >= v))
-}) %>% 
-  bind_rows() %>%
-  pivot_longer(cols = c("ncells_filtered", "ncells_kept"),
-               names_to = "type",
-               values_to = "ncells") 
+              ncells = n()) -> res
+  return(res)
+  
+}
+
+1:40 %>%
+  map_dfr(~find_ncells_mt.thres(.x)) -> tmp
 
 ml <- 5
 ggplot(tmp, aes(x=threshold, y=ncells, colour=type))+

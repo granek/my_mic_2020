@@ -275,18 +275,19 @@ pbmc8k@meta.data %>%
 ### MT%
 
 ``` r
-tmp <- lapply(seq(1, 40, 1), function(v){
-  
+find_ncells_mt.thres <- function(v){
   pbmc8k@meta.data %>%
-    group_by(orig.ident) %>%
+    mutate(type = ifelse(percent.mt < v, "kept", 
+                         ifelse(percent.mt >= v, "filtered", NA))) %>%
+    group_by(orig.ident, type) %>%
     summarize(threshold = v, 
-              ncells_kept = sum(percent.mt < v),
-              ncells_filtered = sum(percent.mt >= v))
-}) %>% 
-  bind_rows() %>%
-  pivot_longer(cols = c("ncells_filtered", "ncells_kept"),
-               names_to = "type",
-               values_to = "ncells") 
+              ncells = n()) -> res
+  return(res)
+  
+}
+
+1:40 %>%
+  map_dfr(~find_ncells_mt.thres(.x)) -> tmp
 
 ml <- 5
 ggplot(tmp, aes(x=threshold, y=ncells, colour=type))+
@@ -493,10 +494,10 @@ sessionInfo()
 print(paste("Start Time:  ",stdt))
 ```
 
-    ## [1] "Start Time:   Sun Jun  5 21:09:00 2022"
+    ## [1] "Start Time:   Thu Jun  9 15:25:14 2022"
 
 ``` r
 print(paste("End Time:  ",date()))
 ```
 
-    ## [1] "End Time:   Sun Jun  5 21:09:29 2022"
+    ## [1] "End Time:   Thu Jun  9 15:25:47 2022"
