@@ -1,0 +1,33 @@
+---
+title: "cr_test"
+output: html_document
+date: '2022-06-10'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{bash cr_demultiplex, eval = F}
+DATADIR=/hpc/group/chsi-mic-2022/data
+BCLS=${DATADIR}/cellranger-tiny-bcl-1.2.0
+SAMP=${BCLS}/cellranger-tiny-bcl-simple-1.2.0.csv
+FASTQ=${DATADIR}/pbmc8k/fastq
+
+cellranger mkfastq \
+    --run=${BCLS} \
+    --csv=${SAMP} \
+    --output-dir=${FASTQ}
+```
+
+```{bash cr_count, eval = T}
+FASTQ=${DATADIR}/pbmc8k/fastq/H35KCBCXY/test_sample
+ANNO=/hpc/group/chsi-mic-2022/annotation/refdata-gex-GRCh38-2020-A/
+
+cellranger count \
+    --id=pbmc8k \
+    --sample=test_sample \
+    --fastqs ${FASTQ} \
+    --transcriptome=${ANNO} \
+    --localcores 16
+```

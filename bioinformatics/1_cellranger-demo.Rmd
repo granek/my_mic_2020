@@ -25,12 +25,21 @@ scRNA-seq dataset of 8K human peripheral blood mononuclear cells (PBMCs) freely 
 
 
 ## Data set up
+
+```{r}
+Sys.setenv(DATADIR="/hpc/group/chsi-mic-2022/data",
+           BCLS="/hpc/group/chsi-mic-2022/data/cellranger-tiny-bcl-1.2.0",
+           FASTQ="/hpc/group/chsi-mic-2022/data/pbmc8k/fastq",
+           SAMP="/hpc/group/chsi-mic-2022/data/cellranger-tiny-bcl-1.2.0/cellranger-tiny-bcl-simple-1.2.0.csv")
+```
+
+Check DATADIR
 ```{bash}
-DATADIR=/hpc/group/chsi-mic-2022/data
 cd ${DATADIR}
 pwd
 ls -l
 ```
+
 
 Locate BCL files
 
@@ -40,16 +49,44 @@ Get tar of bcl files and unzip them
 #tar -zxvf /hpc/group/chsi-mic-2022/data/cellranger-tiny-bcl-1.2.0.tar.gz
 ```
 
+Check BCLS
+```{bash}
+cd ${BCLS}
+pwd
+ls -l
+```
+
 Locate sample sheet
 ```{bash eval=FALSE}
 #mkdir cellranger-tiny-csv-1.2.0/
 #wget --directory-prefix=cellranger-tiny-csv-1.2.0/ https://cf.10xgenomics.com/supp/cell-exp/cellranger-tiny-bcl-simple-1.2.0.csv
 ```
 
+Check SAMP path. Load the csv into R and take a look.
+```{r}
+samp <- Sys.getenv("SAMP") 
+samp
+
+samp.df <- read.csv(samp)
+samp.df
+```
+
 Get fastqs for the pbmc8k dataset
 ```{bash eval=FALSE}
 #mkdir pbmc8k
 #wget --directory-prefix=pbmc8k/ http://s3-us-west-2.amazonaws.com/10x.files/samples/cell-exp/2.1.0/pbmc8k/pbmc8k_fastqs.tar
+```
+
+Check FASTQ
+```{bash}
+cd ${FASTQ}
+pwd
+ls -l
+```
+```{bash}
+cd ${FASTQ}/H35KCBCXY/test_sample
+pwd
+ls -l
 ```
 
 Get reference transcriptome
@@ -69,8 +106,8 @@ cellranger --version
 
 ## 1. Transform BCL files into fastq files
 
-Run cellranger's mkfastq command to reformat BCL files into fastqs
-```{bash eval = FALSE}
+Run cellranger's mkfastq command to reformat BCL files into fastqs.
+```{bash cr_demultiplex, eval = T}
 DATADIR=/hpc/group/chsi-mic-2022/data
 BCLS=${DATADIR}/cellranger-tiny-bcl-1.2.0
 SAMP=${BCLS}/cellranger-tiny-bcl-simple-1.2.0.csv
@@ -82,16 +119,24 @@ cellranger mkfastq \
     --output-dir=${FASTQ}
 ```
 
+FYI, I'm being redundant in the previous bash chunk when I specified the environmental variables (i.e. BCLS) again in bash. Remeber that I already passed these variables to bash in the chunk that starts on line 29.
+
 ## 2. Map reads and count genes
 
 Run cellranger's count command to map reads to the reference transcriptome and count the reads per feature
-```{bash eval=FALSE}
+Note that I updated the $FASTQ path
+```{bash cr_count, eval = T}
+DATADIR=/hpc/group/chsi-mic-2022/data
+BCLS=${DATADIR}/cellranger-tiny-bcl-1.2.0
+SAMP=${BCLS}/cellranger-tiny-bcl-simple-1.2.0.csv
+FASTQ=${DATADIR}/pbmc8k/fastq/H35KCBCXY/test_sample
+
 ANNO=/hpc/group/chsi-mic-2022/annotation/refdata-gex-GRCh38-2020-A/
 
 cellranger count \
     --id=pbmc8k \
-    --sample=pbmc8k \
+    --sample=test_sample \
     --fastqs ${FASTQ} \
     --transcriptome=${ANNO} \
-    --localcores 20
+    --localcores 16
 ```
