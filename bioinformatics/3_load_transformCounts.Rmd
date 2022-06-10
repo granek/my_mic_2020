@@ -100,7 +100,7 @@ for(i in 1:length(seulist)){
   seulist.mt[[i]] <- add_mt(seulist[[i]])
   print(head(seulist.mt[[i]]@meta.data))
 }
-
+names(seulist.mt) <- names(seulist)
 seulist <- seulist.mt
 ```
 
@@ -108,18 +108,12 @@ Examine the distribution of nFeature and nCount for each dataset
 ```{r}
 plotlist <- list()
 for (i in 1:length(seulist)){
-  
-  curr.seuobj <- seulist[[i]]
-  
-  p <- ggplot(curr.seuobj@meta.data, aes(x = nCount_RNA, y = nFeature_RNA, 
+  plotlist[[i]] <- ggplot(seulist[[i]]@meta.data, aes(x = nCount_RNA, y = nFeature_RNA, 
                           color = percent.mt)) +
     geom_point(size = 1) +
     labs(x = "nCount", y = "nFeature", color = "MT%") +
     theme_classic() +
     geom_hline(yintercept = 200, linetype = 2)
-  p
-  
-  plotlist[[i]] <- p
   
 }
 names(plotlist) <- names(seulist)
@@ -174,12 +168,10 @@ Are there any cells with more than 5% mitochondrial genes?
 ```{r}
 plotlist <- list()
 for (i in 1:length(seulist)){
-  plotlist[[i]] <- ggplot(seulist[[i]]@meta.data, aes(x = percent.mt))+
-	geom_histogram() +
-	facet_wrap(~ seuobj, nrow = 2)+
-  theme_classic() +
-  geom_vline(xintercept = 5, linetype = 2)
-  
+  plotlist[[i]] <- ggplot(seulist[[i]]@meta.data, aes(x = percent.mt)) +
+    geom_histogram() +
+    theme_classic() +
+    geom_vline(xintercept = 5, linetype = 2)
 }
 names(plotlist) <- names(seulist)
 
@@ -232,7 +224,7 @@ dim(curr.scale.data) # empty
 
 Compare how the "counts" and "data" values differ. Pull out values for a single cell and plot.
 ```{r}
-i <- 1
+i<-1
 colnames(curr.counts)[i] # cell identifier
 df <- data.frame(count = curr.counts[,i], data = curr.data[,i], feature = row.names(curr.counts), row.names = NULL)
 head(df)
@@ -272,7 +264,6 @@ ggplot(df, aes(x = count, y = data)) +
 
 Normalize each of the seurat objects in the list.
 
-Here is an example of how to do this with a for-loop
 ```{r}
 sampleNames <- names(seulist)
 seulist.n <- list()
@@ -283,16 +274,10 @@ for(i in 1:length(sampleNames)){
 names(seulist.n) <- sampleNames
 ```
 
-Here is an example of how to this using purrr::map and pipes
-```{r}
-# seulist %>%
-#   map(~NormalizeData(object = .x, normalization.method = "LogNormalize", scale.factor = 10000)) -> seulist.n
-```
-
 Save the list of normalized seurat objects
 ```{r}
 newfile <- file.path(intermeddir, "seulist-n.rds")
-saveRDS(seulist.n, file = newfile)
+#saveRDS(seulist.n, file = newfile)
 
 tools::md5sum(newfile)
 ```
