@@ -22,8 +22,6 @@ wd <- "/hpc/group/chsi-mic-2022"
 datadirs <- list.files(path = file.path(wd, "data","Christian2021CellReports"), pattern = "_10x", full.names = T)
 datadirs <- datadirs[!grepl(".h5", datadirs)]
 intermeddir <- file.path(wd, "intermed")
-outdir <- file.path("/work",Sys.info()[["user"]],"output")
-outdir
 ```
 
 **Goal of this workshop:** Learn how to load cellranger output into R and prepare QC'd data for downstream analyses
@@ -52,8 +50,8 @@ We can use code like this to load the cell ranger output and store it in a Seura
 
 ```{r}
 readin_10x_to_SO <- function(sample, path, min.cells = 0, min.genes = 0){
-  Seurat::Read10X(data.dir = path) %>%
-    Seurat::CreateSeuratObject(project = sample, 
+  Read10X(data.dir = path) %>%
+    CreateSeuratObject(project = sample, 
                                min.cells=min.cells, min.genes=min.genes) -> seu.obj
   return(seu.obj)
 }
@@ -97,38 +95,72 @@ add_mt <- function(so){
   return(so)
 }
 
-seulist %>%
-  map(~add_mt(.x)) -> seulist.mt
-
-seulist.mt %>%
-  map(~head(.x@meta.data))
+seulist.mt <- list()
+for(i in 1:length(seulist)){
+  seulist.mt[[i]] <- add_mt(seulist[[i]])
+  print(head(seulist.mt[[i]]@meta.data))
+}
 
 seulist <- seulist.mt
 ```
 
 Examine the distribution of nFeature and nCount for each dataset
 ```{r}
-seulist %>%
-  map_dfr(~.x@meta.data, .id = "seuobj") %>%
-  ggplot(aes(x = nCount_RNA, y = nFeature_RNA, 
-                color = percent.mt))+
-	geom_point(size = 1)+
-	facet_wrap(~ seuobj, nrow = 2)+
-	labs(x = "nCount", y = "nFeature", color = "MT%") +
-  theme_classic() +
-  geom_hline(yintercept = 200, linetype = 2)
+plotlist <- list()
+for (i in 1:length(seulist)){
+  
+  curr.seuobj <- seulist[[i]]
+  
+  p <- ggplot(curr.seuobj@meta.data, aes(x = nCount_RNA, y = nFeature_RNA, 
+                          color = percent.mt)) +
+    geom_point(size = 1) +
+    labs(x = "nCount", y = "nFeature", color = "MT%") +
+    theme_classic() +
+    geom_hline(yintercept = 200, linetype = 2)
+  p
+  
+  plotlist[[i]] <- p
+  
+}
+names(plotlist) <- names(seulist)
+plotlist[["disTrm"]] + ggtitle("disTrm")
+plotlist[["Tcm"]] + ggtitle("Tcm")
+plotlist[["Tem"]] + ggtitle("Tem")
+plotlist[["Trm"]] + ggtitle("Trm")
 ```
+
+
 Are there any cells with less than 200 expressed genes?
 ```{r}
-seulist %>%
-  map_dfr(~.x@meta.data, .id = "seuobj") %>%
-  ggplot(aes(x = nFeature_RNA))+
-	geom_histogram() +
-	facet_wrap(~ seuobj, nrow = 2)+
-  theme_classic() +
-  geom_vline(xintercept = 200, linetype = 2)
+plotlist <- list()
+for (i in 1:length(seulist)){
+  plotlist[[i]] <- ggplot(seulist[[i]]@meta.data, aes(x = nFeature_RNA)) +
+    geom_histogram() +
+    theme_classic() +
+    geom_vline(xintercept = 200, linetype = 2)
+}
+names(plotlist) <- names(seulist)
+
+plotlist[["disTrm"]] + ggtitle("disTrm")
+plotlist[["Tcm"]] + ggtitle("Tcm")
+plotlist[["Tem"]] + ggtitle("Tem")
+plotlist[["Trm"]] + ggtitle("Trm")
 ```
 Summarize as a table
+```{r}
+df <- data.frame(seuobj = names(seulist))
+df[,c("min","mean","max")] <- NA
+for (i in 1:length(seulist)){
+  df[i,c("min","mean","max")] <- seulist[[i]]@meta.data %>%
+    summarize(min = min(nFeature_RNA),
+            mean = mean(nFeature_RNA),
+            max = max(nFeature_RNA))
+  
+}
+df
+```
+
+An alternative way to do this is by using purrr mapping functions
 ```{r}
 seulist %>%
   map_dfr(~.x@meta.data, .id = "seuobj") %>%
@@ -140,22 +172,34 @@ seulist %>%
 
 Are there any cells with more than 5% mitochondrial genes?
 ```{r}
-seulist %>%
-  map_dfr(~.x@meta.data, .id = "seuobj") %>%
-  ggplot(aes(x = percent.mt))+
+plotlist <- list()
+for (i in 1:length(seulist)){
+  plotlist[[i]] <- ggplot(seulist[[i]]@meta.data, aes(x = percent.mt))+
 	geom_histogram() +
 	facet_wrap(~ seuobj, nrow = 2)+
   theme_classic() +
   geom_vline(xintercept = 5, linetype = 2)
+  
+}
+names(plotlist) <- names(seulist)
+
+plotlist[["disTrm"]] + ggtitle("disTrm")
+plotlist[["Tcm"]] + ggtitle("Tcm")
+plotlist[["Tem"]] + ggtitle("Tem")
+plotlist[["Trm"]] + ggtitle("Trm")
 ```
 Summarize as a table
 ```{r}
-seulist %>%
-  map_dfr(~.x@meta.data, .id = "seuobj") %>%
-  group_by(seuobj) %>%
-  summarize(min = min(percent.mt),
+df <- data.frame(seuobj = names(seulist))
+df[,c("min","mean","max")] <- NA
+for (i in 1:length(seulist)){
+  df[i,c("min","mean","max")] <- seulist[[i]]@meta.data %>%
+    summarize(min = min(percent.mt),
             mean = mean(percent.mt),
             max = max(percent.mt))
+  
+}
+df
 ```
 
 ## 3. Transform gene counts
@@ -245,6 +289,12 @@ Here is an example of how to this using purrr::map and pipes
 #   map(~NormalizeData(object = .x, normalization.method = "LogNormalize", scale.factor = 10000)) -> seulist.n
 ```
 
+Save the list of normalized seurat objects
+```{r}
+newfile <- file.path(intermeddir, "seulist-n.rds")
+saveRDS(seulist.n, file = newfile)
 
+tools::md5sum(newfile)
+```
 
 

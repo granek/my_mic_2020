@@ -20,8 +20,6 @@ library(monocle); package.version("monocle")
 # Paths
 wd <- "/hpc/group/chsi-mic-2022"
 intermeddir <- file.path(wd, "intermed")
-outdir <- file.path("/work",Sys.info()[["user"]],"output")
-#outdir
 ```
 
 **Goal of this workshop:** Learn to analyze cell trajectories with monocle
@@ -44,7 +42,7 @@ outdir <- file.path("/work",Sys.info()[["user"]],"output")
 Load Seurat objects into R
 
 ```{r}
-seulist <- readRDS(file.path(intermeddir, "seulist_drc.rds"))
+seulist <- readRDS(file.path(intermeddir, "seulist-drc.rds"))
 
 trm <- seulist[["Trm"]]
 disttrm <- seulist[["disTrm"]]

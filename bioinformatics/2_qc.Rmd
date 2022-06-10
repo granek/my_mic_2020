@@ -37,11 +37,27 @@ scRNA-seq dataset of 8K human peripheral blood mononuclear cells (PBMCs) freely 
 We can use code like this to load the cell ranger output and store it in a Seurat object.
 
 ```{r}
-Seurat::Read10X_h5(file.path(cr.outs, "filtered_feature_bc_matrix.h5")) %>% 
-  Seurat::CreateSeuratObject() -> pbmc8k
+Read10X_h5(file.path(cr.outs, "filtered_feature_bc_matrix.h5")) %>% 
+  CreateSeuratObject() -> pbmc8k
 pbmc8k
 ```
 
+Alternatively, you can load all the files inside the `filtered_feature_bc_matrix` folder
+Here are the contents of this folder
+```{r}
+dir(file.path(cr.outs, "filtered_feature_bc_matrix"))
+```
+Here is how you can load the data into a Seurat object.
+```{r}
+Read10X(file.path(cr.outs, "filtered_feature_bc_matrix")) %>% 
+  CreateSeuratObject() -> pbmc8k.alt
+pbmc8k.alt
+```
+
+Since these objects are large, I am going to remove the alternative object from the R environment
+```{r}
+rm(pbmc8k.alt)
+```
 
 ## Calculate mitrochondiral gene percentage
 
@@ -71,14 +87,18 @@ head(pbmc8k@meta.data)
 
 ## Learn data quality attributes, Initial QC
 
+Seurat has a built-in function to plot the three key aspects of data quality that we need to check. Below we will explain each attribute and show how to generate similar plots using ggplot.
+```{r}
+VlnPlot(pbmc8k, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+```
+
 Number of molecules aka reads detected per cell (nCount)
 
 - A very low number of reads per cell could indicate a sequencing failure.
 - A very high number of reads per cell could indicate more than one cell was actually sequenced.
 
 ```{r}
-pbmc8k@meta.data %>%
-  ggplot(aes(x = orig.ident, y = nCount_RNA))+
+ggplot(pbmc8k@meta.data, aes(x = orig.ident, y = nCount_RNA))+
 	geom_jitter(shape = 16, position = position_jitter(0.2))+
 	geom_violin(trim = F, alpha = 0.7) +
   labs(x = "Group", y = "nCount") +
@@ -92,8 +112,7 @@ Number of gene features detected per cell (nFeature)
 - A very low number of gene features per cell could indicate a library prep or sequencing failure.
 
 ```{r}
-pbmc8k@meta.data %>%
-  ggplot(aes(x = orig.ident, y = nFeature_RNA))+
+ggplot(pbmc8k@meta.data, aes(x = orig.ident, y = nFeature_RNA))+
 	geom_jitter(shape = 16, position = position_jitter(0.2))+
 	geom_violin(trim = F, alpha = 0.7)+
   labs(x = "Group", y = "nFeature") +
@@ -107,8 +126,7 @@ Percentage of mitochondrial genes per cell (MT%)
 - A high percentage of mitochondrial genes (MT%) indicates a cell may be dead or dying based on the expectation that, if a cell is ruptured, non-MT genes will leak out first and increase the relative abundance of MT genes.
 
 ```{r}
-pbmc8k@meta.data %>%
-  ggplot(aes(x = orig.ident, y = percent.mt)) +
+ggplot(pbmc8k@meta.data, aes(x = orig.ident, y = percent.mt)) +
   geom_jitter(shape=16, position=position_jitter(0.2))+
 	geom_violin(trim=FALSE, alpha=0.7)+
   scale_y_continuous(limits = c(0, 10)) +
@@ -124,8 +142,7 @@ Correlation between nCounts and nFeatures, colored by MT%
 - The number of gene features detected in a cell (nFeatures) tends to increase with library size (nCounts). Divergence from this correlation could indicate low-quality data, e.g. often observed in high MT% cells.
 
 ```{r}
-pbmc8k@meta.data %>%
-  ggplot(aes(x = nCount_RNA, y = nFeature_RNA, 
+ggplot(pbmc8k@meta.data, aes(x = nCount_RNA, y = nFeature_RNA, 
                 color = percent.mt))+
 	geom_point(size = 1)+
 	labs(x = "nCount", y = "nFeature", color = "MT%") +
@@ -151,8 +168,7 @@ Filter out cells with log(nCount) $>$ `ch` \& $<$ `cl`
 - Note: Different y-axis scales
 
 ```{r}
-pbmc8k@meta.data %>%
-  ggplot(aes(x = log(nCount_RNA))) +
+ggplot(pbmc8k@meta.data, aes(x = log(nCount_RNA))) +
   geom_histogram(bins = 50) +
   geom_vline(xintercept = c(cl, ch), 
              color = "blue", linetype = "dashed") +
@@ -173,8 +189,7 @@ Filtering out cells with log(nFeature) $<$ `fl`
 - Note: Different y-axis scales
 
 ```{r}
-pbmc8k@meta.data %>%
-  ggplot(aes(x = log(nFeature_RNA))) +
+ggplot(pbmc8k@meta.data, aes(x = log(nFeature_RNA))) +
   geom_histogram(bins = 100) +
   geom_vline(xintercept = fl, 
              color = "blue", linetype = "dashed") +
@@ -187,26 +202,12 @@ pbmc8k@meta.data %>%
 ### MT%
 
 ```{r}
-# find_ncells_mt.thres <- function(v){
-#   pbmc8k@meta.data %>%
-#     mutate(type = ifelse(percent.mt < v, "kept", 
-#                          ifelse(percent.mt >= v, "filtered", NA))) %>%
-#     group_by(orig.ident, type) %>%
-#     summarize(threshold = v, 
-#               ncells = n()) -> res
-#   return(res)
-#   
-# }
-# 
-# 1:40 %>%
-#   map_dfr(~find_ncells_mt.thres(.x)) -> tmp
-
-tmp <- data.frame(threshold = 1:40) %>%
-  merge(pbmc8k@meta.data) %>%
+data.frame(threshold = 1:40) %>%
+  full_join(pbmc8k@meta.data, by = character()) %>%
   mutate(type = ifelse(percent.mt < threshold, "Kept", 
                        ifelse(percent.mt >= threshold, "Removed", NA))) %>%
   group_by(orig.ident, threshold, type) %>%
-  summarize(ncells = n())
+  summarize(ncells = n()) -> tmp
 
 ml <- 5
 ggplot(tmp, aes(x=threshold, y=ncells, colour=type))+
@@ -222,8 +223,7 @@ ggplot(tmp, aes(x=threshold, y=ncells, colour=type))+
 Filtering out cells with MT% $>$ `ml`
 There aren't any of these cells because they have already been filtered.
 ```{r}
-pbmc8k@meta.data %>%
-  ggplot(aes(x = percent.mt)) +
+ggplot(pbmc8k@meta.data, aes(x = percent.mt)) +
   geom_histogram(bins = 100) +
   geom_vline(xintercept = ml,
              color = "blue", linetype = "dashed") +
@@ -243,16 +243,9 @@ nrow(pbmc8k@meta.data)
 Filter 
 
 ```{r, echo = T}
-seu_filt <- function(seuobj){
-  seuobj_filt <- subset(seuobj, 
-         nCount_RNA > exp(cl) & 
-         nCount_RNA < exp(ch) &
-         nFeature_RNA > exp(fl) &
-         percent.mt < ml)
-  return(seuobj_filt)
-}
-
-pbmc8k.filt <- seu_filt(seuobj = pbmc8k)
+pbmc8k.filt <- subset(pbmc8k, nCount_RNA > exp(cl) & nCount_RNA < exp(ch) &
+                        nFeature_RNA > exp(fl) & 
+                        percent.mt < ml)
 ```
 
 Post
@@ -274,8 +267,7 @@ nrow(pbmc8k@meta.data) - nrow(pbmc8k.filt@meta.data)
 nCount
 
 ```{r}
-pbmc8k.filt@meta.data %>%
-  ggplot(aes(x = orig.ident, y = nCount_RNA))+
+ggplot(pbmc8k.filt@meta.data, aes(x = orig.ident, y = nCount_RNA))+
 	geom_jitter(shape = 16, position = position_jitter(0.2))+
 	geom_violin(trim = F, alpha = 0.7) +
   labs(x = "Group") +
@@ -286,8 +278,7 @@ pbmc8k.filt@meta.data %>%
 nFeature
 
 ```{r}
-pbmc8k.filt@meta.data %>%
-  ggplot(aes(x = orig.ident, y = nFeature_RNA)) +
+ggplot(pbmc8k.filt@meta.data, aes(x = orig.ident, y = nFeature_RNA)) +
 	geom_jitter(shape = 16, position = position_jitter(0.2))+
 	geom_violin(trim = F, alpha = 0.7)+
   labs(x = "Group") +
@@ -298,8 +289,7 @@ pbmc8k.filt@meta.data %>%
 MT%
 
 ```{r}
-pbmc8k.filt@meta.data %>%
-  ggplot(aes(x = orig.ident, y = percent.mt)) +
+ggplot(pbmc8k.filt@meta.data, aes(x = orig.ident, y = percent.mt)) +
   geom_jitter(shape=16, position=position_jitter(0.2))+
 	geom_violin(trim=FALSE, alpha=0.7)+
   labs(x = "Group", y = "MT%") +
@@ -310,14 +300,19 @@ pbmc8k.filt@meta.data %>%
 Correlation between nCounts and nFeatures, colored by MT%
 
 ```{r}
-pbmc8k.filt@meta.data %>%
-  ggplot(aes(x = nCount_RNA, y = nFeature_RNA, 
-                color = percent.mt))+
+ggplot(pbmc8k.filt@meta.data, aes(x = nCount_RNA, y = nFeature_RNA, color = percent.mt))+
 	geom_point(size = 1)+
 	labs(x = "nCount", y = "nFeature", color = "MT%") +
   theme_classic()
 ```
 
+Save the filtered seurat object as a R data object
+```{r}
+newfile <- file.path(intermeddir, "pbmc8k-filt.rds")
+#saveRDS(pbmc8k.filt, newfile)
+
+tools::md5sum(newfile)
+```
 
 ## Session Info
 ```{r echo=T}

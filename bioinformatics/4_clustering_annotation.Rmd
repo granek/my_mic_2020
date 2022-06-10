@@ -24,13 +24,6 @@ library(cowplot)
 #wd <- "~/Documents/Teaching/chsi-mic-2022"
 wd <- "/hpc/group/chsi-mic-2022"
 intermeddir <- file.path(wd, "intermed")
-
-# Output paths
-scratchdir <- "~/Documents/Temporary/scratch"
-# scratchdir <- "/work"
-# username <- Sys.info()[["user"]]
-# outdir <- file.path(scratchdir,username,"output")
-# dir.create(outdir) # uncomment if not already there
 ```
 
 ## Overview
@@ -58,7 +51,9 @@ Note that the Seurat - [Guided Clustering Tutorial](https://satijalab.org/seurat
 First, we load the normalized UMI count single-cell data.
 
 ```{r load data}
-seulist <- readRDS(file.path(intermeddir, "seulist_drc.rds"))
+tools::md5sum(file.path(intermeddir, "seulist-n.rds"))
+
+seulist <- readRDS(file.path(intermeddir, "seulist-n.rds"))
 ls()
 seulist
 tem <- seulist[["Tem"]]
@@ -226,14 +221,14 @@ dimRed_and_cluster <- function(seuobj){
 
 Apply that function to each seurat object in the list of objects that we normalized
 ```{r}
-#seulist.n %>%
+# seulist.n %>%
 #  map(~dimRed_and_cluster(.x)) -> seulist.drc
 # this takes a minute or two, so we can just load a version that we previously created, cooking-show style.
 
 # Students will not be able to run the saveRDS command because 
 # everything the data/ and intermed/ folders will need to be write-protected
-#saveRDS(seulist.drc, file = file.path(intermeddir, "seulist_drc.rds"))
-seulist.drc <- readRDS(file.path(intermeddir, "seulist_drc.rds"))
+#saveRDS(seulist.drc, file = file.path(intermeddir, "seulist-drc.rds"))
+seulist.drc <- readRDS(file.path(intermeddir, "seulist-drc.rds"))
 ```
 
 ### Examine the tSNE plots (Fig2A). 
