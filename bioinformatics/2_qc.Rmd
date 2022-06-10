@@ -187,19 +187,26 @@ pbmc8k@meta.data %>%
 ### MT%
 
 ```{r}
-find_ncells_mt.thres <- function(v){
-  pbmc8k@meta.data %>%
-    mutate(type = ifelse(percent.mt < v, "kept", 
-                         ifelse(percent.mt >= v, "filtered", NA))) %>%
-    group_by(orig.ident, type) %>%
-    summarize(threshold = v, 
-              ncells = n()) -> res
-  return(res)
-  
-}
+# find_ncells_mt.thres <- function(v){
+#   pbmc8k@meta.data %>%
+#     mutate(type = ifelse(percent.mt < v, "kept", 
+#                          ifelse(percent.mt >= v, "filtered", NA))) %>%
+#     group_by(orig.ident, type) %>%
+#     summarize(threshold = v, 
+#               ncells = n()) -> res
+#   return(res)
+#   
+# }
+# 
+# 1:40 %>%
+#   map_dfr(~find_ncells_mt.thres(.x)) -> tmp
 
-1:40 %>%
-  map_dfr(~find_ncells_mt.thres(.x)) -> tmp
+tmp <- data.frame(threshold = 1:40) %>%
+  merge(pbmc8k@meta.data) %>%
+  mutate(type = ifelse(percent.mt < threshold, "Kept", 
+                       ifelse(percent.mt >= threshold, "Removed", NA))) %>%
+  group_by(orig.ident, threshold, type) %>%
+  summarize(ncells = n())
 
 ml <- 5
 ggplot(tmp, aes(x=threshold, y=ncells, colour=type))+
