@@ -26,7 +26,7 @@ Christian et al. 2021 Cell Reports (https://doi.org/10.1016/j.celrep.2021.109118
 ## Load data
 
 ```{r}
-seulist <- readRDS(file.path(intermeddir, "seulist_drc.rds"))
+seulist <- readRDS(file.path(intermeddir, "seulist-drc.rds"))
 ```
 
 ## Load signature matrix
