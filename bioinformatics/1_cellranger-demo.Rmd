@@ -63,6 +63,9 @@ Download – 11 GB – md5sum: dfd654de39bff23917471e7fcc7a00cd
 #tar -zxvf refdata-gex-GRCh38-2020-A.tar.gz
 ```
 
+See (https://support.10xgenomics.com/single-cell-gene-expression/software/pipelines/latest/advanced/references) for creating a 
+custom bundle.
+
 ## 1. Set and inspect data sources
 
 ### Setup environment variables
@@ -73,8 +76,7 @@ Sys.setenv(
   BCLS="/hpc/group/chsi-mic-2022/data/cellranger-tiny-bcl-1.2.0",
   FASTQ="/hpc/group/chsi-mic-2022/data/pbmc8k/fastqs/",
   SAMP="/hpc/group/chsi-mic-2022/data/cellranger-tiny-bcl-1.2.0/cellranger-tiny-bcl-simple-1.2.0.csv",
-  ANNO="/hpc/group/chsi-mic-2022/annotation/refdata-gex-GRCh38-2020-A/",
-  PWD="/work/owzar001/MIC2022/mycellranger/"
+  ANNO="/hpc/group/chsi-mic-2022/annotation/refdata-gex-GRCh38-2020-A/"
   )
 ```
 
@@ -150,14 +152,20 @@ tree H35KCBCXY
 
 ## 2. Alignment and mapping
 
-Run cellranger's count command to map reads to the reference transcriptome and count the reads per feature
+Run cellranger's count command to align and map the reads. For the class demo,
+we will use a downsampled version of the pbmc8k data (for the full version change
+FASTQ0 to FATSQ).
+
+
 
 ```{bash cr_count, eval = T}
+
+FASTQ0=/hpc/group/chsi-mic-2022/fastq0/
 
 cellranger count \
     --id=mypbmc8k \
     --sample=test_sample \
-    --fastqs ${FASTQ} \
+    --fastqs ${FASTQ0} \
     --transcriptome=${ANNO} \
     --localcores 16
 ```
