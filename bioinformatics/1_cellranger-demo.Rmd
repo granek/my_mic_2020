@@ -19,7 +19,7 @@ stdt<-date()
 **What's covered in this workshop:**
 
 -   Demultiplex BCL files into fastq files (bcl -\> fastq)
--   Align reads to genome and map to genes (fastq -\> count matrix)
+-   Align and map reads (fastq -\> count matrix)
 
 **Notes on cellranger dependencies:**
 
@@ -27,9 +27,12 @@ stdt<-date()
 -   STAR (<https://github.com/alexdobin/STAR>) for alignment and mapping. This software is bundled into cellranger
 -   Annotation bundles including reference genome (FASTA) and annotation (GTF) files (<https://cf.10xgenomics.com/supp/cell-exp/refdata-gex-GRCh38-2020-A.tar.gz>)
 
-**Data sources:** - For demultiplexing demo: (<https://cf.10xgenomics.com/supp/cell-exp/cellranger-tiny-bcl-1.2.0.tar.gz>) - For alignment and counting: scRNA-seq dataset of 8K human peripheral blood mononuclear cells (<https://support.10xgenomics.com/single-cell-gene-expression/datasets/2.1.0/pbmc8k>)
+**Data sources:**
 
-## 0. Retrieve data Sources
+-   For demultiplexing demo: (<https://cf.10xgenomics.com/supp/cell-exp/cellranger-tiny-bcl-1.2.0.tar.gz>)
+-   For alignment and mapping demo: scRNAseq dataset of 8K human peripheral blood mononuclear cells (<https://support.10xgenomics.com/single-cell-gene-expression/datasets/2.1.0/pbmc8k>)
+
+## 0. Retrieve data files
 
 ### Get tar of bcl files and unzip them
 
@@ -65,10 +68,21 @@ See (<https://support.10xgenomics.com/single-cell-gene-expression/software/pipel
 
 ### Setup environment variables
 
+Input directories and files:
+
+-   BCLS: location of bcl file directory cellranger-tiny-bcl-simple
+-   SAMP: sample file for BCL directory
+-   FASTQ: location of FASTQ files for the pbmc8k data
+-   ANNO: location of annotation bundle
+
+Output directories:
+
+-   MKFQDIR: The files from the demultiplexing step will be written to this directory
+-   CNTDIR: The files from alignment and mapping step will be written to this directory
+
 ```{r setenv}
 # Input
 Sys.setenv(
-  DATADIR="/hpc/group/chsi-mic-2022/data",
   BCLS="/hpc/group/chsi-mic-2022/data/cellranger-tiny-bcl-1.2.0",
   FASTQ="/hpc/group/chsi-mic-2022/data/pbmc8k/fastqs/",
   SAMP="/hpc/group/chsi-mic-2022/data/cellranger-tiny-bcl-1.2.0/cellranger-tiny-bcl-simple-1.2.0.csv",
@@ -83,7 +97,7 @@ Sys.setenv(
 
 ```
 
-### Inspect bcl tree
+### Inspect bcl tree content
 
 ```{bash bcltree}
 tree ${BCLS}
@@ -103,7 +117,7 @@ samp.df
 
 ### Check FASTQ directory for pbmc data
 
-Notes
+**Notes**
 
 -   each fastq file is prefixed by a sample id (pbmc8k)
 -   the reads from two lanes (L007 and L008)
@@ -111,6 +125,12 @@ Notes
 
 ```{bash}
 tree ${FASTQ}
+```
+
+### Inspect annotation bundle content
+
+```{bash annotree}
+tree ${ANNO}
 ```
 
 Make sure that the cellranger works from within the course singularity container
@@ -132,12 +152,11 @@ cellranger mkfastq \
     --csv=${SAMP}
 ```
 
-\*\* Notes: \*\*
-
+**Notes:**
 
 -   cellranger will write various log files to the working directory. Unless using a hack, it does not seem to be possible to specify the location of this directory. Accordingly, we have explicitely changed the working directory (using cd)
 
-- The --output-dir flag can be used to specify the directory of the fastq output directory
+-   The --output-dir flag can be used to specify the directory of the fastq output directory
 
 -   for additional technical details look at cellranger mkfastq --help (in the bash terminal) and see (<https://support.10xgenomics.com/single-cell-gene-expression/software/pipelines/latest/using/mkfastq>)
 
@@ -146,7 +165,6 @@ cellranger mkfastq \
 ```{bash mkfqtree}
 tree /work/owzar001/MIC2022/PROC/mkfastqstep/
 ```
-
 
 ## 2. Alignment and mapping
 
@@ -172,5 +190,5 @@ cellranger count \
 Finally, we will inspect the output directory content
 
 ```{bash cnttree}
-tree mytest
+tree ${CNTDIR}
 ```
