@@ -4,11 +4,12 @@
     percentage](#calculate-mitrochondiral-gene-percentage)
 -   [Learn data quality attributes, Initial
     QC](#learn-data-quality-attributes-initial-qc)
--   [Exclude data from low-quality
-    cells](#exclude-data-from-low-quality-cells)
-    -   [nCount](#ncount)
-    -   [nFeature](#nfeature)
-    -   [MT%](#mt)
+    -   [Number of molecules aka reads detected per cell
+        (nCount)](#number-of-molecules-aka-reads-detected-per-cell-ncount)
+    -   [Number of gene features detected per cell
+        (nFeature)](#number-of-gene-features-detected-per-cell-nfeature)
+    -   [Percentage of mitochondrial genes per cell
+        (MT%)](#percentage-of-mitochondrial-genes-per-cell-mt)
     -   [Do the filtering](#do-the-filtering)
 -   [Final QC](#final-qc)
 -   [Session Info](#session-info)
@@ -65,14 +66,42 @@ We can use code like this to load the cell ranger output and store it in
 a Seurat object.
 
 ``` r
-Seurat::Read10X_h5(file.path(cr.outs, "filtered_feature_bc_matrix.h5")) %>% 
-  Seurat::CreateSeuratObject() -> pbmc8k
+Read10X_h5(file.path(cr.outs, "filtered_feature_bc_matrix.h5")) %>% 
+  CreateSeuratObject() -> pbmc8k
 pbmc8k
 ```
 
     ## An object of class Seurat 
     ## 36601 features across 8788 samples within 1 assay 
     ## Active assay: RNA (36601 features, 0 variable features)
+
+Alternatively, you can load all the files inside the
+`filtered_feature_bc_matrix` folder Here are the contents of this folder
+
+``` r
+dir(file.path(cr.outs, "filtered_feature_bc_matrix"))
+```
+
+    ## [1] "barcodes.tsv.gz" "features.tsv.gz" "matrix.mtx.gz"
+
+Here is how you can load the data into a Seurat object.
+
+``` r
+Read10X(file.path(cr.outs, "filtered_feature_bc_matrix")) %>% 
+  CreateSeuratObject() -> pbmc8k.alt
+pbmc8k.alt
+```
+
+    ## An object of class Seurat 
+    ## 36601 features across 8788 samples within 1 assay 
+    ## Active assay: RNA (36601 features, 0 variable features)
+
+Since these objects are large, I am going to remove the alternative
+object from the R environment
+
+``` r
+rm(pbmc8k.alt)
+```
 
 ## Calculate mitrochondiral gene percentage
 
@@ -141,155 +170,185 @@ head(pbmc8k@meta.data)
 
 ## Learn data quality attributes, Initial QC
 
-Number of molecules aka reads detected per cell (nCount)
-
--   A very low number of reads per cell could indicate a sequencing
-    failure.
--   A very high number of reads per cell could indicate more than one
-    cell was actually sequenced.
+Seurat has a built-in function to plot the three key aspects of data
+quality that we need to check. Below we will explain each attribute and
+show how to generate similar plots using ggplot.
 
 ``` r
-pbmc8k@meta.data %>%
-  ggplot(aes(x = orig.ident, y = nCount_RNA))+
+VlnPlot(pbmc8k, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+```
+
+![](2_qc_files/figure-markdown_github/unnamed-chunk-8-1.png)
+
+### Number of molecules aka reads detected per cell (nCount)
+
+-   A very low number of reads per cell could indicate a sequencing
+    failure. Reads per cell should generally be above 500
+    (<https://hbctraining.github.io/scRNA-seq/lessons/04_SC_quality_control.html>).
+
+``` r
+cl <- 500 # min number of total reads per cell (nCount is analogous to library size or total number of reads)
+```
+
+-   A very high number of reads per cell could indicate more than one
+    cell was actually sequenced. If more than one cell was sequenced
+    with the same UMI, this is called a “doublet” or “multiplet”. These
+    will show up as a clump on the upper tail of the nCount
+    distribution.
+
+Here is a plot that reproduces the default violin plot that is similar
+to from Seurat::VlnPlot(). Here we have added a blue dashed line to show
+the minimum expected total reads per cell (500).
+
+``` r
+ggplot(pbmc8k@meta.data, aes(x = orig.ident, y = nCount_RNA))+
     geom_jitter(shape = 16, position = position_jitter(0.2))+
     geom_violin(trim = F, alpha = 0.7) +
   labs(x = "Group", y = "nCount") +
   theme_classic() +
   theme(axis.text.x = element_text(angle = 30, hjust=1),
-        strip.text = element_text(size = 6))
-```
-
-![](2_qc_files/figure-markdown_github/unnamed-chunk-5-1.png)
-
-Number of gene features detected per cell (nFeature)
-
--   A very low number of gene features per cell could indicate a library
-    prep or sequencing failure.
-
-``` r
-pbmc8k@meta.data %>%
-  ggplot(aes(x = orig.ident, y = nFeature_RNA))+
-    geom_jitter(shape = 16, position = position_jitter(0.2))+
-    geom_violin(trim = F, alpha = 0.7)+
-  labs(x = "Group", y = "nFeature") +
-  theme_classic() +
-  theme(axis.text.x = element_text(angle = 30, hjust=1),
-        strip.text = element_text(size = 6))
-```
-
-![](2_qc_files/figure-markdown_github/unnamed-chunk-6-1.png)
-
-Percentage of mitochondrial genes per cell (MT%)
-
--   A high percentage of mitochondrial genes (MT%) indicates a cell may
-    be dead or dying based on the expectation that, if a cell is
-    ruptured, non-MT genes will leak out first and increase the relative
-    abundance of MT genes.
-
-``` r
-pbmc8k@meta.data %>%
-  ggplot(aes(x = orig.ident, y = percent.mt)) +
-  geom_jitter(shape=16, position=position_jitter(0.2))+
-    geom_violin(trim=FALSE, alpha=0.7)+
-  scale_y_continuous(limits = c(0, 10)) +
-  labs(x = "Group", y = "MT%") +
-  theme_classic() +
-  theme(axis.text.x = element_text(angle = 30, hjust=1),
         strip.text = element_text(size = 6)) +
-  geom_hline(yintercept = 5, linetype = 2)
-```
-
-![](2_qc_files/figure-markdown_github/unnamed-chunk-7-1.png)
-
-Correlation between nCounts and nFeatures, colored by MT%
-
--   The number of gene features detected in a cell (nFeatures) tends to
-    increase with library size (nCounts). Divergence from this
-    correlation could indicate low-quality data, e.g. often observed in
-    high MT% cells.
-
-``` r
-pbmc8k@meta.data %>%
-  ggplot(aes(x = nCount_RNA, y = nFeature_RNA, 
-                color = percent.mt))+
-    geom_point(size = 1)+
-    labs(x = "nCount", y = "nFeature", color = "MT%") +
-  theme_classic() +
-  geom_hline(yintercept = 200, linetype = 2)
-```
-
-![](2_qc_files/figure-markdown_github/unnamed-chunk-8-1.png)
-
-## Exclude data from low-quality cells
-
-“Low-quality cells that had less than 200 expressed genes and more than
-5% mitochondrial genes were filtered out.”
-
-### nCount
-
-``` r
-cl <- 6 # min number of total reads per cell (nCount is analogous to library size or total number of reads)
-ch <- 11 # max number of total reads per cell
-```
-
-Filter out cells with log(nCount) \> `ch` & \< `cl`
-
--   Note: Different y-axis scales
-
-``` r
-pbmc8k@meta.data %>%
-  ggplot(aes(x = log(nCount_RNA))) +
-  geom_histogram(bins = 50) +
-  geom_vline(xintercept = c(cl, ch), 
-             color = "blue", linetype = "dashed") +
-  labs(x = "log(nCount)", y = "Frequency") +
-  scale_x_continuous(breaks = seq(0, 10, 1)) +
-  theme_classic()
+  geom_hline(yintercept = cl, color = "blue", linetype = "dashed")
 ```
 
 ![](2_qc_files/figure-markdown_github/unnamed-chunk-10-1.png)
 
-### nFeature
+It is sometimes more informative to view the data in a histogram. Here
+we have added a blue dashed line to show the minimum expected total
+reads per cell (500).
 
 ``` r
-fl <- 5.5 # min number of gene features per cell
+ggplot(pbmc8k@meta.data, aes(x = nCount_RNA)) +
+  geom_histogram(bins = 50) +
+  geom_vline(xintercept = c(cl), 
+             color = "blue", linetype = "dashed") +
+  labs(x = "nCount", y = "Frequency") +
+  scale_x_continuous(breaks = seq(0, 10, 1)) +
+  theme_classic()
 ```
 
-Filtering out cells with log(nFeature) \< `fl`
+![](2_qc_files/figure-markdown_github/unnamed-chunk-11-1.png)
 
--   Note: Different y-axis scales
+Here we have log-transformed nCount on the x-axis to get another view of
+the distribution. For these data, we do not see a small shoulder to
+right of the major peak so we did not filter by an upper nCount
+threshold.
 
 ``` r
-pbmc8k@meta.data %>%
-  ggplot(aes(x = log(nFeature_RNA))) +
-  geom_histogram(bins = 100) +
-  geom_vline(xintercept = fl, 
+ggplot(pbmc8k@meta.data, aes(x = log(nCount_RNA))) +
+  geom_histogram(bins = 50) +
+  geom_vline(xintercept = c(log(cl)), 
              color = "blue", linetype = "dashed") +
-  scale_x_continuous(breaks = c(seq(0, 20, 1), fl)) +
-  labs(x = "log(nCount)", y = "Frequency") +
+  labs(x = "Log(nCount)", y = "Frequency") +
+  scale_x_continuous(breaks = seq(0, 10, 1)) +
   theme_classic()
 ```
 
 ![](2_qc_files/figure-markdown_github/unnamed-chunk-12-1.png)
 
-### MT%
+### Number of gene features detected per cell (nFeature)
+
+-   A very low number of gene features per cell could indicate a library
+    prep or sequencing failure. Features per cell should generally be
+    above 300
+    (<https://hbctraining.github.io/scRNA-seq/lessons/04_SC_quality_control.html>).
 
 ``` r
-find_ncells_mt.thres <- function(v){
-  pbmc8k@meta.data %>%
-    mutate(type = ifelse(percent.mt < v, "kept", 
-                         ifelse(percent.mt >= v, "filtered", NA))) %>%
-    group_by(orig.ident, type) %>%
-    summarize(threshold = v, 
-              ncells = n()) -> res
-  return(res)
-  
-}
+fl <- 300 # min number of gene features per cell
+```
 
-1:40 %>%
-  map_dfr(~find_ncells_mt.thres(.x)) -> tmp
+Here is a plot that reproduces the default violin plot that is similar
+to from Seurat::VlnPlot(). Here we have added a blue dashed line to show
+the minimum expected total features per cell (300).
 
-ml <- 5
+``` r
+ggplot(pbmc8k@meta.data, aes(x = orig.ident, y = nFeature_RNA))+
+    geom_jitter(shape = 16, position = position_jitter(0.2))+
+    geom_violin(trim = F, alpha = 0.7)+
+  labs(x = "Group", y = "nFeature") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 30, hjust=1),
+        strip.text = element_text(size = 6)) +
+  geom_hline(yintercept = fl, color = "blue", linetype = "dashed")
+```
+
+![](2_qc_files/figure-markdown_github/unnamed-chunk-14-1.png)
+
+Here we have plotted the histogram with log-transformed nFeatures on the
+x-axis to get another view of the distribution. For these data, we do
+not see a small shoulder to the left of the major peak so we kept the
+minimum nFeatures threshold of 300.
+
+``` r
+ggplot(pbmc8k@meta.data, aes(x = log(nFeature_RNA))) +
+  geom_histogram(bins = 100) +
+  geom_vline(xintercept = log(fl), 
+             color = "blue", linetype = "dashed") +
+  scale_x_continuous(breaks = c(seq(0, 20, 1), round(log(fl), digits = 2)) ) +
+  labs(x = "log(nFeature)", y = "Frequency") +
+  theme_classic()
+```
+
+![](2_qc_files/figure-markdown_github/unnamed-chunk-15-1.png)
+
+### Percentage of mitochondrial genes per cell (MT%)
+
+-   A high percentage of mitochondrial genes (MT%) indicates a cell may
+    be dead or dying based on the expectation that, if a cell is
+    ruptured, non-MT genes will leak out first and increase the relative
+    abundance of MT genes. Often, researchers use 5 MT% as an upper
+    threshold.
+
+``` r
+ml <- 5 # max MT%
+```
+
+Here is a plot that reproduces the default violin plot that is similar
+to from Seurat::VlnPlot(). Here we have added a blue dashed line to show
+the minimum MT% (5).
+
+``` r
+ggplot(pbmc8k@meta.data, aes(x = orig.ident, y = percent.mt)) +
+  geom_jitter(shape=16, position=position_jitter(0.2))+
+    geom_violin(trim=FALSE, alpha=0.7)+
+  labs(x = "Group", y = "MT%") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 30, hjust=1),
+        strip.text = element_text(size = 6)) +
+  geom_hline(yintercept = ml, color = "blue", linetype = "dashed")
+```
+
+![](2_qc_files/figure-markdown_github/unnamed-chunk-17-1.png)
+
+Here we have plotted the histogram with log-transformed MT% on the
+x-axis to get another view of the distribution. For these data, we do
+not see a small shoulder to the right of the major peak so we kept the
+maximum MT% threshold of 5.
+
+``` r
+ggplot(pbmc8k@meta.data, aes(x = log(percent.mt))) +
+  geom_histogram(bins = 100) +
+  geom_vline(xintercept = log(ml), 
+             color = "blue", linetype = "dashed") +
+  scale_x_continuous(breaks = c(seq(0, 20, 1), round(log(ml), digits = 2)) ) +
+  labs(x = "log(MT%)", y = "Frequency") +
+  theme_classic()
+```
+
+![](2_qc_files/figure-markdown_github/unnamed-chunk-18-1.png)
+
+This plot shows how the MT% threshold influences the number of cells
+that are kept versus removed. This is especially useful if one
+encounters a dataset in which higher than normal %MT values.
+
+``` r
+data.frame(threshold = 1:40) %>%
+  full_join(pbmc8k@meta.data, by = character()) %>%
+  mutate(type = ifelse(percent.mt < threshold, "Kept", 
+                       ifelse(percent.mt >= threshold, "Removed", NA))) %>%
+  group_by(orig.ident, threshold, type) %>%
+  summarize(ncells = n()) -> tmp
+
 ggplot(tmp, aes(x=threshold, y=ncells, colour=type))+
     geom_line() + 
   geom_vline(xintercept = ml, color = "blue", linetype = "dashed") + 
@@ -300,23 +359,28 @@ ggplot(tmp, aes(x=threshold, y=ncells, colour=type))+
   theme_classic()
 ```
 
-![](2_qc_files/figure-markdown_github/unnamed-chunk-13-1.png)
+![](2_qc_files/figure-markdown_github/unnamed-chunk-19-1.png)
 
-Filtering out cells with MT% \> `ml` There aren’t any of these cells
-because they have already been filtered.
+Correlation between nCounts and nFeatures, colored by MT%
+
+-   The number of gene features detected in a cell (nFeatures) tends to
+    increase with library size (nCounts). Divergence from this
+    correlation could indicate low-quality data, e.g. often observed in
+    high MT% cells.
 
 ``` r
-pbmc8k@meta.data %>%
-  ggplot(aes(x = percent.mt)) +
-  geom_histogram(bins = 100) +
-  geom_vline(xintercept = ml,
+ggplot(pbmc8k@meta.data, aes(x = nCount_RNA, y = nFeature_RNA, 
+                color = percent.mt))+
+    geom_point(size = 1)+
+    labs(x = "nCount", y = "nFeature", color = "MT%") +
+  theme_classic() +
+  geom_hline(yintercept = fl, 
              color = "blue", linetype = "dashed") +
-  # scale_x_continuous(breaks = c(seq(2, 14, 2), fl)) +
-  labs(x = "MT%", y = "Frequency") +
-  theme_classic()
+  geom_vline(xintercept = cl,
+             color = "blue", linetype = "dashed")
 ```
 
-![](2_qc_files/figure-markdown_github/unnamed-chunk-14-1.png)
+![](2_qc_files/figure-markdown_github/unnamed-chunk-20-1.png)
 
 ### Do the filtering
 
@@ -331,16 +395,10 @@ nrow(pbmc8k@meta.data)
 Filter
 
 ``` r
-seu_filt <- function(seuobj){
-  seuobj_filt <- subset(seuobj, 
-         nCount_RNA > exp(cl) & 
-         nCount_RNA < exp(ch) &
-         nFeature_RNA > exp(fl) &
-         percent.mt < ml)
-  return(seuobj_filt)
-}
-
-pbmc8k.filt <- seu_filt(seuobj = pbmc8k)
+pbmc8k.filt <- subset(pbmc8k, 
+                      nCount_RNA > cl &
+                        nFeature_RNA > fl & 
+                        percent.mt < ml)
 ```
 
 Post
@@ -349,7 +407,7 @@ Post
 nrow(pbmc8k.filt@meta.data)
 ```
 
-    ## [1] 8456
+    ## [1] 8452
 
 Number of cells removed by filtering
 
@@ -357,64 +415,37 @@ Number of cells removed by filtering
 nrow(pbmc8k@meta.data) - nrow(pbmc8k.filt@meta.data)
 ```
 
-    ## [1] 332
+    ## [1] 336
 
 ## Final QC
 
-nCount
+Seurat has a built-in function to plot the three key aspects of data
+quality that we need to check. Below we will explain each attribute and
+show how to generate similar plots using ggplot.
 
 ``` r
-pbmc8k.filt@meta.data %>%
-  ggplot(aes(x = orig.ident, y = nCount_RNA))+
-    geom_jitter(shape = 16, position = position_jitter(0.2))+
-    geom_violin(trim = F, alpha = 0.7) +
-  labs(x = "Group") +
-  theme_classic() +
-  theme(axis.text.x = element_text(angle = 30, hjust=1))
+VlnPlot(pbmc8k, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
 ```
 
-![](2_qc_files/figure-markdown_github/unnamed-chunk-19-1.png)
-
-nFeature
+![](2_qc_files/figure-markdown_github/unnamed-chunk-25-1.png)
 
 ``` r
-pbmc8k.filt@meta.data %>%
-  ggplot(aes(x = orig.ident, y = nFeature_RNA)) +
-    geom_jitter(shape = 16, position = position_jitter(0.2))+
-    geom_violin(trim = F, alpha = 0.7)+
-  labs(x = "Group") +
-  theme_classic() +
-  theme(axis.text.x = element_text(angle = 30, hjust=1))
+VlnPlot(pbmc8k.filt, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
 ```
 
-![](2_qc_files/figure-markdown_github/unnamed-chunk-20-1.png)
+![](2_qc_files/figure-markdown_github/unnamed-chunk-25-2.png)
 
-MT%
+Save the filtered seurat object as a R data object
 
 ``` r
-pbmc8k.filt@meta.data %>%
-  ggplot(aes(x = orig.ident, y = percent.mt)) +
-  geom_jitter(shape=16, position=position_jitter(0.2))+
-    geom_violin(trim=FALSE, alpha=0.7)+
-  labs(x = "Group", y = "MT%") +
-  theme_classic()+
-  theme(axis.text.x = element_text(angle = 30, hjust=1))
+newfile <- file.path(intermeddir, "pbmc8k-filt.rds")
+#saveRDS(pbmc8k.filt, newfile)
+
+tools::md5sum(newfile)
 ```
 
-![](2_qc_files/figure-markdown_github/unnamed-chunk-21-1.png)
-
-Correlation between nCounts and nFeatures, colored by MT%
-
-``` r
-pbmc8k.filt@meta.data %>%
-  ggplot(aes(x = nCount_RNA, y = nFeature_RNA, 
-                color = percent.mt))+
-    geom_point(size = 1)+
-    labs(x = "nCount", y = "nFeature", color = "MT%") +
-  theme_classic()
-```
-
-![](2_qc_files/figure-markdown_github/unnamed-chunk-22-1.png)
+    ## /hpc/group/chsi-mic-2022/intermed/pbmc8k-filt.rds 
+    ##                "7e2bbf769464203488d5b4035a3c6ffc"
 
 ## Session Info
 
@@ -466,7 +497,7 @@ sessionInfo()
     ##  [49] httr_1.4.3            RColorBrewer_1.1-3    ellipsis_0.3.2       
     ##  [52] ica_1.0-2             farver_2.1.0          pkgconfig_2.0.3      
     ##  [55] uwot_0.1.11           dbplyr_2.1.1          deldir_1.0-6         
-    ##  [58] utf8_1.2.2            tidyselect_1.1.2      labeling_0.4.2       
+    ##  [58] utf8_1.2.2            labeling_0.4.2        tidyselect_1.1.2     
     ##  [61] rlang_1.0.2           reshape2_1.4.4        later_1.3.0          
     ##  [64] munsell_0.5.0         cellranger_1.1.0      tools_4.2.0          
     ##  [67] cli_3.3.0             generics_0.1.2        broom_0.8.0          
@@ -474,30 +505,32 @@ sessionInfo()
     ##  [73] yaml_2.3.5            goftest_1.2-3         knitr_1.39           
     ##  [76] bit64_4.0.5           fs_1.5.2              fitdistrplus_1.1-8   
     ##  [79] RANN_2.6.1            pbapply_1.5-0         future_1.26.1        
-    ##  [82] nlme_3.1-157          mime_0.12             xml2_1.3.3           
-    ##  [85] hdf5r_1.3.5           compiler_4.2.0        rstudioapi_0.13      
-    ##  [88] plotly_4.10.0         png_0.1-7             spatstat.utils_2.3-1 
-    ##  [91] reprex_2.0.1          stringi_1.7.6         highr_0.9            
-    ##  [94] rgeos_0.5-9           lattice_0.20-45       Matrix_1.4-1         
-    ##  [97] vctrs_0.4.1           pillar_1.7.0          lifecycle_1.0.1      
-    ## [100] spatstat.geom_2.4-0   lmtest_0.9-40         RcppAnnoy_0.0.19     
-    ## [103] data.table_1.14.2     cowplot_1.1.1         irlba_2.3.5          
-    ## [106] httpuv_1.6.5          patchwork_1.1.1       R6_2.5.1             
-    ## [109] promises_1.2.0.1      KernSmooth_2.23-20    gridExtra_2.3        
-    ## [112] parallelly_1.31.1     codetools_0.2-18      MASS_7.3-57          
-    ## [115] assertthat_0.2.1      withr_2.5.0           sctransform_0.3.3    
-    ## [118] mgcv_1.8-40           parallel_4.2.0        hms_1.1.1            
-    ## [121] grid_4.2.0            rpart_4.1.16          rmarkdown_2.14       
-    ## [124] Rtsne_0.16            shiny_1.7.1           lubridate_1.8.0
+    ##  [82] nlme_3.1-157          mime_0.12             ggrastr_1.0.1        
+    ##  [85] xml2_1.3.3            hdf5r_1.3.5           compiler_4.2.0       
+    ##  [88] rstudioapi_0.13       beeswarm_0.4.0        plotly_4.10.0        
+    ##  [91] png_0.1-7             spatstat.utils_2.3-1  reprex_2.0.1         
+    ##  [94] stringi_1.7.6         highr_0.9             rgeos_0.5-9          
+    ##  [97] lattice_0.20-45       Matrix_1.4-1          vctrs_0.4.1          
+    ## [100] pillar_1.7.0          lifecycle_1.0.1       spatstat.geom_2.4-0  
+    ## [103] lmtest_0.9-40         RcppAnnoy_0.0.19      data.table_1.14.2    
+    ## [106] cowplot_1.1.1         irlba_2.3.5           httpuv_1.6.5         
+    ## [109] patchwork_1.1.1       R6_2.5.1              promises_1.2.0.1     
+    ## [112] KernSmooth_2.23-20    gridExtra_2.3         vipor_0.4.5          
+    ## [115] parallelly_1.31.1     codetools_0.2-18      MASS_7.3-57          
+    ## [118] assertthat_0.2.1      withr_2.5.0           sctransform_0.3.3    
+    ## [121] mgcv_1.8-40           parallel_4.2.0        hms_1.1.1            
+    ## [124] grid_4.2.0            rpart_4.1.16          rmarkdown_2.14       
+    ## [127] Rtsne_0.16            shiny_1.7.1           lubridate_1.8.0      
+    ## [130] ggbeeswarm_0.6.0
 
 ``` r
 print(paste("Start Time:  ",stdt))
 ```
 
-    ## [1] "Start Time:   Thu Jun  9 15:25:14 2022"
+    ## [1] "Start Time:   Mon Jun 13 11:54:50 2022"
 
 ``` r
 print(paste("End Time:  ",date()))
 ```
 
-    ## [1] "End Time:   Thu Jun  9 15:25:47 2022"
+    ## [1] "End Time:   Mon Jun 13 11:55:18 2022"

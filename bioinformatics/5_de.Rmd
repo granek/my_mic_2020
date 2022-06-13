@@ -20,8 +20,6 @@ library(cowplot)
 # Paths
 wd <- "/hpc/group/chsi-mic-2022"
 intermeddir <- file.path(wd, "intermed")
-outdir <- file.path("/work",Sys.info()[["user"]],"output")
-outdir
 ```
 
 **Goal of this workshop:** Learn how to test differential expression between cells
@@ -47,7 +45,7 @@ Note that the Seurat - Guided Clustering Tutorial (https://satijalab.org/seurat/
 ## Load data
 
 ```{r}
-seulist.drc <- readRDS(file.path(intermeddir, "seulist_drc.rds"))
+seulist.drc <- readRDS(file.path(intermeddir, "seulist-drc.rds"))
 ```
 
 ## 1. Identify DEGs between clusters

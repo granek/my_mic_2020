@@ -41,11 +41,7 @@ wd <- "/hpc/group/chsi-mic-2022"
 datadirs <- list.files(path = file.path(wd, "data","Christian2021CellReports"), pattern = "_10x", full.names = T)
 datadirs <- datadirs[!grepl(".h5", datadirs)]
 intermeddir <- file.path(wd, "intermed")
-outdir <- file.path("/work",Sys.info()[["user"]],"output")
-outdir
 ```
-
-    ## [1] "/work/mrl17/output"
 
 **Goal of this workshop:** Learn how to load cellranger output into R
 and prepare QC’d data for downstream analyses
@@ -86,8 +82,8 @@ a Seurat object.
 
 ``` r
 readin_10x_to_SO <- function(sample, path, min.cells = 0, min.genes = 0){
-  Seurat::Read10X(data.dir = path) %>%
-    Seurat::CreateSeuratObject(project = sample, 
+  Read10X(data.dir = path) %>%
+    CreateSeuratObject(project = sample, 
                                min.cells=min.cells, min.genes=min.genes) -> seu.obj
   return(seu.obj)
 }
@@ -171,14 +167,13 @@ add_mt <- function(so){
   return(so)
 }
 
-seulist %>%
-  map(~add_mt(.x)) -> seulist.mt
-
-seulist.mt %>%
-  map(~head(.x@meta.data))
+seulist.mt <- list()
+for(i in 1:length(seulist)){
+  seulist.mt[[i]] <- add_mt(seulist[[i]])
+  print(head(seulist.mt[[i]]@meta.data))
+}
 ```
 
-    ## $disTrm
     ##                  orig.ident nCount_RNA nFeature_RNA percent.mt
     ## AAACCTGAGTCCTCCT     disTrm       2459          963   3.538024
     ## AAACCTGCACTTAAGC     disTrm       3035         1038   3.228995
@@ -186,8 +181,6 @@ seulist.mt %>%
     ## AAACGGGAGCGATCCC     disTrm       8625         1700   3.524638
     ## AAAGTAGCACATGTGT     disTrm       3969         1403   2.670698
     ## AAATGCCGTCAATACC     disTrm       2712          968   2.138643
-    ## 
-    ## $Tcm
     ##                  orig.ident nCount_RNA nFeature_RNA percent.mt
     ## AAACCTGCAGGTGGAT        Tcm       3597         1142   2.224076
     ## AAACCTGGTACGCTGC        Tcm       4175         1185   2.419162
@@ -195,8 +188,6 @@ seulist.mt %>%
     ## AAACCTGGTCGTTGTA        Tcm       8476         1948   2.524776
     ## AAACCTGTCACGAAGG        Tcm       3934         1104   3.050330
     ## AAACCTGTCAGCTGGC        Tcm       4090         1189   3.056235
-    ## 
-    ## $Tem
     ##                  orig.ident nCount_RNA nFeature_RNA percent.mt
     ## AAACCTGCAAGGTTCT        Tem       6011         1797  0.9316254
     ## AAACCTGCACGCGAAA        Tem       3740         1186  2.7005348
@@ -204,8 +195,6 @@ seulist.mt %>%
     ## AAACCTGTCTGGTATG        Tem       2336          955  2.0547945
     ## AAACGGGCATGCCTAA        Tem       6249         1539  2.2083533
     ## AAACGGGGTCTGATTG        Tem       9313         2374  2.2549125
-    ## 
-    ## $Trm
     ##                  orig.ident nCount_RNA nFeature_RNA percent.mt
     ## AAACCTGGTCTTGCGG        Trm       4480         1544   2.343750
     ## AAACGGGAGGCTCAGA        Trm       7628         1696   3.224961
@@ -215,38 +204,103 @@ seulist.mt %>%
     ## AAAGATGTCCTACAGA        Trm       2934         1027   2.453988
 
 ``` r
+names(seulist.mt) <- names(seulist)
 seulist <- seulist.mt
 ```
 
 Examine the distribution of nFeature and nCount for each dataset
 
 ``` r
-seulist %>%
-  map_dfr(~.x@meta.data, .id = "seuobj") %>%
-  ggplot(aes(x = nCount_RNA, y = nFeature_RNA, 
-                color = percent.mt))+
-    geom_point(size = 1)+
-    facet_wrap(~ seuobj, nrow = 2)+
+plotlist <- list()
+for (i in 1:length(seulist)){
+  plotlist[[i]] <- ggplot(seulist[[i]]@meta.data, aes(x = nCount_RNA, y = nFeature_RNA, 
+                          color = percent.mt)) +
+    geom_point(size = 1) +
     labs(x = "nCount", y = "nFeature", color = "MT%") +
-  theme_classic() +
-  geom_hline(yintercept = 200, linetype = 2)
+    theme_classic() +
+    geom_hline(yintercept = 200, linetype = 2)
+  
+}
+names(plotlist) <- names(seulist)
+plotlist[["disTrm"]] + ggtitle("disTrm")
 ```
 
 ![](3_load_transformCounts_files/figure-markdown_github/unnamed-chunk-5-1.png)
+
+``` r
+plotlist[["Tcm"]] + ggtitle("Tcm")
+```
+
+![](3_load_transformCounts_files/figure-markdown_github/unnamed-chunk-5-2.png)
+
+``` r
+plotlist[["Tem"]] + ggtitle("Tem")
+```
+
+![](3_load_transformCounts_files/figure-markdown_github/unnamed-chunk-5-3.png)
+
+``` r
+plotlist[["Trm"]] + ggtitle("Trm")
+```
+
+![](3_load_transformCounts_files/figure-markdown_github/unnamed-chunk-5-4.png)
+
 Are there any cells with less than 200 expressed genes?
 
 ``` r
-seulist %>%
-  map_dfr(~.x@meta.data, .id = "seuobj") %>%
-  ggplot(aes(x = nFeature_RNA))+
+plotlist <- list()
+for (i in 1:length(seulist)){
+  plotlist[[i]] <- ggplot(seulist[[i]]@meta.data, aes(x = nFeature_RNA)) +
     geom_histogram() +
-    facet_wrap(~ seuobj, nrow = 2)+
-  theme_classic() +
-  geom_vline(xintercept = 200, linetype = 2)
+    theme_classic() +
+    geom_vline(xintercept = 200, linetype = 2)
+}
+names(plotlist) <- names(seulist)
+
+plotlist[["disTrm"]] + ggtitle("disTrm")
 ```
 
 ![](3_load_transformCounts_files/figure-markdown_github/unnamed-chunk-6-1.png)
+
+``` r
+plotlist[["Tcm"]] + ggtitle("Tcm")
+```
+
+![](3_load_transformCounts_files/figure-markdown_github/unnamed-chunk-6-2.png)
+
+``` r
+plotlist[["Tem"]] + ggtitle("Tem")
+```
+
+![](3_load_transformCounts_files/figure-markdown_github/unnamed-chunk-6-3.png)
+
+``` r
+plotlist[["Trm"]] + ggtitle("Trm")
+```
+
+![](3_load_transformCounts_files/figure-markdown_github/unnamed-chunk-6-4.png)
 Summarize as a table
+
+``` r
+df <- data.frame(seuobj = names(seulist))
+df[,c("min","mean","max")] <- NA
+for (i in 1:length(seulist)){
+  df[i,c("min","mean","max")] <- seulist[[i]]@meta.data %>%
+    summarize(min = min(nFeature_RNA),
+            mean = mean(nFeature_RNA),
+            max = max(nFeature_RNA))
+  
+}
+df
+```
+
+    ##   seuobj min     mean  max
+    ## 1 disTrm 622 1265.912 3947
+    ## 2    Tcm 686 1258.717 2499
+    ## 3    Tem 500 1268.495 2495
+    ## 4    Trm 372 1244.065 2442
+
+An alternative way to do this is by using purrr mapping functions
 
 ``` r
 seulist %>%
@@ -268,34 +322,57 @@ seulist %>%
 Are there any cells with more than 5% mitochondrial genes?
 
 ``` r
-seulist %>%
-  map_dfr(~.x@meta.data, .id = "seuobj") %>%
-  ggplot(aes(x = percent.mt))+
+plotlist <- list()
+for (i in 1:length(seulist)){
+  plotlist[[i]] <- ggplot(seulist[[i]]@meta.data, aes(x = percent.mt)) +
     geom_histogram() +
-    facet_wrap(~ seuobj, nrow = 2)+
-  theme_classic() +
-  geom_vline(xintercept = 5, linetype = 2)
+    theme_classic() +
+    geom_vline(xintercept = 5, linetype = 2)
+}
+names(plotlist) <- names(seulist)
+
+plotlist[["disTrm"]] + ggtitle("disTrm")
 ```
 
-![](3_load_transformCounts_files/figure-markdown_github/unnamed-chunk-8-1.png)
+![](3_load_transformCounts_files/figure-markdown_github/unnamed-chunk-9-1.png)
+
+``` r
+plotlist[["Tcm"]] + ggtitle("Tcm")
+```
+
+![](3_load_transformCounts_files/figure-markdown_github/unnamed-chunk-9-2.png)
+
+``` r
+plotlist[["Tem"]] + ggtitle("Tem")
+```
+
+![](3_load_transformCounts_files/figure-markdown_github/unnamed-chunk-9-3.png)
+
+``` r
+plotlist[["Trm"]] + ggtitle("Trm")
+```
+
+![](3_load_transformCounts_files/figure-markdown_github/unnamed-chunk-9-4.png)
 Summarize as a table
 
 ``` r
-seulist %>%
-  map_dfr(~.x@meta.data, .id = "seuobj") %>%
-  group_by(seuobj) %>%
-  summarize(min = min(percent.mt),
+df <- data.frame(seuobj = names(seulist))
+df[,c("min","mean","max")] <- NA
+for (i in 1:length(seulist)){
+  df[i,c("min","mean","max")] <- seulist[[i]]@meta.data %>%
+    summarize(min = min(percent.mt),
             mean = mean(percent.mt),
             max = max(percent.mt))
+  
+}
+df
 ```
 
-    ## # A tibble: 4 × 4
-    ##   seuobj   min  mean   max
-    ##   <chr>  <dbl> <dbl> <dbl>
-    ## 1 disTrm 0.826  2.56  4.89
-    ## 2 Tcm    0.654  2.44  4.83
-    ## 3 Tem    0      2.18  4.95
-    ## 4 Trm    0.426  2.35  4.46
+    ##   seuobj       min     mean      max
+    ## 1 disTrm 0.8255366 2.562216 4.888039
+    ## 2    Tcm 0.6540019 2.441314 4.828367
+    ## 3    Tem 0.0000000 2.175146 4.952538
+    ## 4    Trm 0.4261364 2.352405 4.456825
 
 ## 3. Transform gene counts
 
@@ -385,7 +462,7 @@ Compare how the “counts” and “data” values differ. Pull out values for a
 single cell and plot.
 
 ``` r
-i <- 1
+i<-1
 colnames(curr.counts)[i] # cell identifier
 ```
 
@@ -410,7 +487,7 @@ ggplot(df, aes(x = count, y = data)) +
   geom_abline(slope = 1, intercept = 0, linetype = 2, color = "grey")
 ```
 
-![](3_load_transformCounts_files/figure-markdown_github/unnamed-chunk-12-1.png)
+![](3_load_transformCounts_files/figure-markdown_github/unnamed-chunk-13-1.png)
 
 Normalize the counts and re-examine the data slots. Note that only the
 values in the “data” slot have changed.
@@ -493,11 +570,9 @@ ggplot(df, aes(x = count, y = data)) +
   geom_abline(slope = 1, intercept = 0, linetype = 2, color = "grey")
 ```
 
-![](3_load_transformCounts_files/figure-markdown_github/unnamed-chunk-13-1.png)
+![](3_load_transformCounts_files/figure-markdown_github/unnamed-chunk-14-1.png)
 
 Normalize each of the seurat objects in the list.
-
-Here is an example of how to do this with a for-loop
 
 ``` r
 sampleNames <- names(seulist)
@@ -509,9 +584,14 @@ for(i in 1:length(sampleNames)){
 names(seulist.n) <- sampleNames
 ```
 
-Here is an example of how to this using purrr::map and pipes
+Save the list of normalized seurat objects
 
 ``` r
-# seulist %>%
-#   map(~NormalizeData(object = .x, normalization.method = "LogNormalize", scale.factor = 10000)) -> seulist.n
+newfile <- file.path(intermeddir, "seulist-n.rds")
+#saveRDS(seulist.n, file = newfile)
+
+tools::md5sum(newfile)
 ```
+
+    ## /hpc/group/chsi-mic-2022/intermed/seulist-n.rds 
+    ##              "a6716478ddf41b86a622048437b63215"
