@@ -14,55 +14,99 @@ knitr::opts_chunk$set(echo = T, message = FALSE, warning = FALSE)
 stdt<-date()
 ```
 
-**Goal of this workshop:** Learn how to preprocess scRNAseq data using cellranger
+**Goal of this workshop:** Learn how to preprocess scRNAseq data using the cellranger software
 
 **What's covered in this workshop:**
-- Transform BCL files into fastq files
-- Map reads and count genes
 
-**Data source:** 
-scRNA-seq dataset of 8K human peripheral blood mononuclear cells (PBMCs) freely available from 10X Genomics (https://support.10xgenomics.com/single-cell-gene-expression/datasets/2.1.0/pbmc8k)
+-   Demultiplex BCL files into fastq files (bcl -\> fastq)
+-   Align and map reads (fastq -\> count matrix)
 
+**Notes on cellranger dependencies:**
 
-## Data set up
+-   bcl2fastq (<https://support.illumina.com/sequencing/sequencing_software/bcl2fastq-conversion-software.html>) for demultiplexing. This software needs to be installed (see course container script)
+-   STAR (<https://github.com/alexdobin/STAR>) for alignment and mapping. This software is bundled into cellranger
+-   Annotation bundles including reference genome (FASTA) and annotation (GTF) files (<https://cf.10xgenomics.com/supp/cell-exp/refdata-gex-GRCh38-2020-A.tar.gz>)
 
-```{r}
-Sys.setenv(DATADIR="/hpc/group/chsi-mic-2022/data",
-           BCLS="/hpc/group/chsi-mic-2022/data/cellranger-tiny-bcl-1.2.0",
-           FASTQ="/hpc/group/chsi-mic-2022/data/pbmc8k/fastq",
-           SAMP="/hpc/group/chsi-mic-2022/data/cellranger-tiny-bcl-1.2.0/cellranger-tiny-bcl-simple-1.2.0.csv")
-```
+**Data sources:**
 
-Check DATADIR
-```{bash}
-cd ${DATADIR}
-pwd
-ls -l
-```
+-   For demultiplexing demo: (<https://cf.10xgenomics.com/supp/cell-exp/cellranger-tiny-bcl-1.2.0.tar.gz>)
+-   For alignment and mapping demo: scRNAseq dataset of 8K human peripheral blood mononuclear cells (<https://support.10xgenomics.com/single-cell-gene-expression/datasets/2.1.0/pbmc8k>)
 
+## 0. Retrieve data files
 
-Locate BCL files
+### Get tar of bcl files and unzip them
 
-Get tar of bcl files and unzip them
 ```{bash eval=FALSE}
 #wget -P /hpc/group/chsi-mic-2022/data https://cf.10xgenomics.com/supp/cell-exp/cellranger-tiny-bcl-1.2.0.tar.gz\
 #tar -zxvf /hpc/group/chsi-mic-2022/data/cellranger-tiny-bcl-1.2.0.tar.gz
 ```
 
-Check BCLS
-```{bash}
-cd ${BCLS}
-pwd
-ls -l
-```
+### Get sample sheet (for bcl files)
 
-Locate sample sheet
 ```{bash eval=FALSE}
-#mkdir cellranger-tiny-csv-1.2.0/
-#wget --directory-prefix=cellranger-tiny-csv-1.2.0/ https://cf.10xgenomics.com/supp/cell-exp/cellranger-tiny-bcl-simple-1.2.0.csv
+# wget https://cf.10xgenomics.com/supp/cell-exp/cellranger-tiny-bcl-simple-1.2.0.csv
 ```
 
-Check SAMP path. Load the csv into R and take a look.
+### Get fastqs for the pbmc8k dataset
+
+```{bash eval=FALSE}
+#wget http://s3-us-west-2.amazonaws.com/10x.files/samples/cell-exp/2.1.0/pbmc8k/pbmc8k_fastqs.tar
+```
+
+### Get reference transcriptome
+
+Human reference (GRCh38) dataset required for Cell Ranger. Download -- 11 GB -- md5sum: dfd654de39bff23917471e7fcc7a00cd
+
+```{bash eval=FALSE}
+#wget https://cf.10xgenomics.com/supp/cell-exp/refdata-gex-GRCh38-2020-A.tar.gz
+#tar -zxvf refdata-gex-GRCh38-2020-A.tar.gz
+```
+
+See (<https://support.10xgenomics.com/single-cell-gene-expression/software/pipelines/latest/advanced/references>) for creating a custom bundle.
+
+## 1. Set and inspect data sources
+
+### Setup environment variables
+
+Input directories and files:
+
+-   BCLS: location of bcl file directory cellranger-tiny-bcl-simple
+-   SAMP: sample file for BCL directory
+-   FASTQ: location of FASTQ files for the pbmc8k data
+-   ANNO: location of annotation bundle
+
+Output directories:
+
+-   MKFQDIR: The files from the demultiplexing step will be written to this directory
+-   CNTDIR: The files from alignment and mapping step will be written to this directory
+
+```{r setenv}
+# Input
+Sys.setenv(
+  BCLS="/hpc/group/chsi-mic-2022/data/cellranger-tiny-bcl-1.2.0",
+  FASTQ="/hpc/group/chsi-mic-2022/data/pbmc8k/fastqs/",
+  SAMP="/hpc/group/chsi-mic-2022/data/cellranger-tiny-bcl-1.2.0/cellranger-tiny-bcl-simple-1.2.0.csv",
+  ANNO="/hpc/group/chsi-mic-2022/annotation/refdata-gex-GRCh38-2020-A/"
+  )
+
+# Output
+Sys.setenv(
+  MKFQDIR="/work/owzar001/MIC2022/PROC/mkfastqstep/",
+  CNTDIR="/work/owzar001/MIC2022/PROC/cnt/"
+  )
+
+```
+
+### Inspect bcl tree content
+
+```{bash bcltree}
+tree ${BCLS}
+```
+
+### Inspect sample sheet (for bcl)
+
+(<https://support.10xgenomics.com/single-cell-gene-expression/software/pipelines/latest/using/mkfastq#simple_csv>)
+
 ```{r}
 samp <- Sys.getenv("SAMP") 
 samp
@@ -71,72 +115,92 @@ samp.df <- read.csv(samp)
 samp.df
 ```
 
-Get fastqs for the pbmc8k dataset
-```{bash eval=FALSE}
-#mkdir pbmc8k
-#wget --directory-prefix=pbmc8k/ http://s3-us-west-2.amazonaws.com/10x.files/samples/cell-exp/2.1.0/pbmc8k/pbmc8k_fastqs.tar
-```
+### Check FASTQ directory for pbmc data
 
-Check FASTQ
+**Notes**
+
+-   each fastq file is prefixed by a sample id (pbmc8k)
+-   the reads from two lanes (L007 and L008)
+-   Each fastq set is a triplet (I1, R1, R2)
+
 ```{bash}
-cd ${FASTQ}
-pwd
-ls -l
-```
-```{bash}
-cd ${FASTQ}/H35KCBCXY/test_sample
-pwd
-ls -l
+tree ${FASTQ}
 ```
 
-Get reference transcriptome
-Human reference (GRCh38) dataset required for Cell Ranger.
-Download – 11 GB – md5sum: dfd654de39bff23917471e7fcc7a00cd
-```{bash eval=FALSE}
-#wget https://cf.10xgenomics.com/supp/cell-exp/refdata-gex-GRCh38-2020-A.tar.gz
-#tar -zxvf refdata-gex-GRCh38-2020-A.tar.gz
-```
+### Inspect annotation bundle content
 
+```{bash annotree}
+tree ${ANNO}
+```
 
 Make sure that the cellranger works from within the course singularity container
+
 ```{bash}
 cellranger --version
 ```
 
+## 2. Demultiplex BCL files into fastq files
 
-## 1. Transform BCL files into fastq files
+### Run cellranger's mkfastq command to demultiplex BCL files into fastq files.
 
-Run cellranger's mkfastq command to reformat BCL files into fastqs.
 ```{bash cr_demultiplex, eval = T}
-DATADIR=/hpc/group/chsi-mic-2022/data
-BCLS=${DATADIR}/cellranger-tiny-bcl-1.2.0
-SAMP=${BCLS}/cellranger-tiny-bcl-simple-1.2.0.csv
-FASTQ=${DATADIR}/pbmc8k/fastq
+mkdir -p ${MKFQDIR}
+cd ${MKFQDIR}
 
 cellranger mkfastq \
     --run=${BCLS} \
-    --csv=${SAMP} \
-    --output-dir=${FASTQ}
+    --csv=${SAMP}
 ```
 
-FYI, I'm being redundant in the previous bash chunk when I specified the environmental variables (i.e. BCLS) again in bash. Remeber that I already passed these variables to bash in the chunk that starts on line 29.
+**Notes:**
 
-## 2. Map reads and count genes
+-   cellranger will write various log ("interop") files to the working directory. Without a hack, it does not seem to be possible to specify the location of this directory. Accordingly, we have explicitely changed the working directory (using cd)
 
-Run cellranger's count command to map reads to the reference transcriptome and count the reads per feature
-Note that I updated the $FASTQ path
+-   The --output-dir flag can be used to specify the directory of the fastq output directory (the interop files will still be written to the working directory)
+
+-   for additional technical details look at cellranger mkfastq --help (in the bash terminal) and see (<https://support.10xgenomics.com/single-cell-gene-expression/software/pipelines/latest/using/mkfastq>)
+
+### Inspect output directory tree
+
+```{bash mkfqtree}
+tree /work/owzar001/MIC2022/PROC/mkfastqstep/
+```
+
+## 2. Alignment and mapping
+
+Run cellranger's count command to align and map the reads. For the class demo, we will use a downsampled version of the pbmc8k data (for the full version change FASTQ0 to FASTQ).
+
+**Notes:**
+
+-   the sample flag has to match the prefix labels used of the fastq files (foo_S1_L007_I1_001.fastq, foo_S1_L007_R1_001.fastq, foo_S1_L007_R2_001.fastq) while the id flag sets the name of the output directory.
+
+-   the number of cells is by default automatically estimated. You can override this behavior using the --expect-cells and --force-cell flags
+
+-   Earlier versions of cellranger apparently used 3,000 as the default for expected number of cells -
+
+-   See (<https://support.10xgenomics.com/single-cell-gene-expression/software/pipelines/latest/algorithms/overview#cell_calling>) for additional details on the cell number estimation procedure used by cellranger.
+
+-   for additional technical details look at cellranger count --help (in the bash terminal) and see (<https://support.10xgenomics.com/single-cell-gene-expression/software/pipelines/latest/using/count>)
+
 ```{bash cr_count, eval = T}
-DATADIR=/hpc/group/chsi-mic-2022/data
-BCLS=${DATADIR}/cellranger-tiny-bcl-1.2.0
-SAMP=${BCLS}/cellranger-tiny-bcl-simple-1.2.0.csv
-FASTQ=${DATADIR}/pbmc8k/fastq/H35KCBCXY/test_sample
 
-ANNO=/hpc/group/chsi-mic-2022/annotation/refdata-gex-GRCh38-2020-A/
+FASTQ=/hpc/group/chsi-mic-2022/fastq0/
+
+ls ${FASTQ}
+
+mkdir -p ${CNTDIR}
+cd ${CNTDIR}
 
 cellranger count \
-    --id=pbmc8k \
-    --sample=test_sample \
+    --id foo \
+    --sample foo \
     --fastqs ${FASTQ} \
-    --transcriptome=${ANNO} \
+    --transcriptome ${ANNO} \
     --localcores 16
+```
+
+Finally, we will inspect the output directory content
+
+```{bash cnttree}
+tree ${CNTDIR}
 ```

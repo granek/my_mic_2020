@@ -2,6 +2,7 @@
 title: "scSorter demonstration"
 output: html_notebook
 ---
+
 ```{r prereqs}
 knitr::opts_chunk$set(echo = T, message = FALSE, warning = FALSE)
 stdt<-date()
@@ -19,9 +20,7 @@ sigfile = "/hpc/group/chsi-mic-2022/data/cellAssignSig.csv"
 
 **Goal:** Show how to use the R package scSorter to classify cells into cells types using gene expression and a signature matrix.
 
-**Data source:** 
-Christian et al. 2021 Cell Reports (https://doi.org/10.1016/j.celrep.2021.109118)
-
+**Data source:** Christian et al. 2021 Cell Reports (<https://doi.org/10.1016/j.celrep.2021.109118>)
 
 ## Load data
 
@@ -32,6 +31,7 @@ seulist <- readRDS(file.path(intermeddir, "seulist-drc.rds"))
 ## Load signature matrix
 
 See the script `make-cellAssignSig.R` for details on how this file was generated.
+
 ```{r}
 sigobj <- read.csv(file = sigfile)
 head(sigobj)
@@ -40,6 +40,7 @@ head(sigobj)
 Translate marker genes symbols to gene names used in Seurat objects
 
 First, extract gene names from Seurat objects
+
 ```{r}
 # extract genes from seurat objects
 seulist %>%
@@ -50,7 +51,8 @@ length(seulist.genes) #13430 genes in total
 seulist.genes[1:5]
 ```
 
-If we transform these into uppercase, do they match markers? Of the 39 markers, 27 have matches. 
+If we transform these into uppercase, do they match markers? Of the 39 markers, 27 have matches.
+
 ```{r}
 data.frame(gene =  seulist.genes, 
            upper.gene = toupper(seulist.genes)) -> gene.indx
@@ -62,11 +64,13 @@ sum(unique(sigobj$Marker) %in% gene.indx$upper.gene) # 27 matches
 ```
 
 Which markers do not have matches?
+
 ```{r}
 unique(sigobj$Marker)[!unique(sigobj$Marker) %in% gene.indx$upper.gene]
 ```
 
 Recode the signature matrix so that the marker names will match the gene names in the seurat objects
+
 ```{r}
 sigobj %>%
   left_join(gene.indx, by = c("Marker"="upper.gene")) %>%
@@ -78,11 +82,11 @@ sigobj %>%
 
 Function to ...
 
-- 1. Find variable features in Seurat Object
-- 2. Find genes from the signature matrix that are also variable genes
-- 3. Extract expression matrix for those genes
-- 4. Get predicted cell types using expression matrix and signiture matrix
-- 5. Add cell types as metadata to the seurat object
+1.  Find variable features in Seurat Object
+2.  Find genes from the signature matrix that are also variable genes
+3.  Extract expression matrix for those genes
+4.  Get predicted cell types using expression matrix and signiture matrix
+5.  Add cell types as metadata to the seurat object
 
 ```{r}
 celltypefun <- function(cobj, sigobj.t) {
@@ -123,6 +127,7 @@ celltypefun <- function(cobj, sigobj.t) {
 Apply the function to each seurat object...
 
 ### disTrm
+
 ```{r}
 seulist[["disTrm"]]
 distrm.out <- celltypefun(cobj = seulist[["disTrm"]], 
@@ -132,7 +137,9 @@ distrm.out@meta.data %>%
   group_by(orig.ident, scSorter) %>%
   summarize(ncells = length(orig.ident))
 ```
+
 ### Tcm
+
 ```{r}
 seulist[["Tcm"]]
 tcm.out <- celltypefun(cobj = seulist[["Tcm"]], 
@@ -142,8 +149,8 @@ tcm.out@meta.data %>%
   summarize(ncells = length(orig.ident))
 ```
 
-
 ### Tem
+
 ```{r}
 seulist[["Tem"]]
 tem.out <- celltypefun(cobj = seulist[["Tem"]], 
@@ -153,8 +160,8 @@ tem.out@meta.data %>%
   summarize(ncells = length(orig.ident))
 ```
 
- 
 ### Trm
+
 ```{r}
 seulist[["Trm"]]
 trm.out <- celltypefun(cobj = seulist[["Trm"]], 
@@ -164,8 +171,8 @@ trm.out@meta.data %>%
   summarize(ncells = length(orig.ident))
 ```
 
-  
 ### Save
+
 ```{r}
 names(seulist)
 seulist.sc <- list(distrm.out, tcm.out, tem.out, trm.out)
