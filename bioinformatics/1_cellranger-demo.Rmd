@@ -9,14 +9,9 @@ output:
     toc_float: true
 ---
 
-cellranger writes files to the working directory and often does not
-provide the option of overriding this default. We will set the working directory
-upfront.
-
 
 ```{r}
 knitr::opts_chunk$set(echo = T, message = FALSE, warning = FALSE)
-knitr::opts_knit$set(root.dir = '/work/owzar001/MIC2022/mycellranger/')
 stdt<-date()
 ```
 
@@ -38,12 +33,7 @@ stdt<-date()
 
 ## 0. Data Sources
 
-Check DATADIR
-```{bash checkdatadir}
-cd ${DATADIR}
-pwd
-ls -l
-```
+
 
 
 ### Get tar of bcl files and unzip them
@@ -114,8 +104,6 @@ Note that that there are reads from two lanes (L007 and L008).
 ```{bash}
 tree ${FASTQ}
 ```
-
-
 
 Make sure that the cellranger works from within the course singularity container
 
