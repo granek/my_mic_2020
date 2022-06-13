@@ -154,9 +154,9 @@ cellranger mkfastq \
 
 **Notes:**
 
--   cellranger will write various log files to the working directory. Unless using a hack, it does not seem to be possible to specify the location of this directory. Accordingly, we have explicitely changed the working directory (using cd)
+-   cellranger will write various log ("interop") files to the working directory. Without a hack, it does not seem to be possible to specify the location of this directory. Accordingly, we have explicitely changed the working directory (using cd)
 
--   The --output-dir flag can be used to specify the directory of the fastq output directory
+-   The --output-dir flag can be used to specify the directory of the fastq output directory (the interop files will still be written to the working directory)
 
 -   for additional technical details look at cellranger mkfastq --help (in the bash terminal) and see (<https://support.10xgenomics.com/single-cell-gene-expression/software/pipelines/latest/using/mkfastq>)
 
@@ -168,7 +168,19 @@ tree /work/owzar001/MIC2022/PROC/mkfastqstep/
 
 ## 2. Alignment and mapping
 
-Run cellranger's count command to align and map the reads. For the class demo, we will use a downsampled version of the pbmc8k data (for the full version change FASTQ0 to FASTQ). Note that the sample flag has to match the prefix labels used of the fastq files (foo_S1_L007_I1_001.fastq, foo_S1_L007_R1_001.fastq, foo_S1_L007_R2_001.fastq) while the id flag sets the name of the output directory.
+Run cellranger's count command to align and map the reads. For the class demo, we will use a downsampled version of the pbmc8k data (for the full version change FASTQ0 to FASTQ).
+
+**Notes:**
+
+-   the sample flag has to match the prefix labels used of the fastq files (foo_S1_L007_I1_001.fastq, foo_S1_L007_R1_001.fastq, foo_S1_L007_R2_001.fastq) while the id flag sets the name of the output directory.
+
+-   the number of cells is by default automatically estimated. You can override this behavior using the --expect-cells and --force-cell flags
+
+-   Earlier versions of cellranger apparently used 3,000 as the default for expected number of cells -
+
+-   See (<https://support.10xgenomics.com/single-cell-gene-expression/software/pipelines/latest/algorithms/overview#cell_calling>) for additional details on the cell number estimation procedure used by cellranger.
+
+-   for additional technical details look at cellranger count --help (in the bash terminal) and see (<https://support.10xgenomics.com/single-cell-gene-expression/software/pipelines/latest/using/count>)
 
 ```{bash cr_count, eval = T}
 
@@ -180,10 +192,10 @@ mkdir -p ${CNTDIR}
 cd ${CNTDIR}
 
 cellranger count \
-    --id=foo \
-    --sample=foo \
+    --id foo \
+    --sample foo \
     --fastqs ${FASTQ} \
-    --transcriptome=${ANNO} \
+    --transcriptome ${ANNO} \
     --localcores 16
 ```
 
