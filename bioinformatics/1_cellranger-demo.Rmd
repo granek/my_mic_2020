@@ -129,16 +129,19 @@ tree H35KCBCXY
 
 ## 2. Alignment and mapping
 
-Run cellranger's count command to align and map the reads. For the class demo, we will use a downsampled version of the pbmc8k data (for the full version change FASTQ0 to FASTQ).
+Run cellranger's count command to align and map the reads. For the class demo, we will use a downsampled version of the pbmc8k data (for the full version change FASTQ0 to FASTQ). Note that the sample flag has to match the prefix labels used of the fastq files (foo_S1_L007_I1_001.fastq, foo_S1_L007_R1_001.fastq, foo_S1_L007_R2_001.fastq) while the id flag sets the name of the output directory.
 
 ```{bash cr_count, eval = T}
 
 FASTQ0=/hpc/group/chsi-mic-2022/fastq0/
 
+ls ${FASTQ0}
+
 cellranger count \
-    --id=mypbmc8k \
-    --sample=test_sample \
+    --id=mytest \
+    --sample=foo \
     --fastqs ${FASTQ0} \
     --transcriptome=${ANNO} \
     --localcores 16
 ```
+
