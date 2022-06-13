@@ -144,4 +144,8 @@ cellranger count \
     --transcriptome=${ANNO} \
     --localcores 16
 ```
+Finally, we will inspect the output directory content
 
+```{bash cnttree}
+tree mytest
+```
