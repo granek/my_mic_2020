@@ -1,7 +1,7 @@
 | Day       |        Time | Topic                                      | Links                                                                                                       | Instructor |
 |-----------|-------------|--------------------------------------------|-------------------------------------------------------------------------------------------------------------|------------|
 | Monday    | 09:00-10:15 | scRNA-Seq Background                       | [Slides](biology/scrna_background_day6_s1.pdf)                                                              | Granek     |
-|           | 10:30-11:45 | scRNA-Seq Bioinformatics Pre-processing    | [Slides](biology/scrna_bioinformatics_day6_s2.pdf) <br> [Quality Score Details](biology/quality_scores.Rmd) | Granek     |
+|           | 10:30-11:45 | scRNA-Seq Bioinformatics Pre-processing    | [Slides](biology/scrna_bioinformatics_day6_s2.pdf) <br> [Quality Score Details](biology/quality_scores.md)  | Granek     |
 |           | 13:15-14:30 | Hands-on Tutorial                          |                                                                                                             | Owzar      |
 |           | 14:45-16:00 | Data Analysis Workshop I                   |                                                                                                             | Owzar      |
 |           |             |                                            |                                                                                                             |            |
