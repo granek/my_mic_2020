@@ -9,7 +9,6 @@ output:
     toc_float: true
 ---
 
-
 ```{r}
 knitr::opts_chunk$set(echo = T, message = FALSE, warning = FALSE)
 stdt<-date()
@@ -17,24 +16,13 @@ stdt<-date()
 
 **Goal of this workshop:** Learn how to preprocess scRNAseq data using cellranger
 
-**What's covered in this workshop:**
-- Demultiplex BCL files into fastq files (bcl -> fastq)
-- Align reads to genome and map to genes (fastq -> count matrix)
+**What's covered in this workshop:** - Demultiplex BCL files into fastq files (bcl -\> fastq) - Align reads to genome and map to genes (fastq -\> count matrix)
 
-**Notes on cellranger dependencies:**
-- bcl2fastq (https://support.illumina.com/sequencing/sequencing_software/bcl2fastq-conversion-software.html) for demultiplexing. This software needs to be installed (see course container script)
-- STAR (https://github.com/alexdobin/STAR) for alignment and mapping. This software is bundled into cellranger
-- Annotation bundles including  reference genome (FASTA) and annotation (GTF) files (https://cf.10xgenomics.com/supp/cell-exp/refdata-gex-GRCh38-2020-A.tar.gz)
+**Notes on cellranger dependencies:** - bcl2fastq (<https://support.illumina.com/sequencing/sequencing_software/bcl2fastq-conversion-software.html>) for demultiplexing. This software needs to be installed (see course container script) - STAR (<https://github.com/alexdobin/STAR>) for alignment and mapping. This software is bundled into cellranger - Annotation bundles including reference genome (FASTA) and annotation (GTF) files (<https://cf.10xgenomics.com/supp/cell-exp/refdata-gex-GRCh38-2020-A.tar.gz>)
 
-**Data sources:** 
-- For demultiplexing demo:  (https://cf.10xgenomics.com/supp/cell-exp/cellranger-tiny-bcl-1.2.0.tar.gz)
-- For alignment and counting: scRNA-seq dataset of 8K human peripheral blood mononuclear cells (https://support.10xgenomics.com/single-cell-gene-expression/datasets/2.1.0/pbmc8k)
-
+**Data sources:** - For demultiplexing demo: (<https://cf.10xgenomics.com/supp/cell-exp/cellranger-tiny-bcl-1.2.0.tar.gz>) - For alignment and counting: scRNA-seq dataset of 8K human peripheral blood mononuclear cells (<https://support.10xgenomics.com/single-cell-gene-expression/datasets/2.1.0/pbmc8k>)
 
 ## 0. Data Sources
-
-
-
 
 ### Get tar of bcl files and unzip them
 
@@ -43,28 +31,28 @@ stdt<-date()
 #tar -zxvf /hpc/group/chsi-mic-2022/data/cellranger-tiny-bcl-1.2.0.tar.gz
 ```
 
-### Get  sample sheet (for bcl files)
+### Get sample sheet (for bcl files)
+
 ```{bash eval=FALSE}
 # wget https://cf.10xgenomics.com/supp/cell-exp/cellranger-tiny-bcl-simple-1.2.0.csv
 ```
 
 ### Get fastqs for the pbmc8k dataset
+
 ```{bash eval=FALSE}
 #wget http://s3-us-west-2.amazonaws.com/10x.files/samples/cell-exp/2.1.0/pbmc8k/pbmc8k_fastqs.tar
 ```
 
-
 ### Get reference transcriptome
 
-Human reference (GRCh38) dataset required for Cell Ranger.
-Download – 11 GB – md5sum: dfd654de39bff23917471e7fcc7a00cd
+Human reference (GRCh38) dataset required for Cell Ranger. Download -- 11 GB -- md5sum: dfd654de39bff23917471e7fcc7a00cd
+
 ```{bash eval=FALSE}
 #wget https://cf.10xgenomics.com/supp/cell-exp/refdata-gex-GRCh38-2020-A.tar.gz
 #tar -zxvf refdata-gex-GRCh38-2020-A.tar.gz
 ```
 
-See (https://support.10xgenomics.com/single-cell-gene-expression/software/pipelines/latest/advanced/references) for creating a 
-custom bundle.
+See (<https://support.10xgenomics.com/single-cell-gene-expression/software/pipelines/latest/advanced/references>) for creating a custom bundle.
 
 ## 1. Set and inspect data sources
 
@@ -86,10 +74,9 @@ Sys.setenv(
 tree ${BCLS}
 ```
 
-
 ### Inspect sample sheet (for bcl)
 
-(https://support.10xgenomics.com/single-cell-gene-expression/software/pipelines/latest/using/mkfastq#simple_csv)
+(<https://support.10xgenomics.com/single-cell-gene-expression/software/pipelines/latest/using/mkfastq#simple_csv>)
 
 ```{r}
 samp <- Sys.getenv("SAMP") 
@@ -99,10 +86,10 @@ samp.df <- read.csv(samp)
 samp.df
 ```
 
-
 ### Check FASTQ directory for pbmc data
 
-Note that that there are reads from two lanes (L007 and L008). 
+Note that that there are reads from two lanes (L007 and L008).
+
 ```{bash}
 tree ${FASTQ}
 ```
@@ -113,13 +100,9 @@ Make sure that the cellranger works from within the course singularity container
 cellranger --version
 ```
 
-
-
 ## 2. Demultiplex BCL files into fastq files
 
-
-### Run cellranger's mkfastq command to demultiplex BCL files into fastqs. 
-
+### Run cellranger's mkfastq command to demultiplex BCL files into fastqs.
 
 ```{bash cr_demultiplex, eval = T}
 OUTDIR=/work/owzar001/MIC2022/PROC/mkfastqstep/
@@ -130,11 +113,7 @@ cellranger mkfastq \
     --output-dir=${OUTDIR}
 ```
 
-** Notes: **
-- An output directory has been set (see contents in the next step)
-- cellranger will write various log files to the current directory (unless using a hack, it does not seem to be possible to specify the location of this directory)
-- for additional technical details look at cellranger mkfastq --help (in the bash terminal) and see 
-(https://support.10xgenomics.com/single-cell-gene-expression/software/pipelines/latest/using/mkfastq)
+\*\* Notes: \*\* - An output directory has been set (see contents in the next step) - cellranger will write various log files to the current directory (unless using a hack, it does not seem to be possible to specify the location of this directory) - for additional technical details look at cellranger mkfastq --help (in the bash terminal) and see (<https://support.10xgenomics.com/single-cell-gene-expression/software/pipelines/latest/using/mkfastq>)
 
 ### Inspect output directory tree
 
@@ -144,19 +123,13 @@ tree /work/owzar001/MIC2022/PROC/mkfastqstep/
 
 ### Inspect mkfastq log files
 
-
 ```{bash mkfqlogtree}
 tree H35KCBCXY
 ```
 
-
 ## 2. Alignment and mapping
 
-Run cellranger's count command to align and map the reads. For the class demo,
-we will use a downsampled version of the pbmc8k data (for the full version change
-FASTQ0 to FATSQ).
-
-
+Run cellranger's count command to align and map the reads. For the class demo, we will use a downsampled version of the pbmc8k data (for the full version change FASTQ0 to FASTQ).
 
 ```{bash cr_count, eval = T}
 
