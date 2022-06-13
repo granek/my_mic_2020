@@ -4,11 +4,12 @@
     percentage](#calculate-mitrochondiral-gene-percentage)
 -   [Learn data quality attributes, Initial
     QC](#learn-data-quality-attributes-initial-qc)
--   [Exclude data from low-quality
-    cells](#exclude-data-from-low-quality-cells)
-    -   [nCount](#ncount)
-    -   [nFeature](#nfeature)
-    -   [MT%](#mt)
+    -   [Number of molecules aka reads detected per cell
+        (nCount)](#number-of-molecules-aka-reads-detected-per-cell-ncount)
+    -   [Number of gene features detected per cell
+        (nFeature)](#number-of-gene-features-detected-per-cell-nfeature)
+    -   [Percentage of mitochondrial genes per cell
+        (MT%)](#percentage-of-mitochondrial-genes-per-cell-mt)
     -   [Do the filtering](#do-the-filtering)
 -   [Final QC](#final-qc)
 -   [Session Info](#session-info)
@@ -179,12 +180,25 @@ VlnPlot(pbmc8k, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol =
 
 ![](2_qc_files/figure-markdown_github/unnamed-chunk-8-1.png)
 
-Number of molecules aka reads detected per cell (nCount)
+### Number of molecules aka reads detected per cell (nCount)
 
 -   A very low number of reads per cell could indicate a sequencing
-    failure.
+    failure. Reads per cell should generally be above 500
+    (<https://hbctraining.github.io/scRNA-seq/lessons/04_SC_quality_control.html>).
+
+``` r
+cl <- 500 # min number of total reads per cell (nCount is analogous to library size or total number of reads)
+```
+
 -   A very high number of reads per cell could indicate more than one
-    cell was actually sequenced.
+    cell was actually sequenced. If more than one cell was sequenced
+    with the same UMI, this is called a “doublet” or “multiplet”. These
+    will show up as a clump on the upper tail of the nCount
+    distribution.
+
+Here is a plot that reproduces the default violin plot that is similar
+to from Seurat::VlnPlot(). Here we have added a blue dashed line to show
+the minimum expected total reads per cell (500).
 
 ``` r
 ggplot(pbmc8k@meta.data, aes(x = orig.ident, y = nCount_RNA))+
@@ -193,15 +207,59 @@ ggplot(pbmc8k@meta.data, aes(x = orig.ident, y = nCount_RNA))+
   labs(x = "Group", y = "nCount") +
   theme_classic() +
   theme(axis.text.x = element_text(angle = 30, hjust=1),
-        strip.text = element_text(size = 6))
+        strip.text = element_text(size = 6)) +
+  geom_hline(yintercept = cl, color = "blue", linetype = "dashed")
 ```
 
-![](2_qc_files/figure-markdown_github/unnamed-chunk-9-1.png)
+![](2_qc_files/figure-markdown_github/unnamed-chunk-10-1.png)
 
-Number of gene features detected per cell (nFeature)
+It is sometimes more informative to view the data in a histogram. Here
+we have added a blue dashed line to show the minimum expected total
+reads per cell (500).
+
+``` r
+ggplot(pbmc8k@meta.data, aes(x = nCount_RNA)) +
+  geom_histogram(bins = 50) +
+  geom_vline(xintercept = c(cl), 
+             color = "blue", linetype = "dashed") +
+  labs(x = "nCount", y = "Frequency") +
+  scale_x_continuous(breaks = seq(0, 10, 1)) +
+  theme_classic()
+```
+
+![](2_qc_files/figure-markdown_github/unnamed-chunk-11-1.png)
+
+Here we have log-transformed nCount on the x-axis to get another view of
+the distribution. For these data, we do not see a small shoulder to
+right of the major peak so we did not filter by an upper nCount
+threshold.
+
+``` r
+ggplot(pbmc8k@meta.data, aes(x = log(nCount_RNA))) +
+  geom_histogram(bins = 50) +
+  geom_vline(xintercept = c(log(cl)), 
+             color = "blue", linetype = "dashed") +
+  labs(x = "Log(nCount)", y = "Frequency") +
+  scale_x_continuous(breaks = seq(0, 10, 1)) +
+  theme_classic()
+```
+
+![](2_qc_files/figure-markdown_github/unnamed-chunk-12-1.png)
+
+### Number of gene features detected per cell (nFeature)
 
 -   A very low number of gene features per cell could indicate a library
-    prep or sequencing failure.
+    prep or sequencing failure. Features per cell should generally be
+    above 300
+    (<https://hbctraining.github.io/scRNA-seq/lessons/04_SC_quality_control.html>).
+
+``` r
+fl <- 300 # min number of gene features per cell
+```
+
+Here is a plot that reproduces the default violin plot that is similar
+to from Seurat::VlnPlot(). Here we have added a blue dashed line to show
+the minimum expected total features per cell (300).
 
 ``` r
 ggplot(pbmc8k@meta.data, aes(x = orig.ident, y = nFeature_RNA))+
@@ -210,31 +268,98 @@ ggplot(pbmc8k@meta.data, aes(x = orig.ident, y = nFeature_RNA))+
   labs(x = "Group", y = "nFeature") +
   theme_classic() +
   theme(axis.text.x = element_text(angle = 30, hjust=1),
-        strip.text = element_text(size = 6))
+        strip.text = element_text(size = 6)) +
+  geom_hline(yintercept = fl, color = "blue", linetype = "dashed")
 ```
 
-![](2_qc_files/figure-markdown_github/unnamed-chunk-10-1.png)
+![](2_qc_files/figure-markdown_github/unnamed-chunk-14-1.png)
 
-Percentage of mitochondrial genes per cell (MT%)
+Here we have plotted the histogram with log-transformed nFeatures on the
+x-axis to get another view of the distribution. For these data, we do
+not see a small shoulder to the left of the major peak so we kept the
+minimum nFeatures threshold of 300.
+
+``` r
+ggplot(pbmc8k@meta.data, aes(x = log(nFeature_RNA))) +
+  geom_histogram(bins = 100) +
+  geom_vline(xintercept = log(fl), 
+             color = "blue", linetype = "dashed") +
+  scale_x_continuous(breaks = c(seq(0, 20, 1), round(log(fl), digits = 2)) ) +
+  labs(x = "log(nFeature)", y = "Frequency") +
+  theme_classic()
+```
+
+![](2_qc_files/figure-markdown_github/unnamed-chunk-15-1.png)
+
+### Percentage of mitochondrial genes per cell (MT%)
 
 -   A high percentage of mitochondrial genes (MT%) indicates a cell may
     be dead or dying based on the expectation that, if a cell is
     ruptured, non-MT genes will leak out first and increase the relative
-    abundance of MT genes.
+    abundance of MT genes. Often, researchers use 5 MT% as an upper
+    threshold.
+
+``` r
+ml <- 5 # max MT%
+```
+
+Here is a plot that reproduces the default violin plot that is similar
+to from Seurat::VlnPlot(). Here we have added a blue dashed line to show
+the minimum MT% (5).
 
 ``` r
 ggplot(pbmc8k@meta.data, aes(x = orig.ident, y = percent.mt)) +
   geom_jitter(shape=16, position=position_jitter(0.2))+
     geom_violin(trim=FALSE, alpha=0.7)+
-  scale_y_continuous(limits = c(0, 10)) +
   labs(x = "Group", y = "MT%") +
   theme_classic() +
   theme(axis.text.x = element_text(angle = 30, hjust=1),
         strip.text = element_text(size = 6)) +
-  geom_hline(yintercept = 5, linetype = 2)
+  geom_hline(yintercept = ml, color = "blue", linetype = "dashed")
 ```
 
-![](2_qc_files/figure-markdown_github/unnamed-chunk-11-1.png)
+![](2_qc_files/figure-markdown_github/unnamed-chunk-17-1.png)
+
+Here we have plotted the histogram with log-transformed MT% on the
+x-axis to get another view of the distribution. For these data, we do
+not see a small shoulder to the right of the major peak so we kept the
+maximum MT% threshold of 5.
+
+``` r
+ggplot(pbmc8k@meta.data, aes(x = log(percent.mt))) +
+  geom_histogram(bins = 100) +
+  geom_vline(xintercept = log(ml), 
+             color = "blue", linetype = "dashed") +
+  scale_x_continuous(breaks = c(seq(0, 20, 1), round(log(ml), digits = 2)) ) +
+  labs(x = "log(MT%)", y = "Frequency") +
+  theme_classic()
+```
+
+![](2_qc_files/figure-markdown_github/unnamed-chunk-18-1.png)
+
+This plot shows how the MT% threshold influences the number of cells
+that are kept versus removed. This is especially useful if one
+encounters a dataset in which higher than normal %MT values.
+
+``` r
+data.frame(threshold = 1:40) %>%
+  full_join(pbmc8k@meta.data, by = character()) %>%
+  mutate(type = ifelse(percent.mt < threshold, "Kept", 
+                       ifelse(percent.mt >= threshold, "Removed", NA))) %>%
+  group_by(orig.ident, threshold, type) %>%
+  summarize(ncells = n()) -> tmp
+
+ggplot(tmp, aes(x=threshold, y=ncells, colour=type))+
+    geom_line() + 
+  geom_vline(xintercept = ml, color = "blue", linetype = "dashed") + 
+  scale_x_continuous(breaks = seq(0, 40, by = 5)) +
+    labs(x="Thresholds for MT%", y="Number of Cells")+
+  facet_wrap(~orig.ident, nrow = 3, 
+             scales = "free_y")+
+  theme_classic()
+```
+
+![](2_qc_files/figure-markdown_github/unnamed-chunk-19-1.png)
 
 Correlation between nCounts and nFeatures, colored by MT%
 
@@ -249,98 +374,13 @@ ggplot(pbmc8k@meta.data, aes(x = nCount_RNA, y = nFeature_RNA,
     geom_point(size = 1)+
     labs(x = "nCount", y = "nFeature", color = "MT%") +
   theme_classic() +
-  geom_hline(yintercept = 200, linetype = 2)
-```
-
-![](2_qc_files/figure-markdown_github/unnamed-chunk-12-1.png)
-
-## Exclude data from low-quality cells
-
-“Low-quality cells that had less than 200 expressed genes and more than
-5% mitochondrial genes were filtered out.”
-
-### nCount
-
-``` r
-cl <- 6 # min number of total reads per cell (nCount is analogous to library size or total number of reads)
-ch <- 11 # max number of total reads per cell
-```
-
-Filter out cells with log(nCount) \> `ch` & \< `cl`
-
--   Note: Different y-axis scales
-
-``` r
-ggplot(pbmc8k@meta.data, aes(x = log(nCount_RNA))) +
-  geom_histogram(bins = 50) +
-  geom_vline(xintercept = c(cl, ch), 
+  geom_hline(yintercept = fl, 
              color = "blue", linetype = "dashed") +
-  labs(x = "log(nCount)", y = "Frequency") +
-  scale_x_continuous(breaks = seq(0, 10, 1)) +
-  theme_classic()
+  geom_vline(xintercept = cl,
+             color = "blue", linetype = "dashed")
 ```
 
-![](2_qc_files/figure-markdown_github/unnamed-chunk-14-1.png)
-
-### nFeature
-
-``` r
-fl <- 5.5 # min number of gene features per cell
-```
-
-Filtering out cells with log(nFeature) \< `fl`
-
--   Note: Different y-axis scales
-
-``` r
-ggplot(pbmc8k@meta.data, aes(x = log(nFeature_RNA))) +
-  geom_histogram(bins = 100) +
-  geom_vline(xintercept = fl, 
-             color = "blue", linetype = "dashed") +
-  scale_x_continuous(breaks = c(seq(0, 20, 1), fl)) +
-  labs(x = "log(nCount)", y = "Frequency") +
-  theme_classic()
-```
-
-![](2_qc_files/figure-markdown_github/unnamed-chunk-16-1.png)
-
-### MT%
-
-``` r
-data.frame(threshold = 1:40) %>%
-  full_join(pbmc8k@meta.data, by = character()) %>%
-  mutate(type = ifelse(percent.mt < threshold, "Kept", 
-                       ifelse(percent.mt >= threshold, "Removed", NA))) %>%
-  group_by(orig.ident, threshold, type) %>%
-  summarize(ncells = n()) -> tmp
-
-ml <- 5
-ggplot(tmp, aes(x=threshold, y=ncells, colour=type))+
-    geom_line() + 
-  geom_vline(xintercept = ml, color = "blue", linetype = "dashed") + 
-  scale_x_continuous(breaks = seq(0, 40, by = 5)) +
-    labs(x="Thresholds for MT%", y="Number of Cells")+
-  facet_wrap(~orig.ident, nrow = 3, 
-             scales = "free_y")+
-  theme_classic()
-```
-
-![](2_qc_files/figure-markdown_github/unnamed-chunk-17-1.png)
-
-Filtering out cells with MT% \> `ml` There aren’t any of these cells
-because they have already been filtered.
-
-``` r
-ggplot(pbmc8k@meta.data, aes(x = percent.mt)) +
-  geom_histogram(bins = 100) +
-  geom_vline(xintercept = ml,
-             color = "blue", linetype = "dashed") +
-  # scale_x_continuous(breaks = c(seq(2, 14, 2), fl)) +
-  labs(x = "MT%", y = "Frequency") +
-  theme_classic()
-```
-
-![](2_qc_files/figure-markdown_github/unnamed-chunk-18-1.png)
+![](2_qc_files/figure-markdown_github/unnamed-chunk-20-1.png)
 
 ### Do the filtering
 
@@ -355,8 +395,9 @@ nrow(pbmc8k@meta.data)
 Filter
 
 ``` r
-pbmc8k.filt <- subset(pbmc8k, nCount_RNA > exp(cl) & nCount_RNA < exp(ch) &
-                        nFeature_RNA > exp(fl) & 
+pbmc8k.filt <- subset(pbmc8k, 
+                      nCount_RNA > cl &
+                        nFeature_RNA > fl & 
                         percent.mt < ml)
 ```
 
@@ -366,7 +407,7 @@ Post
 nrow(pbmc8k.filt@meta.data)
 ```
 
-    ## [1] 8456
+    ## [1] 8452
 
 Number of cells removed by filtering
 
@@ -374,59 +415,25 @@ Number of cells removed by filtering
 nrow(pbmc8k@meta.data) - nrow(pbmc8k.filt@meta.data)
 ```
 
-    ## [1] 332
+    ## [1] 336
 
 ## Final QC
 
-nCount
+Seurat has a built-in function to plot the three key aspects of data
+quality that we need to check. Below we will explain each attribute and
+show how to generate similar plots using ggplot.
 
 ``` r
-ggplot(pbmc8k.filt@meta.data, aes(x = orig.ident, y = nCount_RNA))+
-    geom_jitter(shape = 16, position = position_jitter(0.2))+
-    geom_violin(trim = F, alpha = 0.7) +
-  labs(x = "Group") +
-  theme_classic() +
-  theme(axis.text.x = element_text(angle = 30, hjust=1))
-```
-
-![](2_qc_files/figure-markdown_github/unnamed-chunk-23-1.png)
-
-nFeature
-
-``` r
-ggplot(pbmc8k.filt@meta.data, aes(x = orig.ident, y = nFeature_RNA)) +
-    geom_jitter(shape = 16, position = position_jitter(0.2))+
-    geom_violin(trim = F, alpha = 0.7)+
-  labs(x = "Group") +
-  theme_classic() +
-  theme(axis.text.x = element_text(angle = 30, hjust=1))
-```
-
-![](2_qc_files/figure-markdown_github/unnamed-chunk-24-1.png)
-
-MT%
-
-``` r
-ggplot(pbmc8k.filt@meta.data, aes(x = orig.ident, y = percent.mt)) +
-  geom_jitter(shape=16, position=position_jitter(0.2))+
-    geom_violin(trim=FALSE, alpha=0.7)+
-  labs(x = "Group", y = "MT%") +
-  theme_classic()+
-  theme(axis.text.x = element_text(angle = 30, hjust=1))
+VlnPlot(pbmc8k, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
 ```
 
 ![](2_qc_files/figure-markdown_github/unnamed-chunk-25-1.png)
 
-Correlation between nCounts and nFeatures, colored by MT%
-
 ``` r
-ggplot(pbmc8k.filt@meta.data, aes(x = nCount_RNA, y = nFeature_RNA, color = percent.mt))+
-    geom_point(size = 1)+
-    labs(x = "nCount", y = "nFeature", color = "MT%") +
-  theme_classic()
+VlnPlot(pbmc8k.filt, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
 ```
 
-![](2_qc_files/figure-markdown_github/unnamed-chunk-26-1.png)
+![](2_qc_files/figure-markdown_github/unnamed-chunk-25-2.png)
 
 Save the filtered seurat object as a R data object
 
@@ -438,7 +445,7 @@ tools::md5sum(newfile)
 ```
 
     ## /hpc/group/chsi-mic-2022/intermed/pbmc8k-filt.rds 
-    ##                "d12aac6e3486482432acc3dc33121197"
+    ##                "7e2bbf769464203488d5b4035a3c6ffc"
 
 ## Session Info
 
@@ -520,10 +527,10 @@ sessionInfo()
 print(paste("Start Time:  ",stdt))
 ```
 
-    ## [1] "Start Time:   Fri Jun 10 17:45:03 2022"
+    ## [1] "Start Time:   Mon Jun 13 11:54:50 2022"
 
 ``` r
 print(paste("End Time:  ",date()))
 ```
 
-    ## [1] "End Time:   Fri Jun 10 17:45:30 2022"
+    ## [1] "End Time:   Mon Jun 13 11:55:18 2022"
