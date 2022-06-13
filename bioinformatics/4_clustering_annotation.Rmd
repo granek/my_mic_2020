@@ -21,7 +21,7 @@ library(Seurat)
 library(cowplot)
 
 # Input paths
-#wd <- "~/Documents/Teaching/chsi-mic-2022"
+# wd <- "~/Documents/Teaching/chsi-mic-2022"
 wd <- "/hpc/group/chsi-mic-2022"
 intermeddir <- file.path(wd, "intermed")
 ```
