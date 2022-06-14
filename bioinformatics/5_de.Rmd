@@ -111,7 +111,7 @@ other cells for comparison" (Seurat help)
 
 
 ```{r}
-cluster0.markers <- FindMarkers(tem, ident.1 = 0)
+cluster0.markers <- FindMarkers(tem, ident.1 = 0) # min.pct = 0.1 by default
 cluster0.markers %>%
   arrange(-avg_log2FC) %>%
   head(n = 5)
@@ -151,8 +151,8 @@ unique(Idents(tem.else)) # check that these are all from clusters other than 0
 This step extracts the expression values
 ```{r}
 # extract scaled expression values
-expr.0 <- GetAssayData(object = tem.0, slot = "scale.data")
-expr.else <- GetAssayData(object = tem.else, slot = "scale.data")
+expr.0 <- GetAssayData(object = tem.0, slot = "data")
+expr.else <- GetAssayData(object = tem.else, slot = "data")
 ```
 ```{r}
 # Extract expression values for the gene Bcl2
@@ -163,7 +163,26 @@ length(expr.0.sel)
 length(expr.else.sel)
 ```
 
-Now, we generate the P-value using the R wilcox.test().
+Now, we reproduce the the fractions of cells with expression for cluster 0 and other clusters, i.e., `pct.1` and `pct.2`,
+
+```{r}
+pct.1 <- mean(expr.0.sel > 0)
+pct.2 <- mean(expr.else.sel > 0)
+
+pct.1
+pct.2
+```
+
+Next, we reproduce the average log2 FC `avg_log2FC`,
+```{r}
+avg.0 <- mean(expm1(expr.0.sel)) + 1
+avg.else <- mean(expm1(expr.else.sel)) + 1
+avg.log2FC <- log2(avg.0) - log2(avg.else)
+
+avg.log2FC
+```
+
+Next, we generate the P-value using the R wilcox.test().
 
 ```{r}
 # Perform the Wilcoxon Rank Sum test 
@@ -176,14 +195,24 @@ wilcox.test(
 wtest$p.value
 ```
 
-It matches the unadjusted P-value provided by FindMarker()
+Next, we calculate the adjusted P-value using Bonferroni correction,
+
+```{r}
+n.genes.tested <- nrow(tem)
+min(wtest$p.value * n.genes.tested, 1)
+```
+
+
+
+The results above match the values provided by FindMarker()
 ```{r}
 cluster0.markers %>%
   rownames_to_column(var = "gene_name") %>%
   filter(gene_name == sel.gene)
 # p-value = 2.175929e-28	
-
 ```
+
+
 
 Do this again for a gene with a less extreme p-value, e.g. Nkg7
 ```{r}
@@ -202,9 +231,35 @@ length(expr.else.sel)
 ```
 
 ```{r}
+pct.1 <- mean(expr.0.sel > 0)
+pct.2 <- mean(expr.else.sel > 0)
+
+pct.1
+pct.2
+```
+
+```{r}
+avg.0 <- mean(expm1(expr.0.sel)) + 1
+avg.else <- mean(expm1(expr.else.sel)) + 1
+avg.log2FC <- log2(avg.0) - log2(avg.else)
+
+avg.log2FC
+```
+
+```{r}
 # Perform the Wilcoxon Rank Sum test 
-wilcox.test(x = expr.0.sel, 
-            y = expr.else.sel, alternative = "two.sided")
+wilcox.test(
+  x = expr.0.sel, 
+  y = expr.else.sel, 
+  alternative = "two.sided"
+  ) -> wtest
+
+wtest$p.value
+```
+
+```{r}
+n.genes.tested <- nrow(tem)
+min(wtest$p.value * n.genes.tested, 1)
 ```
 
 ```{r}
@@ -213,6 +268,8 @@ cluster0.markers %>%
   filter(gene_name == sel.gene)
 # p-value = 0.51
 ```
+
+
 
 ### Run FindMakers() for each cluster
 ```{r}
