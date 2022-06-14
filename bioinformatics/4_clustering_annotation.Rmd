@@ -42,7 +42,7 @@ Tutorial](https://satijalab.org/seurat/articles/pbmc3k_tutorial.html)
 includes a lot of overlapping information.
 
 **METHOD DETAILS, Single-cell RNA-seq analysis, page e4** -
-Pre-processing: "Raw short reads were demultiplexed, filtering and
+Pre-processing: "Raw short reads were demultiplexed, filtering, and
 mapped to mouse genome GRCm38/mm10 using cellranger v2.02." - QC: "The
 gene count matrices from cellranger were subjected to quality control,
 pre-processing and clustering using the R Seurat 2.3.4 package (Butler
@@ -51,14 +51,14 @@ and more than 5% mitochondrial genes were filtered out." - Analysis:
 "Gene counts were scaled to total gene expression and percentage of
 mitochondrial genes with a scaling factor of 10,000, and then
 log-transformed. The high dimensional data for each sample were reduced
-by PCA and t-Distributed Stochastics Neighbor Embedding (tSNE). We used
+by PCA and t-Distributed Stochastic Neighbor Embedding (tSNE). We used
 the FindCluster function to group clusters in each sample with a
-resolution of 0.6. Differential expressed genes (DEGs) were identified
+resolution of 0.6. Differentially expressed genes (DEGs) were identified
 using the Wilcoxon rank-sum test."
 
 **What's covered in this workshop:** - Highly variable gene
 identification - Dimension reduction - Clustering and visualization -
-Cell-type specific marker gene detection - How to generate the figures
+Cell-type-specific marker gene detection - How to generate the figures
 for the paper?
 
 ## Load data
