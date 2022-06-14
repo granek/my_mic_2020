@@ -1,5 +1,5 @@
 ---
-title: "Load data into R and transform"
+title: "Normalization and Transformation of scRNA-Seq Counts"
 output:
   md_document:
     variant: markdown_github
@@ -8,6 +8,7 @@ output:
     toc: true
     toc_float: true
 ---
+
 ```{r prereqs}
 knitr::opts_chunk$set(echo = T, message = FALSE, warning = FALSE)
 stdt<-date()
@@ -16,53 +17,72 @@ stdt<-date()
 library(tidyverse)
 library(Seurat)
 library(cowplot)
-
-# Paths
-wd <- "/hpc/group/chsi-mic-2022"
-datadirs <- list.files(path = file.path(wd, "data","Christian2021CellReports"), pattern = "_10x", full.names = T)
-datadirs <- datadirs[!grepl(".h5", datadirs)]
-intermeddir <- file.path(wd, "intermed")
+library(kableExtra)
 ```
+
 
 **Goal of this workshop:** Learn how to load cellranger output into R and prepare QC'd data for downstream analyses
 
-**What's covered in this workshop:**
-- Load data into R as a Seurat object
-- Verify that the data have been QC'd
-- Transform gene counts
+**What's covered in this workshop:** - Load data into R as a Seurat object - Verify that the data have been QC'd - Transform gene counts
 
-**Data source:** 
-Christian et al. 2021 Cell Reports (https://doi.org/10.1016/j.celrep.2021.109118)
+**Data source:** Christian et al. 2021 Cell Reports (<https://doi.org/10.1016/j.celrep.2021.109118>)
 
-Note that the Seurat - Guided Clustering Tutorial (https://satijalab.org/seurat/articles/pbmc3k_tutorial.html) includes a lot of overlapping information.
+Note that the Seurat - Guided Clustering Tutorial (<https://satijalab.org/seurat/articles/pbmc3k_tutorial.html>) includes a lot of overlapping information.
 
 **METHOD DETAILS, Single-cell RNA-seq analysis, page e4**
 
-- Pre-processing: "Raw short reads were demultiplexed, filtering and mapped to mouse genome GRCm38/mm10 using cellranger v2.02."
+-   Pre-processing: "Raw short reads were demultiplexed, filtering and mapped to mouse genome GRCm38/mm10 using cellranger v2.02."
 
-- QC: "The gene count matrices from cellranger were subjected to quality control, pre-processing and clustering using the R Seurat 2.3.4 package (Butler et al., 2018). Low-quality cells that had less than 200 expressed genes and more than 5% mitochondrial genes were filtered out."
+-   QC: "The gene count matrices from cellranger were subjected to quality control, pre-processing and clustering using the R Seurat 2.3.4 package (Butler et al., 2018). Low-quality cells that had less than 200 expressed genes and more than 5% mitochondrial genes were filtered out."
 
-- Analysis: "Gene counts were scaled to total gene expression and percentage of mitochondrial genes with a scaling factor of 10,000, and then log-transformed. The high dimensional data for each sample were reduced by PCA and t-Distributed Stochastics Neighbor Embedding (tSNE). We used the FindCluster function to group clusters in each sample with a resolution of 0.6. Differential expressed genes (DEGs) were identified using the Wilcoxon rank-sum test."
+-   Analysis: "Gene counts were scaled to total gene expression and percentage of mitochondrial genes with a scaling factor of 10,000, and then log-transformed. The high dimensional data for each sample were reduced by PCA and t-Distributed Stochastics Neighbor Embedding (tSNE). We used the FindCluster function to group clusters in each sample with a resolution of 0.6. Differential expressed genes (DEGs) were identified using the Wilcoxon rank-sum test."
 
-## 1. Load data into R as a Seurat object
+## 1. Load data into R as Seurat objects
 
-We can use code like this to load the cell ranger output and store it in a Seurat object.
+
+First, we identify the hdf5 (*.h5) files containing the Seurat objects 
+from Christian et al. 2021, and create a manifest including file and sample
+ids and the md5 hash. Review the R list.files(), basename() and gsub() functions.
+
+
+```{r datafiles}
+# Set data directory path
+datadir <- "/hpc/group/chsi-mic-2022/data/Christian2021CellReports/"
+# Get all files with ,h5 extension
+h5files <- list.files(path = datadir, pattern = ".h5", full.names = TRUE)
+# Inspect inventory
+tibble::tibble(
+  fname = basename(h5files),
+  sampid =  gsub("_10x.h5", "", fname),
+  md5 = tools::md5sum(h5files)
+) -> manifest
+manifest
+```
+
+
+
+
+Load the four 10x datasets that correspond to T cells sampled in and outside of the tumor. See Fig 2A for tSNE plots of each sample type.
+
+-   Tem = effector memory in tumor
+-   Tcm = central memory in tumor
+-   Trm = resident memory in tumor
+-   disTrm = resident memory T-cells outside of the tumor
+
+The following function can be used to import an hdf5 file from cellranger as
+a Seurat object
 
 ```{r}
-readin_10x_to_SO <- function(sample, path, min.cells = 0, min.genes = 0){
-  Read10X(data.dir = path) %>%
-    CreateSeuratObject(project = sample, 
-                               min.cells=min.cells, min.genes=min.genes) -> seu.obj
+readin_10x_to_SO <- function(datadir, fname, sampid, min.cells = 0, min.genes = 0){
+  
+  Read10X_h5(fname) %>%
+    CreateSeuratObject(
+      project = sampid, 
+      min.cells=min.cells, min.genes=min.genes) -> seu.obj
   return(seu.obj)
 }
 ```
 
-Load the four 10x datasets that correspond to T cells sampled in and outside of the tumor. See Fig 2A for tSNE plots of each sample type.
-
-- Tem = effector memory in tumor
-- Tcm = central memory in tumor
-- Trm = resident memory in tumor
-- disTrm = resident memory T-cells outside of the tumor 
 
 ```{r}
 sampleNames <- gsub("_10x","", basename(datadirs))
@@ -81,6 +101,7 @@ seulist
 *METHOD DETAILS, Single-cell RNA-seq analysis, page e4*: "Low-quality cells that had less than 200 expressed genes and more than 5% mitochondrial genes were filtered out."
 
 The rownames are gene symbols. Investigating the names a bit more, the mitochondrial genes can be identified by the prefix "mt-"
+
 ```{r}
 tem <- seulist$Tem
 curr.count <- tem@assays$RNA@counts
@@ -89,6 +110,7 @@ rownames(curr.count)[grepl("^mt-", rownames(curr.count))] # these look like mito
 ```
 
 Add the mitochondrial percentage for all seurat objects in our list
+
 ```{r}
 add_mt <- function(so){
   so[["percent.mt"]] <- PercentageFeatureSet(so, pattern = "^mt-")
@@ -105,6 +127,7 @@ seulist <- seulist.mt
 ```
 
 Examine the distribution of nFeature and nCount for each dataset
+
 ```{r}
 plotlist <- list()
 for (i in 1:length(seulist)){
@@ -123,8 +146,8 @@ plotlist[["Tem"]] + ggtitle("Tem")
 plotlist[["Trm"]] + ggtitle("Trm")
 ```
 
-
 Are there any cells with less than 200 expressed genes?
+
 ```{r}
 plotlist <- list()
 for (i in 1:length(seulist)){
@@ -140,7 +163,9 @@ plotlist[["Tcm"]] + ggtitle("Tcm")
 plotlist[["Tem"]] + ggtitle("Tem")
 plotlist[["Trm"]] + ggtitle("Trm")
 ```
+
 Summarize as a table
+
 ```{r}
 df <- data.frame(seuobj = names(seulist))
 df[,c("min","mean","max")] <- NA
@@ -155,6 +180,7 @@ df
 ```
 
 An alternative way to do this is by using purrr mapping functions
+
 ```{r}
 seulist %>%
   map_dfr(~.x@meta.data, .id = "seuobj") %>%
@@ -165,6 +191,7 @@ seulist %>%
 ```
 
 Are there any cells with more than 5% mitochondrial genes?
+
 ```{r}
 plotlist <- list()
 for (i in 1:length(seulist)){
@@ -180,7 +207,9 @@ plotlist[["Tcm"]] + ggtitle("Tcm")
 plotlist[["Tem"]] + ggtitle("Tem")
 plotlist[["Trm"]] + ggtitle("Trm")
 ```
+
 Summarize as a table
+
 ```{r}
 df <- data.frame(seuobj = names(seulist))
 df[,c("min","mean","max")] <- NA
@@ -198,7 +227,8 @@ df
 
 *METHOD DETAILS, Single-cell RNA-seq analysis, page e4*: "Gene counts were scaled to total gene expression and percentage of mitochondrial genes with a scaling factor of 10,000, and then log-transformed."
 
-First, take a look at how data are structured inside the filtered seurat object
+First, take a look at how data are structured inside the filtered Seurat object
+
 ```{r}
 tem <- seulist$Tem
 
@@ -207,6 +237,7 @@ tem@assays
 ```
 
 There is 1 assay called "RNA". Inside this, there are 3 slots for matrices named "counts", "data", and "scale.data". Each matrix consists of rows = features and columns = cells.
+
 ```{r}
 curr.counts <- tem@assays$RNA@counts
 dim(curr.counts) # 12571 features as rows and 1457 cells as columns
@@ -222,7 +253,8 @@ curr.scale.data <- tem@assays$RNA@scale.data
 dim(curr.scale.data) # empty
 ```
 
-Compare how the "counts" and "data" values differ. Pull out values for a single cell and plot.
+### Compare how the "counts" and "data" values differ. Pull out values for a single cell and plot.
+
 ```{r}
 i<-1
 colnames(curr.counts)[i] # cell identifier
@@ -234,7 +266,8 @@ ggplot(df, aes(x = count, y = data)) +
   geom_abline(slope = 1, intercept = 0, linetype = 2, color = "grey")
 ```
 
-Normalize the counts and re-examine the data slots. Note that only the values in the "data" slot have changed.
+### Normalize the counts and re-examine the data slots. Note that only the values in the "data" slot have changed.
+
 ```{r}
 tem.s <- NormalizeData(object = tem, normalization.method = "LogNormalize", scale.factor = 10000)
 
@@ -262,7 +295,7 @@ ggplot(df, aes(x = count, y = data)) +
   geom_abline(slope = 1, intercept = 0, linetype = 2, color = "grey")
 ```
 
-Normalize each of the seurat objects in the list.
+### Normalize each of the Seurat objects in the list
 
 ```{r}
 sampleNames <- names(seulist)
@@ -274,12 +307,11 @@ for(i in 1:length(sampleNames)){
 names(seulist.n) <- sampleNames
 ```
 
-Save the list of normalized seurat objects
+### Save the list of normalized Seurat objects
+
 ```{r}
 newfile <- file.path(intermeddir, "seulist-n.rds")
 #saveRDS(seulist.n, file = newfile)
 
 tools::md5sum(newfile)
 ```
-
-

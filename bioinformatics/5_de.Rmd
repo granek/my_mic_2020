@@ -44,6 +44,11 @@ Note that the Seurat - Guided Clustering Tutorial (https://satijalab.org/seurat/
 
 ## Load data
 
+These are seurat objects after they have been processed in the following ways...
+
+- Tranformed the gene counts using NormalizeData(normalization.method = "LogNormalize"), see 3_load_transformCounts.Rmd and seulist-n.rds
+- Identified highly variable genes and then performed dimension reduction and clustering, see 4_clustering_annotation.Rmd and seulist-drc.rds
+
 ```{r}
 seulist.drc <- readRDS(file.path(intermeddir, "seulist-drc.rds"))
 ```
@@ -229,7 +234,15 @@ Based on these updated classifications, we can re-color the tSNE plot
 DimPlot(tem, reduction = "tsne", label = TRUE, pt.size = 0.5)
 ```
 
-We can also perform DE analyses between p4 and p2. 
+
+## 3. Verify manuscript DE results
+
+### DE between p2 and p4
+
+*RESULTS, scRNA-seq dissects intratumoral TEff/EM heterogeneity, page 4-5*?
+"Comparing p2 to p4, the density of Runx3- and Id2-expressing cells was slightly lower in p2. ...This was accompanied by an opposite pattern of Id3, a transcription factor whose expression is crucial for effector memory development (Yang et al., 2011), which is absent in p4 (Figure 2C)."
+
+Now that we have defined clusters p2 and p4, we can perform DE analyses between these cell populations as in the manuscript.
 ```{r}
 p4v2markers <- FindMarkers(tem, ident.1 = "p4", ident.2 = "p2", min.pct = 0.25)
 ```
@@ -248,33 +261,8 @@ p4v2markers %>%
 downGenes
 ```
 
-## 3. Verify manuscript DE results
-
-#### Are these statements true from *RESULTS, scRNA-seq dissects intratumoral TEff/EM heterogeneity, page 4-5*?
-
-1. "The effector molecules Ifng and GzmB were highly expressed in p4, had heterogeneous expression in p1 and p3, but were largely absent from p2. Similar expression patterns were applied to well-known effector surface markers for cytolytic T cells such as Klrc1 and Nkg7 (Figure 2B)."
-
-2. "All four subsets highly expressed the transcription factor Runx3..., as well as Id2... "
-
-3. "Comparing p2 to p4, the density of Runx3- and Id2-expressing cells was slightly lower in p2. ...This was accompanied by an opposite pattern of Id3, a transcription factor whose expression is crucial for effector memory development (Yang et al., 2011), which is absent in p4 (Figure 2C)."
-
-4. "Bcl2, a transcription factor for T cell survival in the effector and memory phases, was abundant in most sorted TEff/EM populations except p3. "
-
-5. "After assessing the cell-cycle programs, we determined that p3 was a highly proliferative subset, as made evident by the expression of genes restrictively expressed in S and M phases, such as Ccnb2, Cdk1, and Mki67 (Figure 2D). 
-
-#### Are these statements true from *RESULTS, Tumor and distant mucosa TRMs comprise two distinct populations that resemble either TEMs or TCMs, page 5-6*?
-
-1. "As expected, the tumor and distant mucosa TRM populations showed high expression of Itgae (CD103) and low expression of S1PR1, con- firming their tendency to reside within the tissue (Figure S4)."
-
-2. "Notably, the binary expression of Lgals3 (galectin-3) could distinguish TEMs (p1 of TEff/EM) from TCMs."
-
-#### Are these statements true from *RESULTS, CXCR6 expression defines a unique subpopulation of TEff/EMs, page 9*?
-
-1. " Among all of the TEff/EM populations, S1pr1 expression was silenced in TEff/EM p4, suggesting that this may be a population that lacks the potential to egress."
-
-2. "In p4, compared to other chemokine receptors, Cxcr6 was highly expressed; compared to the other 3 populations, p4 was the only population that preferentially upregulated Cxcr6 (Figure 5A)."
-
-3. "The elevated Cxcr6 expression in p4 was associated with enhanced Pdcd1 and reduced IL7r expression, in direct opposition to p2 (Figure 5B)."
+*RESULTS, CXCR6 expression defines a unique subpopulation of TEff/EMs, page 9*
+"The elevated Cxcr6 expression in p4 was associated with enhanced Pdcd1 and reduced IL7r expression, in direct opposition to p2 (Figure 5B)."
 
 ```{r}
 p4v2markers %>%
@@ -288,7 +276,9 @@ p4v2markers %>%
   filter(gene %in% c("Il7r","Il18r1"))
 ```
 
-4. "We virtually sorted out these two populations of cells [p2 vs p4] and compared their gene expression at the transcriptomic level (Figure 5C). The differential expression of Nkg7 and Klrc/d family members suggested that these are highly active effector T cells, as seen in the high expression of effector molecules such as Gzmb." And from Fig 5 legend: "T cell activation markers Gzmb, Klrc1/2, and Klrd1 are upregulated in TEFF/TEM p4".
+
+*RESULTS, CXCR6 expression defines a unique subpopulation of TEff/EMs, page 9*
+"We virtually sorted out these two populations of cells [p2 vs p4] and compared their gene expression at the transcriptomic level (Figure 5C). The differential expression of Nkg7 and Klrc/d family members suggested that these are highly active effector T cells, as seen in the high expression of effector molecules such as Gzmb." And from Fig 5 legend: "T cell activation markers Gzmb, Klrc1/2, and Klrd1 are upregulated in TEFF/TEM p4".
 
 ```{r}
 p4v2markers %>%
@@ -296,15 +286,30 @@ p4v2markers %>%
   filter(gene %in% c("Gzmb","Klrc1", "Klrc2","Klrd1")) 
 ```
 
-5. "...However, for T cells in TEff/EM p2, we found that the upregulation of IL7r was associated with IL18r1 (Figure 5C). 
-
-6.  "This analysis illustrated that these CXCR6+ effector cells were quite unique: on the one hand, they could be labeled as terminally exhausted cells (Wherry et al., 2007) based on their elevated expression of Pdcd1, Nr4a1 (Liu et al., 2019), Lag3, and Havcr2 (Tim-3).." And from Fig 5 legend: "Classical exhaustion markers Nr4a1, Lag3, and Havcr2 were upregulated in the tumor TEff/EM p4 population."
-
-**Don't know how to reproduce Fig 3 yet**
-"Figure 3. Two distinct subsets that resemble either TEMs or TCMs comprise tumor and distant mucosa TRMs...
-(B) Heatmap of top 100 DEGs between the tumor TEff/EM and tumor TCMs shows the global gene expression pattern between these circulating memory T cells and active and quiescent TRMs....(E) A global enrichment of ribosome genes associates with tumor TCM and quiescent TRM subsets." (Christian et al. 2021 Cell Reports) **Note** In order to make Fig3, need to (1) be able to distinguish between active and quiesent Trm and disTrm cells. This depends on Monocle2 analysis. We also need (2) to integrate the Tem and Tcm datasets which they did using ...?
 
 
+#### Additional results statements to evaluate using DE
 
+*RESULTS, scRNA-seq dissects intratumoral TEff/EM heterogeneity, page 4-5*
+
+- "The effector molecules Ifng and GzmB were highly expressed in p4, had heterogeneous expression in p1 and p3, but were largely absent from p2. Similar expression patterns were applied to well-known effector surface markers for cytolytic T cells such as Klrc1 and Nkg7 (Figure 2B)."
+- "All four subsets highly expressed the transcription factor Runx3..., as well as Id2... "
+- "Bcl2, a transcription factor for T cell survival in the effector and memory phases, was abundant in most sorted TEff/EM populations except p3. "
+- "After assessing the cell-cycle programs, we determined that p3 was a highly proliferative subset, as made evident by the expression of genes restrictively expressed in S and M phases, such as Ccnb2, Cdk1, and Mki67 (Figure 2D). 
+
+*RESULTS, Tumor and distant mucosa TRMs comprise two distinct populations that resemble either TEMs or TCMs, page 5-6*
+
+- "As expected, the tumor and distant mucosa TRM populations showed high expression of Itgae (CD103) and low expression of S1PR1, con- firming their tendency to reside within the tissue (Figure S4)."
+- "Notably, the binary expression of Lgals3 (galectin-3) could distinguish TEMs (p1 of TEff/EM) from TCMs."
+
+*RESULTS, CXCR6 expression defines a unique subpopulation of TEff/EMs, page 9*
+
+- " Among all of the TEff/EM populations, S1pr1 expression was silenced in TEff/EM p4, suggesting that this may be a population that lacks the potential to egress."
+
+- "In p4, compared to other chemokine receptors, Cxcr6 was highly expressed; compared to the other 3 populations, p4 was the only population that preferentially upregulated Cxcr6 (Figure 5A)."
+
+- "...However, for T cells in TEff/EM p2, we found that the upregulation of IL7r was associated with IL18r1 (Figure 5C). 
+
+- "This analysis illustrated that these CXCR6+ effector cells were quite unique: on the one hand, they could be labeled as terminally exhausted cells (Wherry et al., 2007) based on their elevated expression of Pdcd1, Nr4a1 (Liu et al., 2019), Lag3, and Havcr2 (Tim-3).." And from Fig 5 legend: "Classical exhaustion markers Nr4a1, Lag3, and Havcr2 were upregulated in the tumor TEff/EM p4 population."
 
 
