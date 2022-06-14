@@ -17,11 +17,18 @@ OOD is just a pretty front end for DCC, so you can use the same tools you would 
 OOD has a GUI-based mechanism for uploading and downloading data. You can get to the OOD file browser by clicking on “Files” in the OOD menu bar. In the OOD file browser you will see *Upload* and *Download* buttons. I do not know how well the GUI handles large amounts of data, so command-line tools may be better for large datasets.
 
 # Output 
-For output files, We tell participants to make a subdirectory named based on their Netid in /work, and put output files here (space in home directories is limited). Here is a code snippet that does this.
+For output files, We tell participants to make a subdirectory named based on their Netid in /work, and put output files here (space in home directories is limited). 
 
+Here is a code snippet that does this in R
 ```
 scratch_dir="/work"
 username=Sys.info()[["user"]]
 out_dir=file.path(scratch_dir,username,"mic2022")
 dir_create(out_dir)
+```
+
+Here is a code snippet that does this in bash
+```
+OUT_DIR="/work/${USER}/mic2022"
+mkdir -p $OUT_DIR
 ```
