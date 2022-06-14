@@ -1,5 +1,5 @@
 ---
-title: "Differential expression"
+title: "Differential Expression (DE) Analysis"
 output:
   md_document:
     variant: markdown_github
@@ -12,20 +12,22 @@ output:
 knitr::opts_chunk$set(echo = T, message = FALSE, warning = FALSE)
 stdt<-date()
 
-# Libraries
+# Packages
 library(tidyverse)
 library(Seurat)
 library(cowplot)
+
 
 # Paths
 wd <- "/hpc/group/chsi-mic-2022"
 intermeddir <- file.path(wd, "intermed")
 ```
 
-**Goal of this workshop:** Learn how to test differential expression between cells
+**Goal of this workshop:** Learn how to perform differential expression (DE)
+between clusters
 
 **What's covered in this workshop:**
-- Identify DEGs between clusters
+- Identify Differentially Expressed Genes (DEGs) between clusters
 - Re-name clusters
 - Verify manuscript DE results
 
@@ -44,42 +46,70 @@ Note that the Seurat - Guided Clustering Tutorial (https://satijalab.org/seurat/
 
 ## Load data
 
-These are seurat objects after they have been processed in the following ways...
+These are Seurat objects after they have been processed in the following ways...
 
-- Tranformed the gene counts using NormalizeData(normalization.method = "LogNormalize"), see 3_load_transformCounts.Rmd and seulist-n.rds
+- Transformed the gene counts using NormalizeData(normalization.method = "LogNormalize"), see 3_load_transformCounts.Rmd and seulist-n.rds
 - Identified highly variable genes and then performed dimension reduction and clustering, see 4_clustering_annotation.Rmd and seulist-drc.rds
 
-```{r}
-seulist.drc <- readRDS(file.path(intermeddir, "seulist-drc.rds"))
+```{r loaddata}
+infile <- file.path(intermeddir, "seulist-drc.rds")
+tools::md5sum(infile)
+seulist.drc <- readRDS(infile)
 ```
 
 ## 1. Identify DEGs between clusters
 
-*METHOD DETAILS, Single-cell RNA-seq analysis, page 4e*: "Differential expressed genes (DEGs) were identified using the Wilcoxon rank-sum test."
+*METHOD DETAILS, Single-cell RNA-seq analysis, page 4e*: "Differentially expressed genes (DEGs) were identified using the Wilcoxon rank-sum test."
 
-Identify Tem cluster biomarkers (Fig2B-D)
+We identify inferred clusters in Tem (Fig2B-D). First we have a look at the meta data
+
+```{r temmd}
+tem <- seulist.drc[["Tem"]]
+tem@meta.data %>% head
+```
+
+Next, we get the unique cluster ids
 
 ```{r}
-tem <- seulist.drc[["Tem"]]
 tem@meta.data %>%
   pull(seurat_clusters) %>% unique()
 ```
 
-For the purpose of trying to reproduce the manuscript results, we will assume that the authors use defaults. Here are a few default arguments to be aware of:
+The Seurat FindMarkers() function can be used to conduct differential expression
+analysis between cluster (or group) variables in the meta data slot of a
+Seurat object. 
+For the purpose of trying to reproduce the manuscript results, we will assume 
+that the authors use the defaults. Here are a few default arguments to be aware 
+of:
 
-**min.pct = 0.1** : Do not test genes that make up fewer than 0.1 fraction (10% ?) of the total reads in either of the populations tested. Meant to speed up the function by not testing genes that are very infrequently expressed. Default is 0.1 -- **NOTE: Marissa tried to re-write this so that it is clearer, please check**
+- **min.pct = 0.1** : Do not test genes that make up fewer than 0.1 fraction 
+(10% ?) of the total reads in either of the populations tested. Meant to speed 
+up the function by not testing genes that are very infrequently expressed. 
+Default is 0.1 
 
-**max.cells.per.ident = Inf** : "This will downsample each identity class to have no more cells than whatever this is set to. While there is generally going to be a loss in power, the speed increases can be significant and the most highly differentially expressed features will likely still rise to the top" (https://satijalab.org/seurat/articles/pbmc3k_tutorial.html)
+- **max.cells.per.ident = Inf** : "This will downsample each identity class to 
+have no more cells than whatever this is set to. While there is generally going 
+to be a loss in power, the speed increases can be significant and the most 
+highly differentially expressed features will likely still rise to the top" 
+(https://satijalab.org/seurat/articles/pbmc3k_tutorial.html)
 
-**logfc.threshold = 0.25** "Limit testing to genes which show, on average, at least X-fold difference (log-scale) between the two groups of cells. Default is 0.25 Increasing logfc.threshold speeds up the function, but can miss weaker signals." (Seurat help)
+- **logfc.threshold = 0.25** "Limit testing to genes which show, on average, 
+at least X-fold difference (log-scale) between the two groups of cells. 
+Default is 0.25. Increasing logfc.threshold speeds up the function, but can 
+miss weaker signals." (Seurat help)
 
-**test.use = "wilcox** Denotes which test to use; see Seurat help for alternatives.
+- **test.use = "wilcox** Denotes which test to use; 
+see Seurat help for alternatives.
 
-**min.cells.group = 3** "Minimum number of cells in one of the groups" (Seurat help)
+- **min.cells.group = 3** "Minimum number of cells in one of the groups" 
+(Seurat help)
 
-**ident.2** "A second identity class for comparison; if NULL, use all other cells for comparison" (Seurat help)
+- **ident.2** "A second identity class for comparison; if NULL, use all 
+other cells for comparison" (Seurat help)
 
 ### Find DEGs that identify "Cluster 0"
+
+
 ```{r}
 cluster0.markers <- FindMarkers(tem, ident.1 = 0)
 cluster0.markers %>%
@@ -87,31 +117,52 @@ cluster0.markers %>%
   head(n = 5)
 ```
 
-**Examine Wilcoxon Rank Sum test** -- NOTE: Needs attention!
+The seurat_clusters variable is the active ident in the Tem object. had it not,
+it would have to be set using the Seurat Ident() function
 
-Try to reproduce results for "Bcl2" by doing the Wilcoxon Rank Sum test another way.
+
+**Examine Wilcoxon Rank Sum test** 
+
+Next, we will attempt to reproduce the P-value for Bcl2 by the FindMarker()
+function using the R wilcox.test() function.
+
+First we indicate the gene of interest
+
 ```{r}
 # Select the gene Bcl2
 sel.gene <- "Bcl2"
+```
 
+Next, we subset the Tem object according to inferred cluster (0 vs others)
+
+```{r}
 # subset cells in cluster 0
 tem.0 <- subset(x = tem, idents = "0")
 ncol(x = tem.0) # 317 cells
 unique(Idents(tem.0)) # check that these are all from the 0 cluster
-
+```
+```{r}
 # subset cells in any other cluster
 tem.else <- subset(x = tem, idents = "0", invert = TRUE)
 ncol(x = tem.else) # 1140 cells
 unique(Idents(tem.else)) # check that these are all from clusters other than 0
+```
 
+This step extracts the expression values
+```{r}
 # extract scaled expression values
 expr.0 <- GetAssayData(object = tem.0, slot = "scale.data")
 expr.else <- GetAssayData(object = tem.else, slot = "scale.data")
-
+```
+```{r}
 # Extract expression values for the gene Bcl2
 expr.0.sel <- expr.0[rownames(expr.0) == sel.gene,]
 expr.else.sel <- expr.0[rownames(expr.else) == sel.gene,]
 
+length(expr.0.sel)
+length(expr.else.sel)
+```
+```{r}
 # Perform the Wilcoxon Rank Sum test 
 wilcox.test(x = expr.0.sel, 
             y = expr.else.sel, alternative = "two.sided")
