@@ -1,60 +1,51 @@
--   [1. Load data into R as a Seurat
-    object](#load-data-into-r-as-a-seurat-object)
--   [2. Verify data have been QC’d](#verify-data-have-been-qcd)
+-   [1. Load data into R as Seurat
+    objects](#load-data-into-r-as-seurat-objects)
+-   [2. Review the imported data against information provided in the
+    Christian
+    paper](#review-the-imported-data-against-information-provided-in-the-christian-paper)
+    -   [Adding mitochondrial content percentages to the meta
+        data](#adding-mitochondrial-content-percentages-to-the-meta-data)
+    -   [Generate QC plots](#generate-qc-plots)
+    -   [Tabulating QC summaries](#tabulating-qc-summaries)
 -   [3. Transform gene counts](#transform-gene-counts)
+    -   [Examine slots of a Seurat
+        object](#examine-slots-of-a-seurat-object)
+    -   [Normalize the counts](#normalize-the-counts)
+-   [Save the list of normalized Seurat
+    objects](#save-the-list-of-normalized-seurat-objects)
 
 ``` r
 knitr::opts_chunk$set(echo = T, message = FALSE, warning = FALSE)
 stdt<-date()
 
-# Libraries
+# Packages
 library(tidyverse)
-```
-
-    ## Warning in system("timedatectl", intern = TRUE): running command 'timedatectl'
-    ## had status 1
-
-    ## ── Attaching packages ─────────────────────────────────────── tidyverse 1.3.1 ──
-
-    ## ✔ ggplot2 3.3.6     ✔ purrr   0.3.4
-    ## ✔ tibble  3.1.7     ✔ dplyr   1.0.9
-    ## ✔ tidyr   1.2.0     ✔ stringr 1.4.0
-    ## ✔ readr   2.1.2     ✔ forcats 0.5.1
-
-    ## ── Conflicts ────────────────────────────────────────── tidyverse_conflicts() ──
-    ## ✖ dplyr::filter() masks stats::filter()
-    ## ✖ dplyr::lag()    masks stats::lag()
-
-``` r
 library(Seurat)
+library(kableExtra)
+
+# Set data directory path
+datadir <- "/hpc/group/chsi-mic-2022/data/Christian2021CellReports/"
+datadir <- "/home/owzar001/CURRENT/2022-mic/bioinformatics/"
+
+# Set output directory path
+procdir <- "./"
 ```
 
-    ## Attaching SeuratObject
+**Goal of this workshop:** Learn how to load multiple cellranger output
+data set into R, perform QC and transform UMI counts.
 
-    ## Attaching sp
+**What’s covered in this workshop:**
 
-``` r
-library(cowplot)
-
-# Paths
-wd <- "/hpc/group/chsi-mic-2022"
-datadirs <- list.files(path = file.path(wd, "data","Christian2021CellReports"), pattern = "_10x", full.names = T)
-datadirs <- datadirs[!grepl(".h5", datadirs)]
-intermeddir <- file.path(wd, "intermed")
-```
-
-**Goal of this workshop:** Learn how to load cellranger output into R
-and prepare QC’d data for downstream analyses
-
-**What’s covered in this workshop:** - Load data into R as a Seurat
-object - Verify that the data have been QC’d - Transform gene counts
+-   Import four cellranger count matrices R as Seurat objects
+-   Peform basic QC on the objects
+-   Transform UMI counts
 
 **Data source:** Christian et al. 2021 Cell Reports
-(<https://doi.org/10.1016/j.celrep.2021.109118>)
+(<a href="https://doi.org/10.1016/j.celrep.2021.109118" class="uri">https://doi.org/10.1016/j.celrep.2021.109118</a>)
 
 Note that the Seurat - Guided Clustering Tutorial
-(<https://satijalab.org/seurat/articles/pbmc3k_tutorial.html>) includes
-a lot of overlapping information.
+(<a href="https://satijalab.org/seurat/articles/pbmc3k_tutorial.html" class="uri">https://satijalab.org/seurat/articles/pbmc3k_tutorial.html</a>)
+includes substantial overlapping information.
 
 **METHOD DETAILS, Single-cell RNA-seq analysis, page e4**
 
@@ -75,41 +66,78 @@ a lot of overlapping information.
     sample with a resolution of 0.6. Differential expressed genes (DEGs)
     were identified using the Wilcoxon rank-sum test.”
 
-## 1. Load data into R as a Seurat object
+1. Load data into R as Seurat objects
+-------------------------------------
 
-We can use code like this to load the cell ranger output and store it in
-a Seurat object.
+First, we identify the hdf5 (\*.h5) files containing the UMI counts from
+cellranger from the Christian et al. 2021 paper, and create a manifest
+including file and sample ids and the md5 hash. Review the R
+list.files(), basename() and gsub() functions before reviewing this code
+chunk.
 
 ``` r
-readin_10x_to_SO <- function(sample, path, min.cells = 0, min.genes = 0){
-  Read10X(data.dir = path) %>%
-    CreateSeuratObject(project = sample, 
-                               min.cells=min.cells, min.genes=min.genes) -> seu.obj
-  return(seu.obj)
-}
+# Get all files with ,h5 extension
+h5files <- list.files(path = datadir, pattern = ".h5", full.names = TRUE)
+# Inspect inventory
+tibble::tibble(
+  fname = basename(h5files),
+  sampid =  gsub("_10x.h5", "", fname),
+  md5 = tools::md5sum(h5files)
+) -> manifest
+manifest
 ```
 
-Load the four 10x datasets that correspond to T cells sampled in and
-outside of the tumor. See Fig 2A for tSNE plots of each sample type.
+    ## # A tibble: 4 × 3
+    ##   fname         sampid md5                             
+    ##   <chr>         <chr>  <chr>                           
+    ## 1 disTrm_10x.h5 disTrm 0e16b969c2d0a12be3891f62463c8b2c
+    ## 2 Tcm_10x.h5    Tcm    f21c987d5dddaebe8e65393732360849
+    ## 3 Tem_10x.h5    Tem    566c7c8c381cdf6118dfed012262d0ee
+    ## 4 Trm_10x.h5    Trm    100b70a1f6036c8486882587a2d35527
+
+Confirm that you have identified data files corresponding (see Fig 2A of
+Christian et al. for tSNE plots of each sample type):
 
 -   Tem = effector memory in tumor
 -   Tcm = central memory in tumor
 -   Trm = resident memory in tumor
 -   disTrm = resident memory T-cells outside of the tumor
 
+Next, we write a function to import the hdf5 files as Seurat objects.
+Review the Read10X\_h5() and CreateSeuratObject() functions from the
+Seurat package and the file.path() and paste0() functions from R before
+reviewing this code chunk.
+
 ``` r
-sampleNames <- gsub("_10x","", basename(datadirs))
-sampleNames
+readin_10x_to_SO <- function(datadir, fname, sampid, min.cells = 0, min.genes = 0){
+  # Create a full file name
+  filename <- file.path(datadir, paste0(sampid, "_10x.h5"))
+  Read10X_h5(filename) %>%
+    CreateSeuratObject(
+      project = sampid, 
+      min.cells = min.cells, 
+      min.genes = min.genes) -> seu.obj
+  return(seu.obj)
+}
 ```
 
-    ## [1] "disTrm" "Tcm"    "Tem"    "Trm"
+Next, we use our custom function to read in the hdf5 files. This step
+will create a list of four Seurat objects by looping over the rows of
+the manifest data frame. Review list and dataframe R objects and how to
+extract information from these, and the R seq\_len() function before
+reviewing this code chunk. Note that the number of genes and cells vary
+across the files. It should be noted that one can use R apply type
+function instead of a loop (we will demonstrate the application of R
+lapply function later).
 
 ``` r
 seulist <- list()
-for(i in 1:length(sampleNames)){
-  seulist[[i]] <- readin_10x_to_SO(sample = sampleNames[i], path = datadirs[i])
+for(i in seq_len(nrow(manifest))){
+  fname <- manifest[[i,"fname"]]
+  sampid <- manifest[[i,"sampid"]]
+  seulist[[i]] <- readin_10x_to_SO(datadir, fname, sampid)
+  names(seulist)[i] <- sampid
 }
-names(seulist) <- sampleNames
 seulist
 ```
 
@@ -133,152 +161,3445 @@ seulist
     ## 11778 features across 459 samples within 1 assay 
     ## Active assay: RNA (11778 features, 0 variable features)
 
-## 2. Verify data have been QC’d
+The following illustrates how to access a specific object from the list
+you have created
+
+``` r
+seulist[["Tem"]]
+```
+
+    ## An object of class Seurat 
+    ## 12571 features across 1457 samples within 1 assay 
+    ## Active assay: RNA (12571 features, 0 variable features)
+
+2. Review the imported data against information provided in the Christian paper
+-------------------------------------------------------------------------------
 
 *METHOD DETAILS, Single-cell RNA-seq analysis, page e4*: “Low-quality
 cells that had less than 200 expressed genes and more than 5%
 mitochondrial genes were filtered out.”
 
-The rownames are gene symbols. Investigating the names a bit more, the
-mitochondrial genes can be identified by the prefix “mt-”
+First, we observe that the features are gene symbols by inspecting one
+of the objects
+
+### Adding mitochondrial content percentages to the meta data
 
 ``` r
 tem <- seulist$Tem
-curr.count <- tem@assays$RNA@counts
-rownames(curr.count)[1:10]
+rownames(tem)
 ```
 
-    ##  [1] "Mrpl15"        "Lypla1"        "Tcea1"         "Atp6v1h"      
-    ##  [5] "Rb1cc1"        "4732440D04Rik" "Pcmtd1"        "Gm26901"      
-    ##  [9] "Rrs1"          "Mybl1"
+    ##     [1] "Mrpl15"          "Lypla1"          "Tcea1"           "Atp6v1h"        
+    ##     [5] "Rb1cc1"          "4732440D04Rik"   "Pcmtd1"          "Gm26901"        
+    ##     [9] "Rrs1"            "Mybl1"           "Vcpip1"          "1700034P13Rik"  
+    ##    [13] "Sgk3"            "Mcmdc2"          "Snhg6"           "Cops5"          
+    ##    [17] "Cspp1"           "Arfgef1"         "Ncoa2"           "Tram1"          
+    ##    [21] "Lactb2"          "Gm9947"          "Msc"             "Terf1"          
+    ##    [25] "Rpl7"            "Rdh10"           "Stau2"           "Ube2w"          
+    ##    [29] "Tceb1"           "Tmem70"          "Ly96"            "Il17a"          
+    ##    [33] "Il17f"           "Mcm3"            "Paqr8"           "Tram2"          
+    ##    [37] "Tmem14a"         "Kcnq5"           "Ogfrl1"          "B3gat2"         
+    ##    [41] "Smap1"           "Sdhaf4"          "Lmbrd1"          "Phf3"           
+    ##    [45] "Ptp4a1"          "Prim2"           "Rab23"           "Bag2"           
+    ##    [49] "Zfp451"          "Bend6"           "Dst"             "Gm37233"        
+    ##    [53] "Ccdc115"         "Imp4"            "Ptpn18"          "4930568A12Rik"  
+    ##    [57] "Arhgef4"         "Fam168b"         "Plekhb2"         "Hs6st1"         
+    ##    [61] "Gm33280"         "Uggt1"           "Neurl3"          "Arid5a"         
+    ##    [65] "4930403P22Rik"   "Kansl3"          "Lman2l"          "Cnnm4"          
+    ##    [69] "Cnnm3"           "Ankrd23"         "Ankrd39"         "Sema4c"         
+    ##    [73] "Cox5b"           "Actr1b"          "4933424G06Rik"   "Zap70"          
+    ##    [77] "Tmem131"         "Vwa3b"           "Inpp4a"          "Coa5"           
+    ##    [81] "Unc50"           "Mgat4a"          "2010300C02Rik"   "4930556I23Rik"  
+    ##    [85] "Tsga10"          "Lipt1"           "Mitd1"           "Mrpl30"         
+    ##    [89] "Txndc9"          "Eif5b"           "Rev1"            "Aff3"           
+    ##    [93] "Gm16152"         "Chst10"          "Pdcl3"           "Npas2"          
+    ##    [97] "Rpl31"           "Tbc1d8"          "Cnot11"          "Rnf149"         
+    ##   [101] "Map4k4"          "Il1r2"           "Gm16894"         "Il1r1"          
+    ##   [105] "Il1rl2"          "Il1rl1"          "Il18r1"          "Il18rap"        
+    ##   [109] "Mfsd9"           "Mrps9"           "Gpr45"           "Tgfbrap1"       
+    ##   [113] "AI597479"        "Fhl2"            "Nck2"            "Uxs1"           
+    ##   [117] "Tpp2"            "Gm8251"          "Tex30"           "Kdelc1"         
+    ##   [121] "Bivm"            "Ercc5"           "Wdr75"           "Slc39a10"       
+    ##   [125] "Gm28151"         "Nabp1"           "Gm17767"         "Stat4"          
+    ##   [129] "Stat1"           "Gls"             "Nab1"            "Tmem194b"       
+    ##   [133] "Mfsd6"           "Inpp1"           "Hibch"           "1700019D03Rik"  
+    ##   [137] "Pms1"            "Ormdl1"          "Osgepl1"         "Asnsd1"         
+    ##   [141] "Dnah7a"          "Stk17b"          "Gtf3c3"          "Pgap1"          
+    ##   [145] "Ankrd44"         "Sf3b1"           "Coq10b"          "Hspd1"          
+    ##   [149] "Hspe1"           "Mob4"            "Rftn2"           "Mars2"          
+    ##   [153] "Plcl1"           "4930558J18Rik"   "1700066M21Rik"   "Tyw5"           
+    ##   [157] "9430016H08Rik"   "Kctd18"          "Sgol2a"          "Bzw1"           
+    ##   [161] "Clk1"            "Ppil3"           "Nif3l1"          "Orc2"           
+    ##   [165] "Gm15834"         "Fam126b"         "Ndufb3"          "Als2cr12"       
+    ##   [169] "Cflar"           "Casp8"           "Trak2"           "Stradb"         
+    ##   [173] "Tmem237"         "G730003C15Rik"   "Als2"            "Gm973"          
+    ##   [177] "Sumo1"           "Nop58"           "Bmpr2"           "Fam117b"        
+    ##   [181] "Wdr12"           "Carf"            "Nbeal1"          "Cyp20a1"        
+    ##   [185] "Abi2"            "Raph1"           "Cd28"            "Gm11579"        
+    ##   [189] "Ctla4"           "Icos"            "Pard3b"          "Nrp2"           
+    ##   [193] "Gm4208"          "Ino80d"          "Ino80dos"        "Gm20342"        
+    ##   [197] "Ndufs1"          "Eef1b2"          "Fastkd2"         "Klf7"           
+    ##   [201] "Creb1"           "Mettl21a"        "Ccnyl1"          "Fzd5"           
+    ##   [205] "Plekhm3"         "Idh1"            "Pikfyve"         "Map2"           
+    ##   [209] "Rpe"             "Kansl1l"         "Acadl"           "Lancl1"         
+    ##   [213] "Gm29114"         "Ikzf2"           "Bard1"           "Atic"           
+    ##   [217] "Fn1"             "D230017M19Rik"   "Pecr"            "Xrcc5"          
+    ##   [221] "Smarcal1"        "Rpl37a"          "Tns1"            "Cxcr2"          
+    ##   [225] "Arpc2"           "Aamp"            "Pnkd"            "Tmbim1"         
+    ##   [229] "Ctdsp1"          "Usp37"           "Rqcd1"           "Zfp142"         
+    ##   [233] "Bcs1l"           "Rnf25"           "Ttll4"           "Wnt10a"         
+    ##   [237] "Nhej1"           "Cnppd1"          "Fam134a"         "Zfand2b"        
+    ##   [241] "Abcb6"           "Atg9a"           "Ankzf1"          "Glb1l"          
+    ##   [245] "Stk16"           "Tuba4a"          "Dnajb2"          "Ptprn"          
+    ##   [249] "Dnpep"           "Speg"            "Gmppa"           "Chpf"           
+    ##   [253] "Obsl1"           "Tmem198"         "Stk11ip"         "Sgpp2"          
+    ##   [257] "Farsb"           "Mogat1"          "Acsl3"           "Utp14b"         
+    ##   [261] "Ap1s3"           "Wdfy1"           "Mrpl44"          "Fam124b"        
+    ##   [265] "Cul3"            "1700016L21Rik"   "Dock10"          "Rhbdd1"         
+    ##   [269] "Col4a4"          "Mff"             "Gm28942"         "Agfg1"          
+    ##   [273] "Trip12"          "Fbxo36"          "C130026I21Rik"   "A530032D15Rik"  
+    ##   [277] "A530040E14Rik"   "G530012D18Rik"   "Sp110"           "Gm16094"        
+    ##   [281] "Sp140"           "Sp100"           "A630001G21Rik"   "Cab39"          
+    ##   [285] "Itm2c"           "Gm28884"         "Gpr55"           "Psmd1"          
+    ##   [289] "Armc9"           "Ncl"             "Ptma"            "Pde6d"          
+    ##   [293] "Cops7b"          "Dis3l2"          "Eif4e2"          "Gigyf2"         
+    ##   [297] "Kcnj13"          "Inpp5d"          "Atg16l1"         "Sag"            
+    ##   [301] "Dgkd"            "Usp40"           "Dnajb3"          "Mroh2a"         
+    ##   [305] "Hjurp"           "Gm29336"         "Arl4c"           "Sh3bp4"         
+    ##   [309] "Cops8"           "Lrrfip1"         "Rbm44"           "Ramp1"          
+    ##   [313] "Ube2f"           "Scly"            "Ilkap"           "Hes6"           
+    ##   [317] "Per2"            "Traf3ip1"        "Asb1"            "Hdac4"          
+    ##   [321] "Gm26720"         "Ndufa10"         "Myeov2"          "Otos"           
+    ##   [325] "Gpc1"            "Dusp28"          "5033417F24Rik"   "Rnpepl1"        
+    ##   [329] "9430060I03Rik"   "Capn10"          "Mterf4"          "Gm28535"        
+    ##   [333] "Pask"            "Ppp1r7"          "Hdlbp"           "Sept2"          
+    ##   [337] "Farp2"           "Stk25"           "Thap4"           "Atg4b"          
+    ##   [341] "Dtymk"           "Ing5"            "D2hgdh"          "Pdcd1"          
+    ##   [345] "Fam174a"         "St8sia4"         "Gm28901"         "D1Ertd622e"     
+    ##   [349] "Ppip5k2"         "Gin1"            "Pam"             "1810006J02Rik"  
+    ##   [353] "Gm7967"          "Gm28187"         "Rnf152"          "Pign"           
+    ##   [357] "2310035C23Rik"   "Gm7160"          "Zcchc2"          "Phlpp1"         
+    ##   [361] "Bcl2"            "D630008O14Rik"   "Kdsr"            "Vps4b"          
+    ##   [365] "Dsel"            "Tsn"             "Nifk"            "Clasp1"         
+    ##   [369] "2900060B14Rik"   "Ralb"            "Gm27184"         "Tmem185b"       
+    ##   [373] "Epb41l5"         "Ptpn4"           "Tmem177"         "Sctr"           
+    ##   [377] "Tmem37"          "Dbi"             "3110009E18Rik"   "Insig2"         
+    ##   [381] "Ccdc93"          "Ddx18"           "Actr3"           "Slc35f5"        
+    ##   [385] "Mgat5"           "Tmem163"         "2900009J06Rik"   "Ccnt2"          
+    ##   [389] "Rab3gap1"        "Zranb3"          "R3hdm1"          "Ubxn4"          
+    ##   [393] "Mcm6"            "Dars"            "Cxcr4"           "Gm26686"        
+    ##   [397] "Thsd7b"          "Gm15675"         "Cd55"            "Gm16083"        
+    ##   [401] "Pfkfb2"          "Yod1"            "Fcmr"            "Il10"           
+    ##   [405] "Mapkapk2"        "Dyrk3"           "Eif2d"           "Rassf5"         
+    ##   [409] "Ikbke"           "Srgap2"          "Fam72a"          "Ctse"           
+    ##   [413] "Slc41a1"         "Rab29"           "Nucks1"          "Elk4"           
+    ##   [417] "Mfsd4"           "Nuak2"           "Dstyk"           "Rbbp5"          
+    ##   [421] "Tmem81"          "Mdm4"            "Pik3c2b"         "Ppp1r15b"       
+    ##   [425] "Plekha6"         "Snrpe"           "Zc3h11a"         "Gm38394"        
+    ##   [429] "Lax1"            "Atp2b4"          "Btg2"            "Tmem183a"       
+    ##   [433] "Cyb5r1"          "Adipor1"         "Klhl12"          "Rabif"          
+    ##   [437] "Kdm5b"           "Ppp1r12b"        "Ube2t"           "Ptpn7"          
+    ##   [441] "Arl8a"           "Rnpep"           "Timm17a"         "Ipo9"           
+    ##   [445] "Nav1"            "Csrp1"           "Phlda3"          "Tnni1"          
+    ##   [449] "Lad1"            "Tmem9"           "Cacna1s"         "Kif21b"         
+    ##   [453] "Camsap2"         "Ddx59"           "Kif14"           "Gm33994"        
+    ##   [457] "Zfp281"          "Gm19705"         "A430106G13Rik"   "Ptprc"          
+    ##   [461] "Atp6v1g3"        "Nek7"            "2310009B15Rik"   "Dennd1b"        
+    ##   [465] "Zbtb41"          "Aspm"            "Cdc73"           "B3galt2"        
+    ##   [469] "Glrx2"           "Trove2"          "Uchl5"           "Rgs2"           
+    ##   [473] "Rgs1"            "BC003331"        "Tpr"             "Prg4"           
+    ##   [477] "Gm10138"         "Ivns1abp"        "Swt1"            "Trmt1l"         
+    ##   [481] "Rnf2"            "Fam129a"         "2810414N06Rik"   "Edem3"          
+    ##   [485] "1700025G04Rik"   "Tsen15"          "Rgl1"            "Arpc5"          
+    ##   [489] "Ncf2"            "Smg7"            "Nmnat2"          "Lamc1"          
+    ##   [493] "Dhx9"            "Rgs8"            "C230024C17Rik"   "Rgs16"          
+    ##   [497] "Rnasel"          "Teddm2"          "Glul"            "Cacna1e"        
+    ##   [501] "Ier5"            "Mr1"             "Stx6"            "Xpr1"           
+    ##   [505] "Gm5532"          "Acbd6"           "Qsox1"           "Cep350"         
+    ##   [509] "Tor1aip1"        "Tor1aip2"        "Gm2000"          "Soat1"          
+    ##   [513] "Gm10031"         "Abl2"            "Tor3a"           "Fam20b"         
+    ##   [517] "Ralgps2"         "Rfwd2"           "4930523C07Rik"   "4930562F07Rik"  
+    ##   [521] "Mrps14"          "Cacybp"          "Rabgap1l"        "Rc3h1"          
+    ##   [525] "Serpinc1"        "Zbtb37"          "Dars2"           "Gm37634"        
+    ##   [529] "Cenpl"           "Klhl20"          "Prdx6"           "Tnfsf4"         
+    ##   [533] "Fasl"            "Suco"            "Pigc"            "Dnm3"           
+    ##   [537] "Mettl13"         "Vamp4"           "Prrc2c"          "Fmo1"           
+    ##   [541] "Gorab"           "Kifap3"          "Scyl3"           "BC055324"       
+    ##   [545] "Mettl18"         "Sell"            "Slc19a2"         "Ccdc181"        
+    ##   [549] "Blzf1"           "Nme7"            "Atp1b1"          "Xcl1"           
+    ##   [553] "Sft2d2"          "Tiprl"           "Dcaf6"           "Mpc2"           
+    ##   [557] "Mpzl1"           "Rcsd1"           "Creg1"           "Cd247"          
+    ##   [561] "Gm37469"         "Pou2f1"          "Gm15853"         "Tada1"          
+    ##   [565] "Gm15853.1"       "Pogk"            "Fam78b"          "Uck2"           
+    ##   [569] "Tmco1"           "Aldh9a1"         "Mgst3"           "Nuf2"           
+    ##   [573] "Hsd17b7"         "3110045C21Rik"   "Uap1"            "Uhmk1"          
+    ##   [577] "Atf6"            "Dusp12"          "Fcgr2b"          "Fcgr3"          
+    ##   [581] "Cfap126"         "Sdhc"            "Tomm40l"         "Fcer1g"         
+    ##   [585] "Ndufs2"          "B4galt3"         "Ppox"            "Usp21"          
+    ##   [589] "Ufc1"            "Gm20045"         "Dedd"            "Nit1"           
+    ##   [593] "Pfdn2"           "Arhgap30"        "Usf1"            "Tstd1"          
+    ##   [597] "B930036N10Rik"   "Alyref2"         "Itln1"           "Cd244"          
+    ##   [601] "Ly9"             "Slamf7"          "Cd48"            "Slamf1"         
+    ##   [605] "Cd84"            "Gm10521"         "Gm37065"         "Slamf6"         
+    ##   [609] "Vangl2"          "Ncstn"           "Copa"            "Pex19"          
+    ##   [613] "Dcaf8"           "Pea15a"          "Igsf8"           "Atp1a2"         
+    ##   [617] "Pigm"            "Slamf9"          "Igsf9"           "Tagln2"         
+    ##   [621] "Fcrl6"           "Dusp23"          "Aim2"            "Gm4955"         
+    ##   [625] "BC094916"        "Pydc4"           "Pyhin1"          "Pydc3"          
+    ##   [629] "Ifi204"          "Mndal"           "Mnda"            "Ifi203"         
+    ##   [633] "Ifi202b"         "Fh1"             "Opn3"            "Chml"           
+    ##   [637] "Exo1"            "Rbm8a2"          "Cep170"          "Sdccag8"        
+    ##   [641] "Akt3"            "Zbtb18"          "Adss"            "Desi2"          
+    ##   [645] "B230369F24Rik"   "Cox20"           "Gm16586"         "Hnrnpu"         
+    ##   [649] "Efcab2"          "Smyd3"           "Tfb2m"           "Cnst"           
+    ##   [653] "Sccpdh"          "Ahctf1"          "Cdc42bpa"        "Adck3"          
+    ##   [657] "Psen2"           "Itpkb"           "Parp1"           "Lin9"           
+    ##   [661] "Acbd3"           "H3f3a"           "Gm17275"         "Sde2"           
+    ##   [665] "Pycr2"           "Lefty1"          "Tmem63a"         "Ephx1"          
+    ##   [669] "Nvl"             "Cnih4"           "Wdr26"           "A430110L20Rik"  
+    ##   [673] "Lbr"             "Gm5533"          "Enah"            "Srp9"           
+    ##   [677] "Degs1"           "Fbxo28"          "Trp53bp2"        "Capn2"          
+    ##   [681] "Susd4"           "Disp1"           "Brox"            "Aida"           
+    ##   [685] "Mia3"            "Taf1a"           "Dusp10"          "1700056E22Rik"  
+    ##   [689] "Hlx"             "Marc2"           "Rab3gap2"        "Iars2"          
+    ##   [693] "Bpnt1"           "4930532G15Rik"   "Eprs"            "Rrp15"          
+    ##   [697] "A430105J06Rik"   "Gpatch2"         "Kctd3"           "Cenpf"          
+    ##   [701] "Smyd2"           "Rps6kc1"         "Angel2"          "Mfsd7b"         
+    ##   [705] "Tatdn3"          "Nsl1"            "Batf3"           "Atf3"           
+    ##   [709] "D730003I15Rik"   "Nenf"            "Tmem206"         "Ppp2r5a"        
+    ##   [713] "Dtl"             "Ints7"           "Lpgat1"          "Gm38037"        
+    ##   [717] "Nek2"            "Slc30a1"         "Rd3"             "Gm26670"        
+    ##   [721] "Traf5"           "Rcor3"           "Hhat"            "Diexf"          
+    ##   [725] "Irf6"            "A130010J15Rik"   "Traf3ip3"        "4930570N18Rik"  
+    ##   [729] "Lamb3"           "Hsd11b1"         "G0s2"            "Cd46"           
+    ##   [733] "Cr1l"            "Cr2"             "Nmt2"            "Rpp38"          
+    ##   [737] "Acbd7"           "Dclre1c"         "Suv39h2"         "Hspa14"         
+    ##   [741] "Cdnf"            "Fam107b"         "Frmd4a"          "Prpf18"         
+    ##   [745] "Sephs1"          "Phyh"            "Mcm10"           "Optn"           
+    ##   [749] "Camk1d"          "Cdc123"          "Nudt5"           "Sec61a2"        
+    ##   [753] "Upf2"            "Usp6nl"          "Celf2"           "1700061F12Rik"  
+    ##   [757] "Gata3"           "Gm13256"         "9230102O04Rik"   "Taf3"           
+    ##   [761] "Atp5c1"          "Kin"             "Itih5"           "Sfmbt2"         
+    ##   [765] "Prkcq"           "Gm13293"         "Pfkfb3"          "Gm10851"        
+    ##   [769] "Rbm17"           "Il2ra"           "Il15ra"          "Fbxo18"         
+    ##   [773] "Ankrd16"         "Fam188a"         "Pter"            "Rsu1"           
+    ##   [777] "Trdmt1"          "Vim"             "St8sia6"         "Stam"           
+    ##   [781] "Nsun6"           "Arl5b"           "Plxdc2"          "Nebl"           
+    ##   [785] "A930004D18Rik"   "Mllt10"          "Dnajc1"          "Commd3"         
+    ##   [789] "Bmi1"            "Spag6"           "Pip4k2a"         "4930426L09Rik"  
+    ##   [793] "Armc3"           "Msrb2"           "Otud1"           "Arhgap21"       
+    ##   [797] "Enkur"           "Thnsl1"          "Gad2"            "Apbb1ip"        
+    ##   [801] "Pdss1"           "Abi1"            "Acbd5"           "Mastl"          
+    ##   [805] "Yme1l1"          "Spopl"           "Il1rn"           "Psd4"           
+    ##   [809] "Ehmt1"           "Arrdc1"          "Zmynd19"         "Dph7"           
+    ##   [813] "Mrpl41"          "Pnpla7"          "Nsmf"            "Noxa1"          
+    ##   [817] "Nrarp"           "Tor4a"           "Nelfb"           "Tubb4b"         
+    ##   [821] "Ndor1"           "Tmem203"         "Tprn"            "Ssna1"          
+    ##   [825] "Anapc2"          "AA543186"        "Man1b1"          "Dpp7"           
+    ##   [829] "Uap1l1"          "Sapcd2"          "Npdc1"           "Fut7"           
+    ##   [833] "Abca2"           "BC029214"        "C8g"             "Fbxw5"          
+    ##   [837] "Traf2"           "Edf1"            "Mamdc4"          "Phpt1"          
+    ##   [841] "Rabl6"           "Tmem141"         "Bmyc"            "Camsap1"        
+    ##   [845] "Ubac1"           "Nacc2"           "C330006A16Rik"   "Qsox2"          
+    ##   [849] "Gpsm1"           "Dnlz"            "Card9"           "Snapc4"         
+    ##   [853] "Sdccag3"         "Pmpca"           "Inpp5e"          "Sec16a"         
+    ##   [857] "Notch1"          "Egfl7"           "Agpat2"          "Fam69b"         
+    ##   [861] "Lcn4"            "Surf6"           "Med22"           "Rpl7a"          
+    ##   [865] "Surf1"           "Surf2"           "Surf4"           "Rexo4"          
+    ##   [869] "Adamts13"        "Cacfd1"          "Slc2a6"          "Sardh"          
+    ##   [873] "Vav2"            "Brd3"            "Wdr5"            "Rxra"           
+    ##   [877] "Olfm1"           "Mrps2"           "Ralgds"          "Gtf3c5"         
+    ##   [881] "Tsc1"            "1700026L06Rik"   "Gtf3c4"          "Ddx31"          
+    ##   [885] "Cfap77"          "Ttf1"            "Setx"            "Med27"          
+    ##   [889] "Rapgef1"         "Trub2"           "Coq4"            "Slc27a4"        
+    ##   [893] "Urm1"            "2600006K01Rik"   "Cercam"          "Odf2"           
+    ##   [897] "Gle1"            "Sptan1"          "Wdr34"           "Set"            
+    ##   [901] "Zdhhc12"         "Zer1"            "Tbc1d13"         "Endog"          
+    ##   [905] "D2Wsu81e"        "Ccbl1"           "1700084E18Rik"   "Lrrc8a"         
+    ##   [909] "Dolk"            "Nup188"          "Sh3glb2"         "Fam73b"         
+    ##   [913] "Dolpp1"          "Crat"            "Ppp2r4"          "Ier5l"          
+    ##   [917] "Cstad"           "1700001O22Rik"   "Ntmt1"           "Asb6"           
+    ##   [921] "Tor1b"           "Tor1a"           "BC005624"        "Usp20"          
+    ##   [925] "Fnbp1"           "Gpr107"          "Ncs1"            "Ass1"           
+    ##   [929] "Fubp3"           "Exosc2"          "Abl1"            "Qrfp"           
+    ##   [933] "Fibcd1"          "Nup214"          "Fam78a"          "Prrc2b"         
+    ##   [937] "Pomt1"           "Uck1"            "Swi5"            "Golga2"         
+    ##   [941] "Ciz1"            "1110008P14Rik"   "Lcn2"            "Ptges2"         
+    ##   [945] "Slc25a25"        "Naif1"           "Fam102a"         "Dpm2"           
+    ##   [949] "St6galnac4"      "St6galnac6"      "Eng"             "Fpgs"           
+    ##   [953] "Cdk9"            "Sh2d3c"          "Ttc16"           "Tor2a"          
+    ##   [957] "Ptrh1"           "Cfap157"         "Stxbp1"          "Fam129b"        
+    ##   [961] "Lrsam1"          "Rpl12"           "Slc2a8"          "Garnl3"         
+    ##   [965] "Ralgps1"         "Angptl2"         "Zbtb34"          "Zbtb43"         
+    ##   [969] "Mvb12b"          "Pbx3"            "Mapkap1"         "Gapvd1"         
+    ##   [973] "Hspa5"           "Rabepk"          "Fbxw2"           "Psmd5"          
+    ##   [977] "Phf19"           "Traf1"           "Cntrl"           "Rab14"          
+    ##   [981] "Gsn"             "Stom"            "Ggta1"           "Ndufa8"         
+    ##   [985] "Rbm18"           "Mrrf"            "Ptgs1"           "Pdcl"           
+    ##   [989] "Rc3h2"           "Zbtb6"           "Zbtb26"          "Rabgap1"        
+    ##   [993] "Strbp"           "Dennd1a"         "Nek6"            "Psmb7"          
+    ##   [997] "Nr6a1"           "Wdr38"           "Rpl35"           "Arpc5l"         
+    ##  [1001] "Golga1"          "Scai"            "Ppp6c"           "Arhgap15"       
+    ##  [1005] "Gtdc1"           "Zeb2"            "Acvr2a"          "Orc4"           
+    ##  [1009] "Mbd5"            "Epc2"            "Kif5c"           "Lypd6b"         
+    ##  [1013] "Mmadhc"          "1700057H21Rik"   "Rbm43"           "Nmi"            
+    ##  [1017] "Rif1"            "Neb"             "Arl5a"           "Cacnb4"         
+    ##  [1021] "Stam2"           "Prpf40a"         "Arl6ip6"         "Nr4a2"          
+    ##  [1025] "Gpd2"            "Ermn"            "Cytip"           "Gm13546"        
+    ##  [1029] "Acvr1"           "Ccdc148"         "Pkp4"            "Dapl1"          
+    ##  [1033] "Tanc1"           "Wdsub1"          "Baz2b"           "March7"         
+    ##  [1037] "Ly75"            "Rbms1"           "Tank"            "Psmd14"         
+    ##  [1041] "Dpp4"            "Ifih1"           "Gca"             "Cobll1"         
+    ##  [1045] "Gm13594"         "Galnt3"          "Ttc21b"          "Stk39"          
+    ##  [1049] "Cers6"           "Spc25"           "Klhl41"          "Fastkd1"        
+    ##  [1053] "Ppig"            "Ccdc173"         "Phospho2"        "Ssb"            
+    ##  [1057] "Mettl5"          "Mettl5os"        "Ubr3"            "Myo3b"          
+    ##  [1061] "Gorasp2"         "Tlk1"            "Mettl8"          "Dcaf17"         
+    ##  [1065] "Dync1i2"         "Slc25a12"        "Hat1"            "Metap1d"        
+    ##  [1069] "Itga6"           "Pdk1"            "Rapgef4"         "Cdca7"          
+    ##  [1073] "Sp3"             "Sp3os"           "Ola1"            "Cir1"           
+    ##  [1077] "Scrn3"           "Gpr155"          "Wipf1"           "Chrna1os"       
+    ##  [1081] "Chn1os3"         "Chn1"            "Atf2"            "Atp5g3"         
+    ##  [1085] "Lnp"             "Mtx2"            "Hnrnpa3"         "Nfe2l2"         
+    ##  [1089] "Agps"            "Ttc30b"          "Ttc30a1"         "Pde11a"         
+    ##  [1093] "Rbm45"           "Osbpl6"          "Prkra"           "Fkbp7"          
+    ##  [1097] "Plekha3"         "Ttn"             "Ccdc141"         "Sestd1"         
+    ##  [1101] "Cwc22"           "Ube2e3"          "Itga4"           "Cerkl"          
+    ##  [1105] "Ssfa2"           "Dnajc10"         "Frzb"            "Nckap1"         
+    ##  [1109] "Dusp19"          "Nup35"           "Zc3h15"          "Itgav"          
+    ##  [1113] "Fam171b"         "Calcrl"          "Tfpi"            "2700094K13Rik"  
+    ##  [1117] "Tmx2"            "Med19"           "Zdhhc5"          "Clp1"           
+    ##  [1121] "Ypel4"           "Ube2l6"          "Timm10"          "Slc43a3"        
+    ##  [1125] "Ssrp1"           "Tnks1bp1"        "Ptprj"           "Nup160"         
+    ##  [1129] "Fnbp4"           "Mtch2"           "C1qtnf4"         "Ndufs3"         
+    ##  [1133] "Kbtbd4"          "Celf1"           "Rapsn"           "Psmc3"          
+    ##  [1137] "Slc39a13"        "Spi1"            "Madd"            "Acp2"           
+    ##  [1141] "Ddb2"            "A330069E16Rik"   "Pacsin3"         "Arfgap2"        
+    ##  [1145] "1110051M20Rik"   "Ckap5"           "F2"              "Zfp408"         
+    ##  [1149] "Arhgap1"         "Atg13"           "Harbi1"          "Ambra1"         
+    ##  [1153] "Mdk"             "Dgkz"            "Creb3l1"         "Phf21a"         
+    ##  [1157] "Pex16"           "1700029I15Rik"   "Mapk8ip1"        "Cry2"           
+    ##  [1161] "Slc35c1"         "Prdm11"          "Trp53i11"        "Cd82"           
+    ##  [1165] "Ext2"            "Accs"            "Alkbh3"          "Hsd17b12"       
+    ##  [1169] "Ttc17"           "Api5"            "Traf6"           "Prr5l"          
+    ##  [1173] "Commd9"          "Trim44"          "Cd44"            "Pdhx"           
+    ##  [1177] "Apip"            "Cat"             "Abtb2"           "Nat10"          
+    ##  [1181] "Caprin1"         "Lmo2"            "Fbxo3"           "Cd59b"          
+    ##  [1185] "Hipk3"           "Cstf3"           "Tcp11l1"         "Qser1"          
+    ##  [1189] "Eif3m"           "Rcn1"            "Elp4"            "Immp1l"         
+    ##  [1193] "Dnajc24"         "Mpped2"          "Arl14ep"         "Mettl15"        
+    ##  [1197] "Kif18a"          "Lin7c"           "Ccdc34"          "Lpcat4"         
+    ##  [1201] "Nop10"           "Slc12a6"         "Emc4"            "Katnbl1"        
+    ##  [1205] "Emc7"            "Aven"            "Ryr3"            "Scg5"           
+    ##  [1209] "Arhgap11a"       "Aqr"             "Zfp770"          "Dph6"           
+    ##  [1213] "BC052040"        "Spred1"          "Fam98b"          "Rasgrp1"        
+    ##  [1217] "Eif2ak4"         "Srp14"           "Bub1b"           "Pak6"           
+    ##  [1221] "Plcb2"           "Inafm2"          "Knstrn"          "Gm14091"        
+    ##  [1225] "Ivd"             "Bahd1"           "Chst14"          "Ccdc32"         
+    ##  [1229] "Rpusd2"          "Casc5"           "Rad51"           "Rmdn3"          
+    ##  [1233] "Dnajc17"         "Zfyve19"         "Spint1"          "Vps18"          
+    ##  [1237] "Ino80"           "Exd1"            "Chp1"            "1700020I14Rik"  
+    ##  [1241] "Oip5"            "Nusap1"          "Ndufaf1"         "Rtf1"           
+    ##  [1245] "Ltk"             "Rpap1"           "Tyro3"           "Mga"            
+    ##  [1249] "Mapkbp1"         "Jmjd7"           "Ehd4"            "Pla2g4f"        
+    ##  [1253] "Vps39"           "Tmem87a"         "Ganc"            "Capn3"          
+    ##  [1257] "Zfp106"          "Gm26899"         "Snap23"          "Lrrc57"         
+    ##  [1261] "Haus2"           "Stard9"          "Cdan1"           "Ttbk2"          
+    ##  [1265] "Ubr1"            "Tmem62"          "Ccndbp1"         "Lcmt2"          
+    ##  [1269] "Adal"            "Zscan29"         "Tubgcp4"         "Trp53bp1"       
+    ##  [1273] "Map1a"           "Ppip5k1"         "Catsper2"        "Pdia3"          
+    ##  [1277] "Ell3"            "Serf2"           "Hypk"            "Mfap1b"         
+    ##  [1281] "Mfap1a"          "Wdr76"           "Frmd5"           "Casc4"          
+    ##  [1285] "Ctdspl2"         "Eif3j1"          "Spg11"           "Patl2"          
+    ##  [1289] "B2m"             "Sord"            "Shf"             "Slc28a2"        
+    ##  [1293] "Gm14085"         "Gatm"            "AA467197"        "Slc30a4"        
+    ##  [1297] "Bloc1s6os"       "Bloc1s6"         "Sqrdl"           "Sema6d"         
+    ##  [1301] "Slc24a5"         "Myef2"           "Dut"             "Cep152"         
+    ##  [1305] "Eid1"            "Secisbp2l"       "Cops2"           "Galk2"          
+    ##  [1309] "Fgf7"            "Dtwd1"           "Atp8b4"          "Hdc"            
+    ##  [1313] "Gabpb1"          "Gm27003"         "Usp8"            "Usp50"          
+    ##  [1317] "Trpm7"           "Sppl2a"          "Ap4e1"           "Blvra"          
+    ##  [1321] "Ncaph"           "Itpripl1"        "1810024B03Rik"   "Snrnp200"       
+    ##  [1325] "Ciao1"           "Tmem127"         "Stard7"          "Dusp2"          
+    ##  [1329] "Gpat2"           "Fahd2a"          "Kcnip3"          "Zfp661"         
+    ##  [1333] "Mrps5"           "Mal"             "Nphp1"           "1500011K16Rik"  
+    ##  [1337] "Bub1"            "Bcl2l11"         "Anapc1"          "Tmem87b"        
+    ##  [1341] "Zc3h8"           "Gm10762"         "Zc3h6"           "Ttl"            
+    ##  [1345] "Polr1b"          "Chchd5"          "AI847159"        "Gm14029"        
+    ##  [1349] "Slc20a1"         "Ckap2l"          "Stk35"           "Snrpb"          
+    ##  [1353] "Nop56"           "Idh3b"           "Pced1a"          "Vps16"          
+    ##  [1357] "Ptpra"           "Mrps26"          "Ubox5"           "Fastkd5"        
+    ##  [1361] "Ddrgk1"          "Itpa"            "4930402H24Rik"   "Atrn"           
+    ##  [1365] "Gfra4"           "Adam33"          "Siglec1"         "1700037H04Rik"  
+    ##  [1369] "Spef1"           "Cenpb"           "Cdc25b"          "Ap5s1"          
+    ##  [1373] "Mavs"            "Pank2"           "Rnf24"           "Smox"           
+    ##  [1377] "Prnp"            "Rassf2"          "Slc23a2"         "Tmem230"        
+    ##  [1381] "Pcna"            "AV099323"        "Cds2"            "1700026D11Rik"  
+    ##  [1385] "Gpcpd1"          "1110034G24Rik"   "Trmt6"           "Mcm8"           
+    ##  [1389] "Crls1"           "Tmx4"            "Platr3"          "Plcb4"          
+    ##  [1393] "Mkks"            "Slx4ip"          "Jag1"            "Tasp1"          
+    ##  [1397] "Esf1"            "Ndufaf5"         "Macrod2"         "Kif16b"         
+    ##  [1401] "Snrpb2"          "Dstn"            "Rrbp1"           "Snx5"           
+    ##  [1405] "Mgme1"           "Csrp2bp"         "Polr3f"          "Rbbp9"          
+    ##  [1409] "Sec23b"          "Gm561"           "Dtd1"            "Rin2"           
+    ##  [1413] "Naa20"           "Crnkl1"          "Ralgapa2"        "Kiz"            
+    ##  [1417] "Xrn2"            "Cd93"            "Nxt1"            "Gzf1"           
+    ##  [1421] "Napb"            "Cst3"            "Zfp120"          "Zfp937"         
+    ##  [1425] "Gm21994"         "3300002I08Rik"   "Zfp442"          "Cst7"           
+    ##  [1429] "Apmap"           "Acss1"           "Entpd6"          "Pygb"           
+    ##  [1433] "Abhd12"          "Gins1"           "Nanp"            "Nsfl1c"         
+    ##  [1437] "Gm14167"         "Fkbp1a"          "Sdcbp2"          "Psmf1"          
+    ##  [1441] "Gm14154"         "Fam110a"         "Slc52a3"         "Srxn1"          
+    ##  [1445] "Csnk2a1"         "Tbc1d20"         "Rbck1"           "Trib3"          
+    ##  [1449] "Sox12"           "Zcchc3"          "H13"             "Mcts2"          
+    ##  [1453] "Id1"             "Bcl2l1"          "Tpx2"            "Pdrg1"          
+    ##  [1457] "Tm9sf4"          "Tspyl3"          "Plagl2"          "Pofut1"         
+    ##  [1461] "Kif3b"           "Asxl1"           "Nol4l"           "Commd7"         
+    ##  [1465] "Dnmt3b"          "Mapre1"          "Cdk5rap1"        "Cbfa2t2"        
+    ##  [1469] "E2f1"            "Pxmp4"           "Zfp341"          "Chmp4b"         
+    ##  [1473] "Raly"            "a"               "Eif2s2"          "Ahcy"           
+    ##  [1477] "Itch"            "Dynlrb1"         "Map1lc3a"        "Pigu"           
+    ##  [1481] "Trp53inp2"       "Ncoa6"           "Ggt7"            "Acss2"          
+    ##  [1485] "Gss"             "Trpc4ap"         "Edem2"           "Procr"          
+    ##  [1489] "BC029722"        "Eif6"            "Uqcc1"           "Cep250"         
+    ##  [1493] "6430550D23Rik"   "Ergic3"          "Spag4"           "Cpne1"          
+    ##  [1497] "Gm28036"         "Rbm12"           "Nfs1"            "Romo1"          
+    ##  [1501] "Rbm39"           "Phf20"           "Scand1"          "Cnbd2"          
+    ##  [1505] "Aar2"            "Dlgap4"          "Tgif2"           "4930518I15Rik"  
+    ##  [1509] "1110008F13Rik"   "Sla2"            "Ndrg3"           "Dsn1"           
+    ##  [1513] "Samhd1"          "Rbl1"            "Mroh8"           "Rpn2"           
+    ##  [1517] "Manbal"          "Src"             "Gm14286"         "Blcap"          
+    ##  [1521] "Platr27"         "Ctnnbl1"         "Tti1"            "Rprd1b"         
+    ##  [1525] "Tgm2"            "Lbp"             "Ralgapb"         "Actr5"          
+    ##  [1529] "Ppp1r16b"        "Fam83d"          "Dhx35"           "Mafb"           
+    ##  [1533] "Top1"            "Plcg1"           "Zhx3"            "Chd6"           
+    ##  [1537] "Srsf6"           "Ift52"           "Mybl2"           "Gm11454"        
+    ##  [1541] "Tox2"            "Oser1"           "2900093K20Rik"   "Fitm2"          
+    ##  [1545] "Ttpal"           "Serinc3"         "0610039K10Rik"   "Pkig"           
+    ##  [1549] "Ada"             "Ywhab"           "Pabpc1l"         "Tomm34"         
+    ##  [1553] "Stk4"            "Slpi"            "Sdc4"            "Sys1"           
+    ##  [1557] "Gm14302"         "Dbndd2"          "Pigt"            "Dnttip1"        
+    ##  [1561] "Ube2c"           "Snx21"           "Acot8"           "Zswim3"         
+    ##  [1565] "Zswim1"          "Neurl2"          "Ctsa"            "Pltp"           
+    ##  [1569] "Pcif1"           "Zfp335"          "Zfp335os"        "Mmp9"           
+    ##  [1573] "Ncoa5"           "Cd40"            "Slc35c2"         "Elmo2"          
+    ##  [1577] "Trp53rka"        "Eya2"            "Zmynd8"          "Ncoa3"          
+    ##  [1581] "5031425F14Rik"   "Prex1"           "Trp53rkb"        "Arfgef2"        
+    ##  [1585] "Cse1l"           "Stau1"           "Ddx27"           "Znfx1"          
+    ##  [1589] "Zfos1"           "Kcnb1"           "B4galt5"         "Slc9a8"         
+    ##  [1593] "Spata2"          "Rnf114"          "Snai1"           "Ube2v1"         
+    ##  [1597] "Tmem189"         "Cebpb"           "Gm14321"         "9230111E07Rik"  
+    ##  [1601] "Ptpn1"           "Fam65c"          "Pard6b"          "Dpm1"           
+    ##  [1605] "Mocs3"           "Nfatc2"          "Atp9a"           "Zfp64"          
+    ##  [1609] "Tshz2"           "Zfp217"          "Bcas1"           "Pfdn4"          
+    ##  [1613] "Fam210b"         "Aurka"           "Cstf1"           "Cass4"          
+    ##  [1617] "Rtfdc1"          "Fam209"          "Bmp7"            "Spo11"          
+    ##  [1621] "Rae1"            "Rbm38"           "Zbp1"            "Pmepa1"         
+    ##  [1625] "Rab22a"          "Vapb"            "Stx16"           "Npepl1"         
+    ##  [1629] "Nespas"          "Gnas"            "Gm20721"         "Nelfcd"         
+    ##  [1633] "Ctsz"            "Atp5e"           "Slmo2"           "Zfp831"         
+    ##  [1637] "Edn3"            "Gm14391"         "Gm4631"          "Gm4723"         
+    ##  [1641] "Gm4724"          "Gm6710"          "Gm8898"          "Gm2026"         
+    ##  [1645] "Gm14308"         "Gm14306"         "Gm14305"         "Gm14295"        
+    ##  [1649] "Gm14296"         "Gm14419"         "Gm14410"         "Gm14418"        
+    ##  [1653] "Gm14420"         "Gm14403"         "Gm14325"         "Gm14327"        
+    ##  [1657] "C330013J21Rik"   "Gm14326"         "Etohi1"          "Zfp931"         
+    ##  [1661] "Taf4a"           "Lsm14b"          "Psma7"           "Ss18l1"         
+    ##  [1665] "Mtg2"            "Osbpl2"          "Adrm1"           "Lama5"          
+    ##  [1669] "Rps21"           "Cables2"         "Slco4a1"         "Mrgbp"          
+    ##  [1673] "Ogfr"            "Col9a3"          "Dido1"           "Gid8"           
+    ##  [1677] "Slc17a9"         "Ythdf1"          "Arfgap1"         "Col20a1"        
+    ##  [1681] "Ppdpf"           "Srms"            "Helz2"           "Gmeb2"          
+    ##  [1685] "Rtel1"           "Arfrp1"          "Zgpat"           "Lime1"          
+    ##  [1689] "Zbtb46"          "Tpd52l2"         "Dnajc5"          "Uckl1"          
+    ##  [1693] "Uckl1os"         "Zfp512b"         "Prpf6"           "Samd10"         
+    ##  [1697] "Tcea2"           "Rgs19"           "Pcmtd2"          "Polr3k"         
+    ##  [1701] "Clcn5"           "Usp27x"          "Ppp1r3f"         "Ppp1r3fos"      
+    ##  [1705] "Foxp3"           "Ccdc22"          "Syp"             "Prickle3"       
+    ##  [1709] "Plp2"            "Gpkow"           "Wdr45"           "Praf2"          
+    ##  [1713] "Tfe3"            "Gripap1"         "Kcnd1"           "Otud5"          
+    ##  [1717] "Pim2"            "Slc35a2"         "Pqbp1"           "Timm17b"        
+    ##  [1721] "Hdac6"           "Gata1"           "Suv39h1"         "Was"            
+    ##  [1725] "Wdr13"           "Rbm3"            "Rbm3os"          "Tbc1d25"        
+    ##  [1729] "Ebp"             "Ftsj1"           "B630019K06Rik"   "Lancl3"         
+    ##  [1733] "Xk"              "Cybb"            "Dynlt3"          "Rpgr"           
+    ##  [1737] "Mid1ip1"         "Bcor"            "Atp6ap2"         "1810030O07Rik"  
+    ##  [1741] "Med14"           "Usp9x"           "Ddx3x"           "Cask"           
+    ##  [1745] "Gpr34"           "Maoa"            "Fundc1"          "Kdm6a"          
+    ##  [1749] "Slc9a7"          "Rp2"             "Jade3"           "Ndufb11"        
+    ##  [1753] "Rbm10"           "Uba1"            "Cdk16"           "Usp11"          
+    ##  [1757] "Araf"            "Cfp"             "Elk1"            "Uxt"            
+    ##  [1761] "Zfp182"          "Zfp300"          "Wdr44"           "Dock11"         
+    ##  [1765] "Lonrf3"          "Pgrmc1"          "Akap17b"         "Slc25a5"        
+    ##  [1769] "2310010G23Rik"   "C330007P06Rik"   "Ube2a"           "Nkrf"           
+    ##  [1773] "Sept6"           "Rpl39"           "Upf3b"           "Nkap"           
+    ##  [1777] "Ndufa1"          "Rnf113a1"        "Zbtb33"          "Lamp2"          
+    ##  [1781] "Cul4b"           "Mcts1"           "C1galt1c1"       "Thoc2"          
+    ##  [1785] "Xiap"            "Stag2"           "Sh2d1a"          "Ocrl"           
+    ##  [1789] "Sash3"           "Zdhhc9"          "Utp14a"          "Bcorl1"         
+    ##  [1793] "Elf4"            "Aifm1"           "Zfp280c"         "Slc25a14"       
+    ##  [1797] "Rbmx2"           "Enox2"           "Stk26"           "Rap2c"          
+    ##  [1801] "Mbnl3"           "Phf6"            "Hprt"            "Fam122b"        
+    ##  [1805] "Mospd1"          "Cxx1c"           "Cxx1a"           "Cxx1b"          
+    ##  [1809] "Xlr"             "3830403N18Rik"   "Zfp449"          "Smim10l2a"      
+    ##  [1813] "Ddx26b"          "Mmgt1"           "Slc9a6"          "Mtap7d3"        
+    ##  [1817] "Htatsf1"         "Gm14718"         "Cd40lg"          "Arhgef6"        
+    ##  [1821] "Rbmx"            "Fgf13"           "Atp11c"          "Fmr1"           
+    ##  [1825] "Gm14698"         "Ids"             "1110012L19Rik"   "BC023829"       
+    ##  [1829] "Mtm1"            "Mtmr1"           "Cd99l2"          "Hmgb3"          
+    ##  [1833] "Vma21"           "Cetn2"           "Nsdhl"           "Xlr4a"          
+    ##  [1837] "Xlr3a"           "Xlr3b"           "Xlr4b"           "F8a"            
+    ##  [1841] "Xlr4c"           "Zfp275"          "Haus7"           "Dusp9"          
+    ##  [1845] "Pnck"            "Slc6a8"          "Bcap31"          "Abcd1"          
+    ##  [1849] "Idh3g"           "Ssr4"            "L1cam"           "Arhgap4"        
+    ##  [1853] "Avpr2"           "Naa10"           "Renbp"           "Hcfc1"          
+    ##  [1857] "Irak1"           "Mecp2"           "Tktl1"           "Flna"           
+    ##  [1861] "Emd"             "Rpl10"           "Dnase1l1"        "Taz"            
+    ##  [1865] "Atp6ap1"         "Gdi1"            "Fam50a"          "Plxna3"         
+    ##  [1869] "Lage3"           "Ubl4a"           "Slc10a3"         "Fam3a"          
+    ##  [1873] "Ikbkg"           "G6pdx"           "Gab3"            "Dkc1"           
+    ##  [1877] "Mpp1"            "Fundc2"          "Cmc4"            "Mtcp1"          
+    ##  [1881] "Brcc3"           "Vbp1"            "Rab39b"          "Gm15063"        
+    ##  [1885] "Pls3"            "Tbl1x"           "Prkx"            "Prrg1"          
+    ##  [1889] "Tab3"            "Gk"              "5430427O19Rik"   "Pola1"          
+    ##  [1893] "Pcyt1b"          "Pdk3"            "Zfx"             "Eif2s3x"        
+    ##  [1897] "Klhl15"          "Apoo"            "Maged1"          "Gspt2"          
+    ##  [1901] "Zxdb"            "Spin4"           "Arhgef9"         "Amer1"          
+    ##  [1905] "Zc4h2"           "Zc3h12b"         "Las1l"           "Msn"            
+    ##  [1909] "Ar"              "Yipf6"           "Efnb1"           "Pja1"           
+    ##  [1913] "Awat2"           "Igbp1"           "Pdzd11"          "Kif4"           
+    ##  [1917] "Dlg3"            "Snx12"           "Foxo4"           "Gm614"          
+    ##  [1921] "Il2rg"           "Med12"           "Zmym3"           "Nono"           
+    ##  [1925] "Taf1"            "Ogt"             "Cxcr3"           "Nhsl2"          
+    ##  [1929] "Rgag4"           "Pin4"            "Ercc6l"          "Rps4x"          
+    ##  [1933] "Hdac8"           "Chic1"           "Tsx"             "Tsix"           
+    ##  [1937] "Xist"            "Jpx"             "Ftx"             "Rlim"           
+    ##  [1941] "Abcb7"           "Uprt"            "Zdhhc15"         "Pbdc1"          
+    ##  [1945] "Magee1"          "Atrx"            "Magt1"           "Cox7b"          
+    ##  [1949] "Atp7a"           "Pgk1"            "Taf9b"           "Cysltr1"        
+    ##  [1953] "Gm5127"          "P2ry10"          "A630033H20Rik"   "Gpr174"         
+    ##  [1957] "Itm2a"           "2610002M06Rik"   "Brwd3"           "Hmgn5"          
+    ##  [1961] "Sh3bgrl"         "Rps6ka6"         "Apool"           "Chm"            
+    ##  [1965] "Diaph2"          "Tspan6"          "Cstf2"           "Xkrx"           
+    ##  [1969] "Trmt2b"          "Cenpi"           "Timm8a1"         "Rpl36a"         
+    ##  [1973] "Gla"             "Hnrnph2"         "Armcx4"          "Armcx1"         
+    ##  [1977] "Armcx6"          "Armcx3"          "Armcx2"          "Zmat1"          
+    ##  [1981] "Armcx5"          "Gprasp1"         "Bhlhb9"          "Gprasp2"        
+    ##  [1985] "Arxes2"          "Bex2"            "Tceal8"          "Bex1"           
+    ##  [1989] "Wbp5"            "Ngfrap1"         "Tceal3"          "Morf4l2"        
+    ##  [1993] "Plp1"            "Tmsb15l"         "Tmsb15b1"        "Slc25a53"       
+    ##  [1997] "Zcchc18"         "Fam199x"         "Rnf128"          "Tbc1d8b"        
+    ##  [2001] "Gm15013"         "Rbm41"           "Prps1"           "Tsc22d3"        
+    ##  [2005] "Mid2"            "Psmd10"          "Atg4a"           "Nxt2"           
+    ##  [2009] "Acsl4"           "Tmem164"         "Ammecr1"         "Alg13"          
+    ##  [2013] "Tmem29"          "Apex2"           "Pfkfb1"          "Maged2"         
+    ##  [2017] "Gnl3l"           "Tsr2"            "A230072E10Rik"   "Fam120c"        
+    ##  [2021] "Phf8"            "Huwe1"           "Hsd17b10"        "Ribc1"          
+    ##  [2025] "Smc1a"           "Kdm5c"           "Kantr"           "Tspyl2"         
+    ##  [2029] "Mageh1"          "Rragb"           "Klf8"            "Ubqln2"         
+    ##  [2033] "Kctd12b"         "2210013O21Rik"   "Spin2c"          "Sat1"           
+    ##  [2037] "Acot9"           "Prdx4"           "Sms"             "Mbtps2"         
+    ##  [2041] "Rps6ka3"         "Eif1ax"          "A830080D01Rik"   "Sh3kbp1"        
+    ##  [2045] "Pdha1"           "Phka2"           "Cdkl5"           "Rbbp7"          
+    ##  [2049] "Txlng"           "Syap1"           "Ctps2"           "Rnf138rt1"      
+    ##  [2053] "Ap1s2"           "Zrsr2"           "Car5b"           "Siah1b"         
+    ##  [2057] "Piga"            "Mospd2"          "Fancb"           "Gemin8"         
+    ##  [2061] "Gpm6b"           "Ofd1"            "Trappc2"         "Rab9"           
+    ##  [2065] "Tceanc"          "Gm8817"          "Gm15232"         "Tmsb4x"         
+    ##  [2069] "Tlr7"            "Prps2"           "Msl3"            "Arhgap6"        
+    ##  [2073] "Gm15261"         "Hccs"            "Mid1"            "Gm21887"        
+    ##  [2077] "Pex2"            "Gm8797"          "Stmn2"           "Hey1"           
+    ##  [2081] "Mrps28"          "Tpd52"           "Zbtb10"          "C030034L19Rik"  
+    ##  [2085] "Pag1"            "Fabp5"           "Gm9833"          "Fabp4"          
+    ##  [2089] "Impa1"           "Zfand1"          "Chmp4c"          "Snx16"          
+    ##  [2093] "Lrrcc1"          "E2f5"            "1810022K09Rik"   "Car2"           
+    ##  [2097] "A930001A20Rik"   "Ythdf3"          "Armc1"           "Mtfr1"          
+    ##  [2101] "Pde7a"           "1700064H15Rik"   "4632415L05Rik"   "Hps3"           
+    ##  [2105] "Hltf"            "Gyg"             "Gm43672"         "Tbl1xr1"        
+    ##  [2109] "Ect2"            "Nceh1"           "Tnfsf10"         "Fndc3b"         
+    ##  [2113] "Pld1"            "Tnik"            "Eif5a2"          "Rpl22l1"        
+    ##  [2117] "Mynn"            "4933429H19Rik"   "Sec62"           "Gpr160"         
+    ##  [2121] "Phc3"            "Prkci"           "Skil"            "Slc7a14"        
+    ##  [2125] "Zmat3"           "Pik3ca"          "Zfp639"          "Mfn1"           
+    ##  [2129] "Gnb4"            "Actl6a"          "Mrpl47"          "Ndufb5"         
+    ##  [2133] "Ttc14"           "Gm43140"         "Fxr1"            "Dnajc19"        
+    ##  [2137] "Atp11b"          "Dcun1d1"         "Gm15952"         "Mccc1"          
+    ##  [2141] "Mccc1os"         "Acad9"           "D3Ertd254e"      "Anxa5"          
+    ##  [2145] "1810062G17Rik"   "Exosc9"          "Ccna2"           "Bbs7"           
+    ##  [2149] "4932438A13Rik"   "Il2"             "Il21"            "Gm12534"        
+    ##  [2153] "Cetn4"           "Bbs12"           "Fgf2"            "Nudt6"          
+    ##  [2157] "Spata5"          "Spry1"           "Gm5148"          "Gm42921"        
+    ##  [2161] "Ankrd50"         "Intu"            "Hspa4l"          "Plk4"           
+    ##  [2165] "Mfsd8"           "Abhd18"          "Larp1b"          "Pgrmc2"         
+    ##  [2169] "Jade1"           "Sclt1"           "D3Ertd751e"      "Noct"           
+    ##  [2173] "Elf2"            "Mgarp"           "Ndufc1"          "Naa15"          
+    ##  [2177] "Rab33b"          "Setd7"           "Mgst2"           "Maml3"          
+    ##  [2181] "Gm37170"         "Foxo1"           "Gm20750"         "Cog6"           
+    ##  [2185] "Nhlrc3"          "Proser1"         "Ufm1"            "Supt20"         
+    ##  [2189] "Exosc8"          "Alg5"            "Rfxap"           "Spg20"          
+    ##  [2193] "Dclk1"           "Gm43549"         "Commd2"          "Rnf13"          
+    ##  [2197] "Pfn2"            "Tsc22d2"         "Serp1"           "Eif2a"          
+    ##  [2201] "Selt"            "Siah2"           "Med12l"          "Gpr171"         
+    ##  [2205] "P2ry14"          "Mbnl1"           "P2ry1"           "Rap2b"          
+    ##  [2209] "B430305J03Rik"   "Dhx36"           "E130311K13Rik"   "Slc33a1"        
+    ##  [2213] "Gmps"            "Ssr3"            "Tiparp"          "Lekr1"          
+    ##  [2217] "Ccnl1"           "Gm37305"         "Rsrc1"           "Mlf1"           
+    ##  [2221] "Gfm1"            "Lxn"             "Mfsd1"           "1110032F04Rik"  
+    ##  [2225] "Ift80"           "Smc4"            "Trim59"          "Kpna4"          
+    ##  [2229] "Ppm1l"           "Nmd3"            "Wdr49"           "Pdcd10"         
+    ##  [2233] "Serpini1"        "Golim4"          "Rapgef2"         "4921511C10Rik"  
+    ##  [2237] "6430573P05Rik"   "Fnip2"           "4930589L23Rik"   "Ppid"           
+    ##  [2241] "Etfdh"           "4930579G24Rik"   "Ctso"            "Gucy1b3"        
+    ##  [2245] "Gucy1a3"         "Map9"            "Plrg1"           "Gm26771"        
+    ##  [2249] "Tlr2"            "D930015E06Rik"   "Mnd1"            "Trim2"          
+    ##  [2253] "Arfip1"          "Tmem154"         "Fbxw7"           "Gatb"           
+    ##  [2257] "Fam160a1"        "Sh3d19"          "Rps3a1"          "Gm37933"        
+    ##  [2261] "Lrba"            "Mab21l2"         "Gm37876"         "Dclk2"          
+    ##  [2265] "Cd1d2"           "Cd1d1"           "Fcrl1"           "Etv3"           
+    ##  [2269] "Arhgef11"        "Pear1"           "Sh2d2a"          "Prcc"           
+    ##  [2273] "Hdgf"            "Mrpl24"          "Rrnad1"          "Isg20l2"        
+    ##  [2277] "Gpatch4"         "Apoa1bp"         "Iqgap3"          "Mef2d"          
+    ##  [2281] "1700113A16Rik"   "Tsacc"           "Cct3"            "Glmp"           
+    ##  [2285] "Tmem79"          "Smg5"            "Pmf1"            "Slc25a44"       
+    ##  [2289] "Sema4a"          "Lmna"            "Mex3a"           "Lamtor2"        
+    ##  [2293] "Ubqln4"          "Ssr2"            "Arhgef2"         "Gm43714"        
+    ##  [2297] "2810403A07Rik"   "Rit1"            "Gm17146"         "Syt11"          
+    ##  [2301] "Gon4l"           "Msto1"           "Dap3"            "Ash1l"          
+    ##  [2305] "Rusc1"           "Fdps"            "Hcn3"            "Clk2"           
+    ##  [2309] "Scamp3"          "Gm16069"         "Fam189b"         "Gba"            
+    ##  [2313] "Mtx1"            "Muc1"            "Trim46"          "Krtcap2"        
+    ##  [2317] "Dpm3"            "Slc50a1"         "Efna4"           "Adam15"         
+    ##  [2321] "Zbtb7b"          "Gm15417"         "Flad1"           "Cks1b"          
+    ##  [2325] "Shc1"            "Pygo2"           "Pbxip1"          "Pmvk"           
+    ##  [2329] "Adar"            "Chrnb2"          "4632404H12Rik"   "Ube2q1"         
+    ##  [2333] "She"             "Il6ra"           "Gm42809"         "Atp8b2"         
+    ##  [2337] "Hax1"            "Ubap2l"          "4933434E20Rik"   "Tpm3"           
+    ##  [2341] "Nup210l"         "Rps27"           "Rab13"           "Jtb"            
+    ##  [2345] "Slc39a1"         "Crtc2"           "Dennd4b"         "Gatad2b"        
+    ##  [2349] "Ints3"           "Ilf2"            "Snapin"          "Chtop"          
+    ##  [2353] "S100a1"          "S100a13"         "S100a14"         "S100a3"         
+    ##  [2357] "S100a2"          "S100a4"          "S100a6"          "S100a8"         
+    ##  [2361] "S100a9"          "Gm43740"         "Gm9774"          "S100a11"        
+    ##  [2365] "S100a10"         "Them4"           "Gm43306"         "Rorc"           
+    ##  [2369] "Tdrkh"           "Mrpl9"           "Celf3"           "Snx27"          
+    ##  [2373] "Tuft1"           "Pogz"            "Psmb4"           "Selenbp1"       
+    ##  [2377] "Rfx5"            "B230398E01Rik"   "Pi4kb"           "A730011C13Rik"  
+    ##  [2381] "Gm15265"         "Zfp687"          "Psmd4"           "Pip5k1a"        
+    ##  [2385] "Vps72"           "Tmod4"           "Scnm1"           "Lysmd1"         
+    ##  [2389] "Tnfaip8l2"       "Sema6c"          "Gabpb2"          "Gm16740"        
+    ##  [2393] "Mllt11"          "Cdc42se1"        "Prune"           "Fam63a"         
+    ##  [2397] "Anxa9"           "6330562C20Rik"   "Cers2"           "Setdb1"         
+    ##  [2401] "Gm4349"          "Arnt"            "Ctsk"            "Ctss"           
+    ##  [2405] "Golph3l"         "Ensa"            "Mcl1"            "Adamtsl4"       
+    ##  [2409] "Ecm1"            "Tars2"           "Rprd2"           "Prpf3"          
+    ##  [2413] "Mrps21"          "C920021L13Rik"   "Ciart"           "Aph1a"          
+    ##  [2417] "Anp32e"          "Plekho1"         "Vps45"           "Otud7b"         
+    ##  [2421] "Gm17690"         "Sf3b4"           "Sv2a"            "Bola1"          
+    ##  [2425] "Hist2h2ab"       "Hist2h2ac"       "Hist2h2be"       "Hist2h3c2"      
+    ##  [2429] "Gm20632"         "Gm20633"         "Hist2h2aa1"      "Hist2h3c1"      
+    ##  [2433] "Hist2h4"         "Gm20628"         "Hist2h3b"        "Hist2h2bb"      
+    ##  [2437] "Hist2h2bb.1"     "Gm15441"         "Txnip"           "Polr3gl"        
+    ##  [2441] "Rbm8a"           "Pex11b"          "Ankrd35"         "Pias3"          
+    ##  [2445] "Nudt17"          "Polr3c"          "Rnf115"          "Cd160"          
+    ##  [2449] "Pdzk1"           "Gpr89"           "Acp6"            "Bcl9"           
+    ##  [2453] "Chd1l"           "Fmo5"            "Prkab2"          "Pde4dip"        
+    ##  [2457] "Sec22b"          "Gm5544"          "Notch2"          "Phgdh"          
+    ##  [2461] "Hsd3b2"          "Wars2"           "Wdr3"            "Gdap2"          
+    ##  [2465] "Fam46c"          "Gm12474"         "Man1a2"          "Trim45"         
+    ##  [2469] "Ttf2"            "Cd101"           "Ptgfrn"          "Cd2"            
+    ##  [2473] "Igsf3"           "Atp1a1"          "Slc22a15"        "Tspan2"         
+    ##  [2477] "Sike1"           "Csde1"           "Nras"            "Gm43062"        
+    ##  [2481] "Ampd1"           "Dennd2c"         "Bcas2"           "Trim33"         
+    ##  [2485] "Hipk1"           "Gm15886"         "Dclre1b"         "Ap4b1"          
+    ##  [2489] "Bcl2l15"         "Ptpn22"          "Rsbn1"           "Phtf1os"        
+    ##  [2493] "Phtf1"           "Magi3"           "Lrig2"           "Slc16a1"        
+    ##  [2497] "Fam19a3"         "Ppm1j"           "Rhoc"            "Mov10"          
+    ##  [2501] "Capza1"          "St7l"            "Ddx20"           "Fam212b"        
+    ##  [2505] "Gm43848"         "Rap1a"           "Gm5547"          "Adora3"         
+    ##  [2509] "Atp5f1"          "Wdr77"           "Ovgp1"           "Pifo"           
+    ##  [2513] "Gm42722"         "Chil5"           "Dennd2d"         "Cept1"          
+    ##  [2517] "Dram2"           "Lrif1"           "Cd53"            "Gm27008"        
+    ##  [2521] "Kcna3"           "AI504432"        "A930002I21Rik"   "Kcna2"          
+    ##  [2525] "Lamtor5"         "Rbm15"           "Strip1"          "Ahcyl1"         
+    ##  [2529] "Csf1"            "4933431E20Rik"   "Gstm5"           "Gstm1"          
+    ##  [2533] "Gstm4"           "Ampd2"           "Gm12500"         "Gnai3"          
+    ##  [2537] "Amigo1"          "Cyb561d1"        "Atxn7l2"         "Psma5"          
+    ##  [2541] "Psrc1"           "Celsr2"          "Sars"            "5330417C22Rik"  
+    ##  [2545] "Tmem167b"        "Taf13"           "Wdr47"           "Clcc1"          
+    ##  [2549] "Gpsm2"           "Stxbp3"          "Prpf38b"         "Fam102b"        
+    ##  [2553] "Slc25a24"        "Vav3"            "Prmt6"           "C130013H08Rik"  
+    ##  [2557] "Rnpc3"           "S1pr1"           "Gm9889"          "Dph5"           
+    ##  [2561] "Slc30a7"         "Extl2"           "Vcam1"           "Cdc14a"         
+    ##  [2565] "Rtca"            "Dbt"             "Trmt13"          "Sass6"          
+    ##  [2569] "Hiat1"           "Slc35a3"         "Agl"             "Frrs1"          
+    ##  [2573] "Ptbp2"           "Rwdd3"           "Alg14"           "Cnn3"           
+    ##  [2577] "Abcd3"           "Arhgap29"        "Gclm"            "Dnttip2"        
+    ##  [2581] "Bcar3"           "Pde5a"           "4933405D12Rik"   "1810037I17Rik"  
+    ##  [2585] "Usp53"           "Sec24d"          "Mettl14"         "Camk2d"         
+    ##  [2589] "Larp7"           "Zgrf1"           "Ap1ar"           "Gm43653"        
+    ##  [2593] "5730508B09Rik"   "Elovl6"          "Egf"             "Rrh"            
+    ##  [2597] "Gar1"            "Pla2g12a"        "Casp6"           "Ccdc109b"       
+    ##  [2601] "Sec24b"          "Ostc"            "Rpl34"           "Gm42997"        
+    ##  [2605] "Gm43352"         "Lef1"            "Hadh"            "Cyp2u1"         
+    ##  [2609] "Sgms2"           "Papss1"          "Aimp1"           "Tbck"           
+    ##  [2613] "Npnt"            "Gstcd"           "Ints12"          "Gm43254"        
+    ##  [2617] "Ppa2"            "Tet2"            "Cenpe"           "Bdh2"           
+    ##  [2621] "Slc9b2"          "Cisd2"           "4930539J05Rik"   "Ube2d3"         
+    ##  [2625] "Manba"           "Nfkb1"           "Slc39a8"         "Bank1"          
+    ##  [2629] "Ppp3ca"          "Gm43403"         "H2afz"           "Dnajb14"        
+    ##  [2633] "Gm43689"         "Lamtor3"         "Dapp1"           "Mttp"           
+    ##  [2637] "Gm43691"         "Trmt10a"         "Adh1"            "Adh5"           
+    ##  [2641] "Metap1"          "Eif4e"           "Tspan5"          "Rap1gds1"       
+    ##  [2645] "Pdlim5"          "Gbp5"            "Gbp7"            "Gbp3"           
+    ##  [2649] "Gbp2b"           "Gbp2"            "Ccbl2"           "Gtf2b"          
+    ##  [2653] "Pkn2"            "Lmo4"            "Hs2st1"          "Sep15"          
+    ##  [2657] "Sh3glb1"         "Clca3a1"         "Odf2l"           "Znhit6"         
+    ##  [2661] "Bcl10"           "2410004B18Rik"   "Mcoln3"          "Mcoln2"         
+    ##  [2665] "Lpar3"           "Ssx2ip"          "Ctbs"            "Spata1"         
+    ##  [2669] "Gng5"            "Rpf1"            "Samd13"          "Prkacb"         
+    ##  [2673] "Ifi44"           "Ifi44l"          "Gipc2"           "Dnajb4"         
+    ##  [2677] "Fubp1"           "Fam73a"          "Usp33"           "Zzz3"           
+    ##  [2681] "Pigk"            "St6galnac3"      "Rabggtb"         "Acadm"          
+    ##  [2685] "Tyw3"            "Cryz"            "Fpgt"            "Lrriq3"         
+    ##  [2689] "Zranb2"          "Ankrd13c"        "Srsf11"          "Lrrc40"         
+    ##  [2693] "Depdc1a"         "Wls"             "Tmem68"          "Tgs1"           
+    ##  [2697] "Lyn"             "Rps20"           "Plag1"           "Chchd7"         
+    ##  [2701] "Gm11808"         "Penk"            "Impad1"          "Fam110b"        
+    ##  [2705] "Ubxn2b"          "Sdcbp"           "Nsmaf"           "Tox"            
+    ##  [2709] "Rab2a"           "Chd7"            "Asph"            "2610301B20Rik"  
+    ##  [2713] "Plekhf2"         "Ndufaf6"         "Trp53inp1"       "Ccne2"          
+    ##  [2717] "Ints8"           "Dpy19l4"         "1110037F02Rik"   "Rad54b"         
+    ##  [2721] "Fsbp"            "Gem"             "Pdp1"            "Tmem67"         
+    ##  [2725] "Rbm12b2"         "Rbm12b1"         "Fam92a"          "Otud6b"         
+    ##  [2729] "Tmem55a"         "Tmem64"          "Decr1"           "Nbn"            
+    ##  [2733] "Osgin2"          "Ripk2"           "Cpne3"           "Rmdn1"          
+    ##  [2737] "Wwp1"            "Atp6v0d2"        "Ggh"             "Ccnc"           
+    ##  [2741] "Tstd3"           "Usp45"           "Pnisr"           "Coq3"           
+    ##  [2745] "Fbxl4"           "Mms22l"          "Klhl32"          "Ndufaf4"        
+    ##  [2749] "Ufl1"            "Manea"           "Map3k7"          "Bach2"          
+    ##  [2753] "Casp8ap2"        "Mdn1"            "Lyrm2"           "Ankrd6"         
+    ##  [2757] "Rragd"           "Ube2j1"          "Gabrr2"          "Srsf12"         
+    ##  [2761] "Pnrc1"           "Rngtt"           "Spaca1"          "Akirin2"        
+    ##  [2765] "Orc3"            "Rars2"           "Slc35a1"         "Smim8"          
+    ##  [2769] "Zfp292"          "Mob3b"           "3110043O21Rik"   "Aco1"           
+    ##  [2773] "Ddx58"           "Topors"          "Toporsos"        "Ndufb6"         
+    ##  [2777] "Aptx"            "Gm6297"          "Dnaja1"          "Smu1"           
+    ##  [2781] "B4galt1"         "Bag1"            "Chmp5"           "Nfx1"           
+    ##  [2785] "Aqp3"            "Nol6"            "Ube2r2"          "Ubap2"          
+    ##  [2789] "Dcaf12"          "Ubap1"           "Kif24"           "Nudt2"          
+    ##  [2793] "Fam219a"         "Il11ra1"         "Rpp25l"          "Dctn3"          
+    ##  [2797] "Sigmar1"         "Galt"            "Gm20878"         "Dnajb5"         
+    ##  [2801] "Vcp"             "Fancg"           "Pigo"            "Stoml2"         
+    ##  [2805] "Fam214b"         "Gm26881"         "Unc13b"          "Tesk1"          
+    ##  [2809] "Cd72"            "Sit1"            "Ccdc107"         "Arhgef39"       
+    ##  [2813] "Gm12454"         "Tln1"            "Creb3"           "Gba2"           
+    ##  [2817] "Rgp1"            "Hint2"           "Fam221b"         "Tmem8b"         
+    ##  [2821] "Reck"            "Glipr2"          "Clta"            "Gne"            
+    ##  [2825] "Rnf38"           "Melk"            "Pax5"            "Zcchc7"         
+    ##  [2829] "Grhpr"           "Zbtb5"           "1700055D18Rik"   "Polr1e"         
+    ##  [2833] "Fbxo10"          "Tomm5"           "Trmt10b"         "Exosc3"         
+    ##  [2837] "Dcaf10"          "Slc25a51"        "Aldh1b1"         "Tdrd7"          
+    ##  [2841] "Tmod1"           "Tstd2"           "Ncbp1"           "Xpa"            
+    ##  [2845] "Trmo"            "Hemgn"           "Anp32b"          "Nans"           
+    ##  [2849] "Trim14"          "Tbc1d2"          "Gm568"           "Anks6"          
+    ##  [2853] "Galnt12"         "Col15a1"         "Tgfbr1"          "Alg2"           
+    ##  [2857] "Sec61b"          "Nr4a3"           "Stx17"           "Erp44"          
+    ##  [2861] "Invs"            "Tex10"           "Mrpl50"          "Zfp189"         
+    ##  [2865] "Rnf20"           "Smc2"            "Vma21-ps"        "Nipsnap3b"      
+    ##  [2869] "Abca1"           "Slc44a1"         "Fsd1l"           "Fktn"           
+    ##  [2873] "Tmem38b"         "Rad23b"          "Klf4"            "Ikbkap"         
+    ##  [2877] "Fam206a"         "Ctnnal1"         "Tmem245"         "Ptpn3"          
+    ##  [2881] "Akap2"           "D630039A03Rik"   "Txn1"            "AI314180"       
+    ##  [2885] "Ptgr1"           "Dnajc25"         "Gng10"           "Ugcg"           
+    ##  [2889] "Susd1"           "Ptbp3"           "Hsdl2"           "E130308A19Rik"  
+    ##  [2893] "Inip"            "Snx30"           "Slc46a2"         "Slc31a2"        
+    ##  [2897] "Fkbp15"          "Slc31a1"         "Cdc26"           "Prpf4"          
+    ##  [2901] "Wdr31"           "Bspry"           "Hdhd3"           "Alad"           
+    ##  [2905] "Pole3"           "Rgs3"            "Gm11209"         "Akna"           
+    ##  [2909] "Whrn"            "Atp6v1g1"        "6330416G13Rik"   "Tnfsf8"         
+    ##  [2913] "Trim32"          "Tlr4"            "Cdk5rap2"        "Megf9"          
+    ##  [2917] "Tle1"            "Kdm4c"           "A230083N12Rik"   "Tmem261"        
+    ##  [2921] "Zdhhc21"         "Ttc39b"          "Snapc3"          "Psip1"          
+    ##  [2925] "Ccdc171"         "Cntln"           "Rraga"           "Haus6"          
+    ##  [2929] "Plin2"           "Dennd4c"         "Rps6"            "Acer2"          
+    ##  [2933] "Mllt3"           "Focad"           "Klhl9"           "Gm26566"        
+    ##  [2937] "Gm26525"         "Gm26867"         "Mtap"            "Cdkn2a"         
+    ##  [2941] "Cdkn2b"          "Dmrta1"          "Gm12666"         "Tusc1"          
+    ##  [2945] "Caap1"           "Gm10306"         "Plaa"            "Ift74"          
+    ##  [2949] "Mysm1"           "Jun"             "Junos"           "Hook1"          
+    ##  [2953] "Nfia"            "Tm2d1"           "Inadl"           "Usp1"           
+    ##  [2957] "Atg4c"           "Alg6"            "Itgb3bp"         "Efcab7"         
+    ##  [2961] "Pgm2"            "Raver2"          "Jak1"            "E130102H24Rik"  
+    ##  [2965] "0610043K17Rik"   "Ak4"             "Dnajc6"          "Leprot"         
+    ##  [2969] "Pde4b"           "Sgip1"           "Tctex1d1"        "Wdr78"          
+    ##  [2973] "Mier1"           "Slc35d1"         "Oma1"            "Gm12728"        
+    ##  [2977] "Usp24"           "Dhcr24"          "Pars2"           "Ttc4"           
+    ##  [2981] "Acot11"          "Ssbp3"           "Mrpl37"          "Cyb5rl"         
+    ##  [2985] "Gm12802"         "Tceanc2"         "Tmem59"          "Lrrc42"         
+    ##  [2989] "Hspb11"          "Yipf1"           "Ndc1"            "Lrp8"           
+    ##  [2993] "Magoh"           "0610037L13Rik"   "Cpt2"            "Scp2"           
+    ##  [2997] "Echdc2"          "Zyg11b"          "Coa7"            "Gpx7"           
+    ##  [3001] "Zcchc11"         "Prpf38a"         "Orc1"            "Cc2d1b"         
+    ##  [3005] "Gm17354"         "Btf3l4"          "Txndc12"         "A730015C16Rik"  
+    ##  [3009] "Kti12"           "Nrd1"            "Osbpl9"          "Eps15"          
+    ##  [3013] "Rnf11"           "Cdkn2c"          "Faf1"            "Bend5"          
+    ##  [3017] "Spata6"          "Foxd2"           "Cmpk1"           "Stil"           
+    ##  [3021] "Pdzk1ip1"        "Cyp4x1"          "Efcab14"         "Atpaf1"         
+    ##  [3025] "Mob3c"           "Mknk1"           "Faah"            "Nsun4"          
+    ##  [3029] "Uqcrh"           "Lrrc41"          "Rad54l"          "Pomgnt1"        
+    ##  [3033] "Pik3r3"          "Mast2"           "Ipp"             "Tmem69"         
+    ##  [3037] "Gpbp1l1"         "Ccdc17"          "Nasp"            "Akr1a1"         
+    ##  [3041] "Prdx1"           "Mmachc"          "Ccdc163"         "Tesk2"          
+    ##  [3045] "Toe1"            "Mutyh"           "Urod"            "Hectd3"         
+    ##  [3049] "Eif2b3"          "Btbd19"          "Tctex1d4"        "Plk3"           
+    ##  [3053] "Rps8"            "Kif2c"           "Tmem53"          "Rnf220"         
+    ##  [3057] "Eri3"            "Dmap1"           "Gm12840"         "Atp6v0b"        
+    ##  [3061] "Dph2"            "Ipo13"           "St3gal3"         "9530034E10Rik"  
+    ##  [3065] "Kdm4a"           "Ptprf"           "Szt2"            "Med8"           
+    ##  [3069] "Elovl1"          "Cdc20"           "Ebna1bp2"        "Slc2a1"         
+    ##  [3073] "Zfp691"          "Svbp"            "AU022252"        "P3h1"           
+    ##  [3077] "Ybx1"            "Ppih"            "Ccdc30"          "Ppcs"           
+    ##  [3081] "Rimkla"          "AA415398"        "Foxj3"           "Hivep3"         
+    ##  [3085] "Scmh1"           "Ctps"            "Cited4"          "Nfyc"           
+    ##  [3089] "Rims3"           "Exo5"            "Zfp69"           "Smap2"          
+    ##  [3093] "Zmpste24"        "Rlf"             "Ppt1"            "Cap1"           
+    ##  [3097] "Mfsd2a"          "Trit1"           "Ppie"            "Pabpc4"         
+    ##  [3101] "Macf1"           "Ndufs5"          "Akirin1"         "Mycbp"          
+    ##  [3105] "Rragc"           "Utp11l"          "Fhl3"            "Sf3a3"          
+    ##  [3109] "Inpp5b"          "Mtf1"            "1110065P20Rik"   "Yrdc"           
+    ##  [3113] "Maneal"          "Cdca8"           "Gnl2"            "Snip1"          
+    ##  [3117] "Gm12932"         "Meaf6"           "Zc3h12a"         "Mrps15"         
+    ##  [3121] "Lsm10"           "Stk40"           "Eva1b"           "Sh3d21"         
+    ##  [3125] "Thrap3"          "Map7d1"          "Trappc3"         "Adprhl2"        
+    ##  [3129] "Ago3"            "Ago1"            "Ago4"            "Clspn"          
+    ##  [3133] "5730409E04Rik"   "Psmb2"           "Ncdn"            "AU040320"       
+    ##  [3137] "Zmym4"           "Sfpq"            "Zmym1"           "Zmym6"          
+    ##  [3141] "Gm12942"         "Smim12"          "Zscan20"         "Tlr12"          
+    ##  [3145] "Phc2"            "Zfp362"          "Trim62"          "Ak2"            
+    ##  [3149] "Rnf19b"          "Fndc5"           "S100pbp"         "Yars"           
+    ##  [3153] "Gm12976"         "Rbbp4"           "Gm26722"         "Zbtb8os"        
+    ##  [3157] "Zbtb8a"          "Bsdc1"           "Marcksl1"        "Hdac1"          
+    ##  [3161] "Lck"             "Fam167b"         "Eif3i"           "Tmem234"        
+    ##  [3165] "Iqcc"            "Ccdc28b"         "Txlna"           "Kpna6"          
+    ##  [3169] "Tmem39b"         "Khdrbs1"         "Ptp4a2"          "Adgrb2"         
+    ##  [3173] "Pef1"            "Zcchc17"         "Snrnp40"         "Pum1"           
+    ##  [3177] "Sdc3"            "Laptm5"          "Mecr"            "Srsf4"          
+    ##  [3181] "Epb41"           "Ythdf2"          "Gmeb1"           "Gm28874"        
+    ##  [3185] "Taf12"           "Snhg12"          "Trnau1ap"        "Rcc1"           
+    ##  [3189] "Phactr4"         "Med18"           "Sesn2"           "Gm12981"        
+    ##  [3193] "Atpif1"          "Dnajc8"          "Ptafr"           "Eya3"           
+    ##  [3197] "Xkr8"            "Smpdl3b"         "Rpa2"            "Themis2"        
+    ##  [3201] "Ppp1r8"          "Stx12"           "Fam76a"          "Fgr"            
+    ##  [3205] "Ahdc1"           "Gm26615"         "Wasf2"           "Sytl1"          
+    ##  [3209] "Tmem222"         "Wdtc1"           "Slc9a1"          "Kdf1"           
+    ##  [3213] "Nudc"            "Gpatch3"         "Gpn2"            "Sfn"            
+    ##  [3217] "Zdhhc18"         "Pigv"            "Arid1a"          "Rps6ka1"        
+    ##  [3221] "Hmgn2"           "Dhdds"           "Zfp683"          "Aim1l"          
+    ##  [3225] "Cd52"            "Ubxn11"          "Sh3bgrl3"        "Cep85"          
+    ##  [3229] "Zfp593"          "Pdik1l"          "Pafah2"          "Stmn1"          
+    ##  [3233] "Paqr7"           "Aunip"           "Mtfr1l"          "Sepn1"          
+    ##  [3237] "Man1c1"          "Ldlrap1"         "Tmem57"          "Tmem50a"        
+    ##  [3241] "Rsrp1"           "Syf2"            "Gm16225"         "Runx3"          
+    ##  [3245] "Clic4"           "Srrm1"           "Ncmap"           "Rcan3"          
+    ##  [3249] "Nipal3"          "Myom3"           "Srsf10"          "Pnrc2"          
+    ##  [3253] "Cnr2"            "Fuca1"           "Hmgcl"           "Gale"           
+    ##  [3257] "Lypla2"          "Pithd1"          "Tceb3"           "Gm24362"        
+    ##  [3261] "Rpl11"           "Id3"             "E2f2"            "Tcea3"          
+    ##  [3265] "Zfp46"           "Hnrnpr"          "Gm27022"         "6030445D17Rik"  
+    ##  [3269] "Luzp1"           "Kdm1a"           "C1qb"            "C1qc"           
+    ##  [3273] "C1qa"            "Zbtb40"          "Wnt4"            "Cdc42"          
+    ##  [3277] "2810405F17Rik"   "Usp48"           "Rap1gap"         "Alpl"           
+    ##  [3281] "Ece1"            "Gm13012"         "Eif4g3"          "Hp1bp3"         
+    ##  [3285] "Sh2d5"           "Ddost"           "Pink1"           "Mul1"           
+    ##  [3289] "Camk2n1"         "Otud3"           "Tmco4"           "Minos1"         
+    ##  [3293] "Gm16287"         "Capzb"           "Pqlc2"           "Akr7a5"         
+    ##  [3297] "Mrto4"           "Emc1"            "Ubr4"            "2700016F22Rik"  
+    ##  [3301] "Iffo2"           "Aldh4a1"         "Rcc2"            "Padi4"          
+    ##  [3305] "Padi2"           "Sdhb"            "Atp13a2"         "Crocc"          
+    ##  [3309] "Necap2"          "Szrd1"           "Fbxo42"          "Gm13075"        
+    ##  [3313] "Zbtb17"          "Spen"            "Plekhm2"         "Ddi2"           
+    ##  [3317] "Dnajc16"         "Casp9"           "Efhd2"           "Fhad1"          
+    ##  [3321] "4930455G09Rik"   "Tmem51"          "Prdm2"           "Pramef8"        
+    ##  [3325] "Dhrs3"           "Vps13d"          "Tnfrsf1b"        "Tnfrsf8"        
+    ##  [3329] "Gm13212"         "Gm13166"         "Gm13251"         "Gm13248"        
+    ##  [3333] "Gm13139"         "Gm13157"         "Gm20707"         "Zfp933"         
+    ##  [3337] "Miip"            "Fv1"             "Mfn2"            "Plod1"          
+    ##  [3341] "2510039O18Rik"   "Clcn6"           "Mthfr"           "Agtrap"         
+    ##  [3345] "Mad2l2"          "Fbxo6"           "Fbxo44"          "Fbxo2"          
+    ##  [3349] "Ubiad1"          "Mtor"            "Exosc10"         "Srm"            
+    ##  [3353] "Masp2"           "Tardbp"          "Casz1"           "Gm13205"        
+    ##  [3357] "Pex14"           "Dffa"            "Cort"            "Apitd1"         
+    ##  [3361] "Pgd"             "Kif1b"           "Ube4b"           "Nmnat1"         
+    ##  [3365] "Lzic"            "Ctnnbip1"        "Clstn1"          "Pik3cd"         
+    ##  [3369] "Tmem201"         "Slc25a33"        "Spsb1"           "H6pd"           
+    ##  [3373] "Gpr157"          "Eno1"            "Rere"            "Gm13091"        
+    ##  [3377] "Errfi1"          "Park7"           "Tnfrsf9"         "Camta1"         
+    ##  [3381] "Per3"            "Vamp3"           "Dnajc11"         "Thap3"          
+    ##  [3385] "Phf13"           "Klhl21"          "Zbtb48"          "Nol9"           
+    ##  [3389] "Plekhg5"         "Tnfrsf25"        "Espn"            "Acot7"          
+    ##  [3393] "Icmt"            "Rpl22"           "Kcnab2"          "Nphp4"          
+    ##  [3397] "A430005L14Rik"   "Dffb"            "Cep104"          "Lrrc47"         
+    ##  [3401] "Wrap73"          "Tprgl"           "Arhgef16"        "Prdm16"         
+    ##  [3405] "Fam213b"         "Tnfrsf14"        "Hes5"            "Pank4"          
+    ##  [3409] "Pex10"           "Rer1"            "Morn1"           "Ski"            
+    ##  [3413] "Faap20"          "Prkcz"           "Cfap74"          "Gnb1"           
+    ##  [3417] "Nadk"            "Slc35e2"         "Cdk11b"          "Mib2"           
+    ##  [3421] "B930041F14Rik"   "Ssu72"           "1500002C15Rik"   "Tmem240"        
+    ##  [3425] "Atad3a"          "Atad3aos"        "Mrpl20"          "Ccnl2"          
+    ##  [3429] "Aurkaip1"        "Mxra8"           "Dvl1"            "Cptp"           
+    ##  [3433] "Cpsf3l"          "Pusl1"           "Acap3"           "Ube2j2"         
+    ##  [3437] "Fam132a"         "B3galt6"         "Sdf4"            "Tnfrsf4"        
+    ##  [3441] "Gm16008"         "Tnfrsf18"        "9430015G10Rik"   "Agrn"           
+    ##  [3445] "Isg15"           "AW011738"        "Plekhn1"         "Klhl17"         
+    ##  [3449] "Noc2l"           "Samd11"          "Cdk6"            "Gm17590"        
+    ##  [3453] "Fam133b"         "1700109H08Rik"   "Rbm48"           "2510017J16Rik"  
+    ##  [3457] "Pex1"            "4833413G10Rik"   "Gatad1"          "Ankib1"         
+    ##  [3461] "Krit1"           "Lrrd1"           "Mterf1a"         "Akap9"          
+    ##  [3465] "Cyp51"           "Mterf1b"         "Cdk14"           "Cldn12"         
+    ##  [3469] "Gtpbp10"         "Gm8773"          "Gm26825"         "Sri"            
+    ##  [3473] "Dbf4"            "Slc25a40"        "Rundc3b"         "Abcb1a"         
+    ##  [3477] "Gm5106"          "Abcb1b"          "Abcb4"           "Crot"           
+    ##  [3481] "Tmem243"         "Dmtf1"           "Gm8953"          "Magi2"          
+    ##  [3485] "Phtf2"           "Tmem60"          "Rsbn1l"          "A630072M18Rik"  
+    ##  [3489] "Ptpn12"          "Gsap"            "Ccdc146"         "Fgl2"           
+    ##  [3493] "Fam185a"         "Armc10"          "Napepld"         "Pmpcb"          
+    ##  [3497] "Dnajc2"          "Psmc2"           "Orc5"            "Lhfpl3"         
+    ##  [3501] "5031425E22Rik"   "4930580E04Rik"   "Kmt2e"           "Srpk2"          
+    ##  [3505] "Pus7"            "Rint1"           "Tomm7"           "2700038G22Rik"  
+    ##  [3509] "Fam126a"         "Klhl7"           "Nupl2"           "Kcnh2"          
+    ##  [3513] "Nos3"            "Atg9b"           "Abcb8"           "Cdk5"           
+    ##  [3517] "Slc4a2"          "Fastk"           "Tmub1"           "Agap3"          
+    ##  [3521] "Abcf2"           "Chpf2"           "Nub1"            "Crygn"          
+    ##  [3525] "Rheb"            "Prkag2"          "Galnt11"         "Kmt2c"          
+    ##  [3529] "4831440E17Rik"   "1700096K18Rik"   "Xrcc2"           "Actr3b"         
+    ##  [3533] "Paxip1"          "Insig1"          "Rbm33"           "Rnf32"          
+    ##  [3537] "Lmbr1"           "Nom1"            "Ube3c"           "Gm5129"         
+    ##  [3541] "Dnajb6"          "Tyms"            "Hadha"           "Hadhb"          
+    ##  [3545] "Ept1"            "Drc1"            "Slc35f6"         "Cenpa"          
+    ##  [3549] "Mapre3"          "Tmem214"         "Agbl5"           "Ost4"           
+    ##  [3553] "Emilin1"         "Khk"             "Preb"            "Slc5a6"         
+    ##  [3557] "Atraid"          "Cad"             "Mpv17"           "Gm29609"        
+    ##  [3561] "Gtf3c2"          "Eif2b4"          "Snx17"           "Zfp513"         
+    ##  [3565] "Ppm1g"           "Nrbp1"           "Krtcap3"         "Ift172"         
+    ##  [3569] "Zfp512"          "Gpn1"            "Supt7l"          "Slc4a1ap"       
+    ##  [3573] "Mrpl33"          "Rbks"            "Bre"             "Fosl2"          
+    ##  [3577] "Ppp1cb"          "Gm15614"         "Yes1"            "Pisd"           
+    ##  [3581] "Prr14l"          "Depdc5"          "Ywhah"           "Ctbp1"          
+    ##  [3585] "Maea"            "Uvssa"           "Fam53a"          "Gm9903"         
+    ##  [3589] "Slbp"            "Tmem129"         "Tacc3"           "Letm1"          
+    ##  [3593] "Whsc1"           "Nelfa"           "Gm1673"          "Poln"           
+    ##  [3597] "Haus3"           "Mxd4"            "Gm42846"         "Zfyve28"        
+    ##  [3601] "Rnf4"            "Fam193a"         "Tnip2"           "Sh3bp2"         
+    ##  [3605] "Add1"            "Mfsd10"          "Nop14"           "Grk4"           
+    ##  [3609] "Htt"             "Rgs12"           "Hgfac"           "Lrpap1"         
+    ##  [3613] "Trmt44"          "Acox3"           "Ablim2"          "Afap1"          
+    ##  [3617] "Sorcs2"          "2210406O10Rik"   "Grpel1"          "Tada2b"         
+    ##  [3621] "Tbc1d14"         "D5Ertd579e"      "Bloc1s4"         "Mrfap1"         
+    ##  [3625] "Man2b2"          "Ppp2r2c"         "Wfs1"            "Jakmip1"        
+    ##  [3629] "Gm1043"          "Crmp1"           "Stx18"           "Nsg1"           
+    ##  [3633] "Zbtb49"          "Lyar"            "Tmem128"         "Slc2a9"         
+    ##  [3637] "Wdr1"            "Zfp518b"         "Rab28"           "Bod1l"          
+    ##  [3641] "Gm16223"         "Cpeb2"           "Cc2d2a"          "Fbxl5"          
+    ##  [3645] "Gm42555"         "Bst1"            "Cd38"            "Gm7879"         
+    ##  [3649] "Tapt1"           "Qdpr"            "Lap3"            "Med28"          
+    ##  [3653] "Ncapg"           "Lcorl"           "Pacrgl"          "Dhx15"          
+    ##  [3657] "Sepsecs"         "Pi4k2b"          "Zcchc4"          "Anapc4"         
+    ##  [3661] "Smim20"          "Smim20.1"        "Rbpj"            "Tbc1d19"        
+    ##  [3665] "Stim2"           "Gm43042"         "Arap2"           "Rell1"          
+    ##  [3669] "Pgm1"            "Tbc1d1"          "1700027F09Rik"   "Klf3"           
+    ##  [3673] "Tlr1"            "Tlr6"            "Tmem156"         "Klhl5"          
+    ##  [3677] "Wdr19"           "Rfc1"            "Rpl9"            "Lias"           
+    ##  [3681] "Ugdh"            "Smim14"          "Ube2k"           "Gm42726"        
+    ##  [3685] "Pds5a"           "N4bp2"           "Rhoh"            "Rbm47"          
+    ##  [3689] "Nsun7"           "Apbb2"           "Gm42670"         "Tmem33"         
+    ##  [3693] "Slc30a9"         "Gm43698"         "Bend4"           "Atp8a1"         
+    ##  [3697] "Guf1"            "Gnpda2"          "Gabrb1"          "Commd8"         
+    ##  [3701] "Corin"           "Nfxl1"           "Cnga1"           "Nipal1"         
+    ##  [3705] "Txk"             "Tec"             "Slain2"          "Fryl"           
+    ##  [3709] "Ociad1"          "Ociad2"          "Dcun1d4"         "Sgcb"           
+    ##  [3713] "Usp46"           "Dancr"           "Dancr.1"         "Rasl11b"        
+    ##  [3717] "Scfd2"           "Fip1l1"          "Chic2"           "Kit"            
+    ##  [3721] "Srd5a3"          "Tmem165"         "Clock"           "Gm7467"         
+    ##  [3725] "Exoc1"           "Cep135"          "C530008M17Rik"   "Aasdh"          
+    ##  [3729] "Ppat"            "Paics"           "Srp72"           "Hopx"           
+    ##  [3733] "Rest"            "Noa1"            "Polr2b"          "Igfbp7"         
+    ##  [3737] "Cenpc1"          "Stap1"           "Uba6"            "Gm43057"        
+    ##  [3741] "Ythdc1"          "Jchain"          "Utp3"            "Rufy3"          
+    ##  [3745] "Grsf1"           "Mob1b"           "Dck"             "Cox18"          
+    ##  [3749] "Ankrd17"         "Gm9958"          "Mthfd2l"         "Areg"           
+    ##  [3753] "Btc"             "Rchy1"           "Cdkl2"           "Gm26582"        
+    ##  [3757] "G3bp2"           "Uso1"            "Naaa"            "Sdad1"          
+    ##  [3761] "Cxcl10"          "Nup54"           "Scarb2"          "Stbd1"          
+    ##  [3765] "Sept11"          "Ccni"            "2010109A12Rik"   "Ccng2"          
+    ##  [3769] "Cnot6l"          "Mrpl1"           "Gm8013"          "Bmp2k"          
+    ##  [3773] "Paqr3"           "Antxr2"          "Rasgef1b"        "A930011G23Rik"  
+    ##  [3777] "Hnrnpd"          "Gm17092"         "4930524J08Rik"   "Hnrnpdl"        
+    ##  [3781] "Enoph1"          "Sec31a"          "5430416N02Rik"   "Lin54"          
+    ##  [3785] "Cops4"           "Plac8"           "Coq2"            "Hpse"           
+    ##  [3789] "Helq"            "Mrps18c"         "Fam175a"         "Agpat9"         
+    ##  [3793] "Ptpn13"          "Aff1"            "Klhl8"           "Hsd17b11"       
+    ##  [3797] "Nudt9"           "Spp1"            "Pkd2"            "BC005561"       
+    ##  [3801] "D930016D06Rik"   "Zfp951"          "Abcg3"           "Gbp8"           
+    ##  [3805] "Gbp9"            "Gbp4"            "Gbp6"            "Gbp10"          
+    ##  [3809] "Gbp6.1"          "Lrrc8b"          "Lrrc8c"          "Lrrc8d"         
+    ##  [3813] "Zfp326"          "Zfp644"          "Cdc7"            "Tgfbr3"         
+    ##  [3817] "Brdt"            "Btbd8"           "A830010M20Rik"   "Gm42669"        
+    ##  [3821] "1700028K03Rik"   "Glmn"            "Rpap2"           "Gm26692"        
+    ##  [3825] "4930428O21Rik"   "Gfi1"            "Evi5"            "Rpl5"           
+    ##  [3829] "Fam69a"          "Mtf2"            "Tmed5"           "Ccdc18"         
+    ##  [3833] "Dr1"             "Pigg"            "Atp5k"           "Pcgf3"          
+    ##  [3837] "Gak"             "Tmem175"         "Dgkq"            "Idua"           
+    ##  [3841] "Crlf2"           "5430403G16Rik"   "4930522L14Rik"   "Gm15446"        
+    ##  [3845] "1010001B22Rik"   "Zfp932"          "Plcxd1"          "Gtpbp6"         
+    ##  [3849] "Zfp605"          "Chfr"            "Golga3"          "Gm43137"        
+    ##  [3853] "Ankle2"          "Pgam5"           "Gm26718"         "Pxmp2"          
+    ##  [3857] "Pole"            "Fbrsl1"          "A630023P12Rik"   "Galnt9"         
+    ##  [3861] "Noc4l"           "Ddx51"           "Gm42595"         "Ep400"          
+    ##  [3865] "Gm15559"         "Pus1"            "Gm26515"         "Ulk1"           
+    ##  [3869] "Hscb"            "Chek2"           "Ttc28"           "Pitpnb"         
+    ##  [3873] "Crybb1"          "Tpst2"           "Tfip11"          "Srrd"           
+    ##  [3877] "Hps4"            "2900026A02Rik"   "Wscd2"           "Cmklr1"         
+    ##  [3881] "Ficd"            "Sart3"           "Iscu"            "Selplg"         
+    ##  [3885] "Coro1c"          "Ssh1"            "Usp30"           "Alkbh2"         
+    ##  [3889] "Ung"             "Acacb"           "Myo1h"           "Kctd10"         
+    ##  [3893] "Ube3b"           "Mmab"            "Mvk"             "Fam222a"        
+    ##  [3897] "Trpv4"           "Gltp"            "Tchp"            "Git2"           
+    ##  [3901] "4930515G01Rik"   "Ankrd13a"        "1500011B03Rik"   "2610524H06Rik"  
+    ##  [3905] "Oasl2"           "Gm13822"         "Oasl1"           "2210016L21Rik"  
+    ##  [3909] "Sppl3"           "Gm10401"         "Acads"           "Unc119b"        
+    ##  [3913] "Mlec"            "Pop5"            "Rnf10"           "Coq5"           
+    ##  [3917] "Dynll1"          "Gm13830"         "Srsf9"           "Gatc"           
+    ##  [3921] "Triap1"          "Cox6a1"          "Gm13832"         "Msi1"           
+    ##  [3925] "Sirt4"           "Pxn"             "Rplp0"           "Gcn1l1"         
+    ##  [3929] "1110006O24Rik"   "Rab35"           "Ccdc64"          "Cit"            
+    ##  [3933] "Gm14508"         "Prkab1"          "Gm13842"         "Suds3"          
+    ##  [3937] "Taok3"           "Pebp1"           "BC051077"        "Gm10399"        
+    ##  [3941] "Vsig10"          "Wsb2"            "Rfc5"            "Ksr2"           
+    ##  [3945] "Fbxo21"          "Tesc"            "Fbxw8"           "Rnft2"          
+    ##  [3949] "2410131K14Rik"   "Med13l"          "Rbm19"           "Plbd2"          
+    ##  [3953] "Slc8b1"          "Tpcn1"           "Rita1"           "Ddx54"          
+    ##  [3957] "Gm43579"         "Rasal1"          "Dtx1"            "Oas2"           
+    ##  [3961] "Oas3"            "Oas1c"           "Oas1a"           "Rph3a"          
+    ##  [3965] "Ptpn11"          "Rpl6"            "Gm15800"         "Trafd1"         
+    ##  [3969] "Naa25"           "Erp29"           "Tmem116"         "Mapkapk5"       
+    ##  [3973] "Aldh2"           "Acad12"          "Acad10"          "Brap"           
+    ##  [3977] "Atxn2"           "Gm16552"         "Sh2b3"           "Fam109a"        
+    ##  [3981] "Ccdc63"          "Ppp1cc"          "Hvcn1"           "Tctn1"          
+    ##  [3985] "Pptc7"           "Rad9b"           "Vps29"           "Fam216a"        
+    ##  [3989] "Gpn3"            "Arpc3"           "Anapc7"          "Atp2a2"         
+    ##  [3993] "Ift81"           "P2rx7"           "P2rx4"           "Camkk2"         
+    ##  [3997] "Anapc5"          "Rnf34"           "Kdm2b"           "A930024E05Rik"  
+    ##  [4001] "Gm2479"          "Orai1"           "Tmem120b"        "Rhof"           
+    ##  [4005] "AI480526"        "4932422M17Rik"   "Setd1b"          "Psmd9"          
+    ##  [4009] "Wdr66"           "Gm15860"         "Bcl7a"           "Gm15747"        
+    ##  [4013] "Mlxip"           "Diablo"          "B3gnt4"          "Vps33a"         
+    ##  [4017] "Clip1"           "Zcchc8"          "Rsrc2"           "Kntc1"          
+    ##  [4021] "Denr"            "Ccdc62"          "Hip1r"           "Vps37b"         
+    ##  [4025] "Gm34086"         "Gm43661"         "Abcb9"           "Gm16001"        
+    ##  [4029] "Ogfod2"          "Arl6ip4"         "Pitpnm2"         "Pitpnm2os2"     
+    ##  [4033] "Mphosph9"        "2810006K23Rik"   "Cdk2ap1"         "Sbno1"          
+    ##  [4037] "Setd8"           "Rilpl2"          "Snrnp35"         "Rilpl1"         
+    ##  [4041] "Tmed2"           "Ddx55"           "Eif2b1"          "Gtf2h3"         
+    ##  [4045] "Atp6v0a2"        "Ccdc92"          "Zfp664"          "Ncor2"          
+    ##  [4049] "Scarb1"          "Ubc"             "Gm10382"         "Dhx37"          
+    ##  [4053] "Bri3bp"          "Aacs"            "Slc15a4"         "Stx2"           
+    ##  [4057] "Ran"             "Sfswap"          "Mmp17"           "Zfp11"          
+    ##  [4061] "Mrps17"          "Gbas"            "Psph"            "Sumf2"          
+    ##  [4065] "Phkg1"           "Chchd2"          "Zbed5"           "Nupr1l"         
+    ##  [4069] "Vkorc1l1"        "Gusb"            "Asl"             "Crcp"           
+    ##  [4073] "Tpst1"           "Kctd7"           "Rabgef1"         "Tmem248"        
+    ##  [4077] "Gm42469"         "Sbds"            "Tyw1"            "Auts2"          
+    ##  [4081] "Gatsl2"          "Wbscr16"         "Gtf2ird2"        "Ncf1"           
+    ##  [4085] "Gtf2i"           "Gtf2ird1"        "Clip2"           "Rfc2"           
+    ##  [4089] "Lat2"            "Eif4h"           "Limk1"           "Gm10369"        
+    ##  [4093] "Wbscr27"         "Abhd11"          "Stx1a"           "Wbscr22"        
+    ##  [4097] "Dnajc30"         "Tbl2"            "Bcl7b"           "Baz1b"          
+    ##  [4101] "Nsun5"           "Pom121"          "Hip1"            "Rhbdd2"         
+    ##  [4105] "Por"             "Tmem120a"        "Styxl1"          "Mdh2"           
+    ##  [4109] "Hspb1"           "Ywhag"           "Ssc4d"           "Dtx2"           
+    ##  [4113] "Rasa4"           "Polr2j"          "Lrwd1"           "Alkbh4"         
+    ##  [4117] "Orai2"           "Prkrip1"         "Cux1"            "Ift22"          
+    ##  [4121] "4933404O12Rik"   "Fis1"            "Znhit1"          "Plod3"          
+    ##  [4125] "Ap1s1"           "Trim56"          "Muc3a"           "Ufsp1"          
+    ##  [4129] "Srrt"            "Trip6"           "Slc12a9"         "Zan"            
+    ##  [4133] "Pop7"            "9130604C24Rik"   "Gigyf1"          "Gnb2"           
+    ##  [4137] "Mospd3"          "Gm36266"         "Lrch4"           "Gm20605"        
+    ##  [4141] "Sap25"           "Agfg2"           "Nyap1"           "Tsc22d4"        
+    ##  [4145] "Ppp1r35"         "Mepce"           "Zcwpw1"          "Pilrb1"         
+    ##  [4149] "Zkscan1"         "Zscan21"         "Zfp113"          "Cops6"          
+    ##  [4153] "Mcm7"            "Ap4m1"           "Taf6"            "Cnpy4"          
+    ##  [4157] "Mblac1"          "Lamtor4"         "BC037034"        "6330418K02Rik"  
+    ##  [4161] "Gm10874"         "Zfp157"          "Zfp68"           "A430033K04Rik"  
+    ##  [4165] "Dnaaf5"          "Sun1"            "Get4"            "Adap1"          
+    ##  [4169] "Cox19"           "3110082I17Rik"   "Gpr146"          "Zfand2a"        
+    ##  [4173] "Ints1"           "Mafk"            "Psmg3"           "Mad1l1"         
+    ##  [4177] "Nudt1"           "Ftsj2"           "Snx8"            "Eif3b"          
+    ##  [4181] "Chst12"          "Grifin"          "Gm43703"         "Lfng"           
+    ##  [4185] "Ttyh3"           "Iqce"            "Brat1"           "Amz1"           
+    ##  [4189] "Gna12"           "Card11"          "Foxk1"           "Ap5z1"          
+    ##  [4193] "Wipi2"           "Slc29a4"         "Tnrc18"          "Fbxl18"         
+    ##  [4197] "Actb"            "Rnf216"          "Rbak"            "Zfp12"          
+    ##  [4201] "Zfp316"          "E130309D02Rik"   "Zdhhc4"          "0610040B10Rik"  
+    ##  [4205] "Kdelr2"          "Daglb"           "Rac1"            "Fam220a"        
+    ##  [4209] "Cyth3"           "Usp42"           "D130017N08Rik"   "Eif2ak1"        
+    ##  [4213] "Ankrd61"         "Aimp2"           "Pms2"            "Ccz1"           
+    ##  [4217] "Lmtk2"           "Tecpr1"          "Bri3"            "Trrap"          
+    ##  [4221] "Smurf1"          "Arpc1a"          "Arpc1b"          "Pdap1"          
+    ##  [4225] "Bud31"           "Ptcd1"           "Cpsf4"           "Atp5j2"         
+    ##  [4229] "Zkscan14"        "Zkscan5"         "Zfp655"          "Zscan25"        
+    ##  [4233] "B230303O12Rik"   "Gm43625"         "Rnf6"            "Cdk8"           
+    ##  [4237] "Usp12"           "Rpl21"           "Rasl11a"         "Gtf3a"          
+    ##  [4241] "Mtif3"           "Lnx2"            "Polr1d"          "D5Ertd605e"     
+    ##  [4245] "Pan3"            "Pomp"            "Slc46a3"         "Mtus2"          
+    ##  [4249] "Slc7a1"          "Ubl3"            "2210417A02Rik"   "Katnal1"        
+    ##  [4253] "5930430L01Rik"   "Hmgb1"           "5730422E09Rik"   "Gm43332"        
+    ##  [4257] "Uspl1"           "2310047D07Rik"   "Alox5ap"         "Medag"          
+    ##  [4261] "Tex26"           "Wdr95"           "Hsph1"           "B3glct"         
+    ##  [4265] "Fry"             "Brca2"           "Gm42529"         "N4bp2l1"        
+    ##  [4269] "Gm43598"         "Gm43597"         "N4bp2l2"         "Pds5b"          
+    ##  [4273] "D730045B01Rik"   "Rfc3"            "Samd9l"          "Vps50"          
+    ##  [4277] "Bet1"            "Casd1"           "Pon3"            "Pon2"           
+    ##  [4281] "Slc25a13"        "Shfm1"           "Sdhaf3"          "Asns"           
+    ##  [4285] "C1galt1"         "Mios"            "Rpa3"            "Umad1"          
+    ##  [4289] "Glcci1"          "Ica1"            "Ndufa4"          "Phf14"          
+    ##  [4293] "Tmem106b"        "Tmem168"         "B630005N14Rik"   "2610001J05Rik"  
+    ##  [4297] "1110019D14Rik"   "Mdfic"           "Gm15473"         "Tes"            
+    ##  [4301] "Cav2"            "Capza2"          "St7"             "Gm26809"        
+    ##  [4305] "Gm20186"         "Lsm8"            "Ing3"            "Fam3c"          
+    ##  [4309] "Ndufa5"          "Wasl"            "Pot1a"           "Zfp800"         
+    ##  [4313] "Gcc1"            "Arf5"            "Snd1"            "Rbm28"          
+    ##  [4317] "Impdh1"          "Hilpda"          "Fam71f2"         "Calu"           
+    ##  [4321] "Ccdc136"         "Atp6v1f"         "Irf5"            "Tnpo3"          
+    ##  [4325] "Ahcyl2"          "Smkr-ps"         "Nrf1"            "Ube2h"          
+    ##  [4329] "Zc3hc1"          "Klhdc10"         "Tmem209"         "Cep41"          
+    ##  [4333] "Mest"            "Copg2"           "Lncpint"         "Mkln1os"        
+    ##  [4337] "Mkln1"           "Chchd3"          "Exoc4"           "Slc35b4"        
+    ##  [4341] "Akr1b3"          "Akr1b8"          "Akr1b10"         "Bpgm"           
+    ##  [4345] "Agbl3"           "Tmem140"         "3110062M04Rik"   "Wdr91"          
+    ##  [4349] "Cnot4"           "Nup205"          "1810058I24Rik"   "Mtpn"           
+    ##  [4353] "Creb3l2"         "Trim24"          "Zc3hav1l"        "Zc3hav1"        
+    ##  [4357] "Ubn2"            "1110001J03Rik"   "Luc7l2"          "Gm26699"        
+    ##  [4361] "Hipk2"           "Parp12"          "Kdm7a"           "Slc37a3"        
+    ##  [4365] "Rab19"           "Mkrn1"           "Gm10244"         "Adck2"          
+    ##  [4369] "Ndufb2"          "Braf"            "Mrps33"          "Agk"            
+    ##  [4373] "E330009J07Rik"   "Ssbp1"           "Trbv1"           "Gm2663"         
+    ##  [4377] "2210010C04Rik"   "Trbv2"           "Trbv3"           "Trbv4"          
+    ##  [4381] "Trbv5"           "Trbv13-1"        "Trbv12-2"        "Trbv13-2"       
+    ##  [4385] "Trbv13-3"        "Trbv14"          "Trbv16"          "Trbv17"         
+    ##  [4389] "Trbv19"          "Trbv20"          "Trbv29"          "Prss2"          
+    ##  [4393] "Trbc1"           "Trbc2"           "Trbv31"          "Ephb6"          
+    ##  [4397] "Gstk1"           "Casp2"           "Zyx"             "Arhgef5"        
+    ##  [4401] "Tpk1"            "Cul1"            "Ezh2"            "Gm26625"        
+    ##  [4405] "Pdia4"           "Zfp398"          "Zfp282"          "Zfp212"         
+    ##  [4409] "Zfp956"          "Zfp777"          "Zfp746"          "Gm16630"        
+    ##  [4413] "Krba1"           "Zfp467"          "Atp6v0e2"        "Lrrc61"         
+    ##  [4417] "Gm5111"          "Repin1"          "Zfp775"          "AI854703"       
+    ##  [4421] "Gimap8"          "Gimap9"          "Gimap4"          "Gimap6"         
+    ##  [4425] "Gm28053"         "Gimap7"          "Gimap1"          "Gimap5"         
+    ##  [4429] "4833403J16Rik"   "Gimap3"          "Tmem176b"        "Tmem176a"       
+    ##  [4433] "Malsu1"          "Igf2bp3"         "Tra2a"           "Ccdc126"        
+    ##  [4437] "Fam221a"         "Mpp6"            "Dfna5"           "Osbpl3"         
+    ##  [4441] "Cycs"            "5430402O13Rik"   "4921507P07Rik"   "Hnrnpa2b1"      
+    ##  [4445] "Cbx3"            "Snx10"           "Skap2"           "Hotairm1"       
+    ##  [4449] "Gm15050"         "Hoxaas3"         "Hibadh"          "Tax1bp1"        
+    ##  [4453] "Jazf1"           "Chn2"            "9530036M11Rik"   "Plekha8"        
+    ##  [4457] "Gm28402"         "Mturn"           "Znrf2"           "Nod1"           
+    ##  [4461] "Ggct"            "Gars"            "Lsm5"            "Avl9"           
+    ##  [4465] "Kbtbd2"          "Nt5c3"           "Ppm1k"           "Herc6"          
+    ##  [4469] "Pyurf"           "Lancl2"          "Vopp1"           "Abcg2"          
+    ##  [4473] "Herc3"           "Tigd2"           "Gprin3"          "Smarcad1"       
+    ##  [4477] "Hpgds"           "Tnip3"           "Ndnf"            "Prdm5"          
+    ##  [4481] "Mad2l1"          "Gng12"           "Gadd45a"         "Serbp1"         
+    ##  [4485] "Il12rb2"         "Gm43291"         "Igkc"            "Rpia"           
+    ##  [4489] "Eif2ak3"         "Thnsl2"          "Smyd1"           "Krcc1"          
+    ##  [4493] "Cd8b1"           "Gm44175"         "Cd8a"            "Rmnd5a"         
+    ##  [4497] "Rnf103"          "Chmp3"           "Kdm3a"           "Mrpl35"         
+    ##  [4501] "Immt"            "Ptcd3"           "Polr1a"          "St3gal5"        
+    ##  [4505] "Usp39"           "RP23-60P18.10"   "0610030E20Rik"   "Tmem150a"       
+    ##  [4509] "Rnf181"          "Vamp5"           "Vamp8"           "Ggcx"           
+    ##  [4513] "Mat2a"           "Capg"            "Elmod3"          "Retsat"         
+    ##  [4517] "Tgoln1"          "Tcf7l1"          "Gm15401"         "Kcmf1"          
+    ##  [4521] "Gm26640"         "Tmsb10"          "Suclg1"          "Gm9008"         
+    ##  [4525] "Gcfc2"           "Mrpl19"          "Pole4"           "Hk2"            
+    ##  [4529] "Sema4f"          "Dok1"            "Htra2"           "Aup1"           
+    ##  [4533] "Dqx1"            "Pcgf1"           "Lbx2"            "Ccdc142os"      
+    ##  [4537] "Mrpl53"          "Mogs"            "Wbp1"            "Ino80b"         
+    ##  [4541] "Wdr54"           "Dctn1"           "Mthfd2"          "Mob1a"          
+    ##  [4545] "Bola3"           "Tet3"            "Dguok"           "Actg2"          
+    ##  [4549] "Stambp"          "Vax2"            "Tex261"          "Nagk"           
+    ##  [4553] "Paip2b"          "Zfp638"          "Exoc6b"          "Spr"            
+    ##  [4557] "Sfxn5"           "Rab11fip5"       "Smyd5"           "Pradc1"         
+    ##  [4561] "Cct7"            "Fbxo41"          "Egr4"            "Alms1"          
+    ##  [4565] "1700019G17Rik"   "Cml1"            "Tprkb"           "Dusp11"         
+    ##  [4569] "Gm19265"         "Fam136a"         "Snrpg"           "Pcyox1"         
+    ##  [4573] "Tia1"            "C87436"          "A430078I02Rik"   "2310040G24Rik"  
+    ##  [4577] "Pcbp1"           "1600020E01Rik"   "Mxd1"            "Snrnp27"        
+    ##  [4581] "Gmcl1"           "Anxa4"           "Aak1"            "Nfu1"           
+    ##  [4585] "Gfpt1"           "Arhgap25"        "Aplf"            "Rab43"          
+    ##  [4589] "Isy1"            "Cnbp"            "Copg1"           "Hmces"          
+    ##  [4593] "H1fx"            "Rab7"            "Rpn1"            "Eefsec"         
+    ##  [4597] "Gm44264"         "Ruvbl1"          "Sec61a1"         "Mgll"           
+    ##  [4601] "Abtb1"           "Mcm2"            "Tpra1"           "Plxna1"         
+    ##  [4605] "Chchd6"          "Txnrd3"          "Zxdc"            "Slc41a3"        
+    ##  [4609] "Iqsec1"          "Nup210"          "Hdac11"          "4930471M09Rik"  
+    ##  [4613] "1810044D09Rik"   "Chchd4"          "Tmem43"          "Xpc"            
+    ##  [4617] "Lsm3"            "Slc6a6"          "Ccdc174"         "4930590J08Rik"  
+    ##  [4621] "Nr2c2"           "Mrps25"          "Rbsn"            "Magi1"          
+    ##  [4625] "Slc25a26"        "Lrig1"           "Kbtbd8"          "Suclg2"         
+    ##  [4629] "Eogt"            "Tmf1"            "Uba3"            "Arl6ip5"        
+    ##  [4633] "Frmd4b"          "Mitf"            "Foxp1"           "Gm20696"        
+    ##  [4637] "Eif4e3"          "Rybp"            "Shq1"            "Gxylt2"         
+    ##  [4641] "Ppp4r2"          "Pdzrn3"          "Trnt1"           "Crbn"           
+    ##  [4645] "Setmar"          "Sumf1"           "Itpr1"           "Bhlhe40"        
+    ##  [4649] "Arl8b"           "Edem1"           "Rad18"           "Gm26799"        
+    ##  [4653] "Srgap3"          "Thumpd3"         "Gt(ROSA)26Sor"   "Setd5"          
+    ##  [4657] "Lhfpl4"          "Mtmr14"          "Brpf1"           "Gm15492"        
+    ##  [4661] "Ogg1"            "Camk1"           "Tada3"           "Arpc4"          
+    ##  [4665] "Ttll3"           "Rpusd3"          "Jagn1"           "Il17re"         
+    ##  [4669] "Il17rc"          "Creld1"          "Prrt3"           "Emc3"           
+    ##  [4673] "Fancd2"          "Brk1"            "Vhl"             "Irak2"          
+    ##  [4677] "Tatdn2"          "Gm26982"         "Sec13"           "Atg7"           
+    ##  [4681] "Vgll4"           "Tamm41"          "Pparg"           "Tsen2"          
+    ##  [4685] "Mkrn2"           "Raf1"            "Cand2"           "Rpl32"          
+    ##  [4689] "Mbd4"            "Ift122"          "Plxnd1"          "Tmcc1"          
+    ##  [4693] "Fam21"           "Zfand4"          "Zfand4.1"        "Gm5580"         
+    ##  [4697] "Zfp422"          "Rassf4"          "Zfp637"          "Zfp239"         
+    ##  [4701] "Hnrnpf"          "Fxyd4"           "Rasgef1a"        "Csgalnact2"     
+    ##  [4705] "Ret"             "Bms1"            "Zfp248"          "Ankrd26"        
+    ##  [4709] "Dcp1b"           "Cacna2d4"        "Adipor2"         "Wnt5b"          
+    ##  [4713] "Fbxl14"          "Erc1"            "Rad52"           "Wnk1"           
+    ##  [4717] "Ninj2"           "Ccdc77"          "Kdm5a"           "Il17ra"         
+    ##  [4721] "Cecr5"           "Atp6v1e1"        "Bcl2l13"         "Bid"            
+    ##  [4725] "Mical3"          "Pex26"           "Usp18"           "Gm44148"        
+    ##  [4729] "Slc6a13"         "Klrg1"           "M6pr"            "Phc1"           
+    ##  [4733] "Apobec1"         "Slc2a3"          "Gm26826"         "Foxj2"          
+    ##  [4737] "Necap1"          "Pex5"            "Clstn3"          "Lpcat3"         
+    ##  [4741] "Emg1"            "Phb2"            "Ptpn6"           "Gm20531"        
+    ##  [4745] "Grcc10"          "Atn1.1"          "Eno2"            "Lrrc23"         
+    ##  [4749] "Spsb2"           "Tpi1"            "Usp5"            "Cdca3"          
+    ##  [4753] "P3h3"            "Gpr162"          "Cd4"             "Lag3"           
+    ##  [4757] "Ptms"            "Mlf2"            "Cops7a"          "Pianp"          
+    ##  [4761] "Zfp384"          "Ing4"            "Acrbp"           "Chd4"           
+    ##  [4765] "Nop2"            "Iffo1"           "Gapdh"           "Ncapd2"         
+    ##  [4769] "Mrpl51"          "Vamp1"           "Tapbpl"          "Cd27"           
+    ##  [4773] "Tnfrsf1a"        "Cd9"             "Gm28809"         "Ndufa9"         
+    ##  [4777] "Gm42574"         "Dyrk4"           "Rad51ap1"        "D6Wsu163e"      
+    ##  [4781] "Tigar"           "Ccnd2"           "9330179D12Rik"   "Parp11"         
+    ##  [4785] "Tspan9"          "Gm10010"         "Tulp3"           "Rhno1"          
+    ##  [4789] "Foxm1"           "Itfg2"           "Fkbp4"           "Gm10069"        
+    ##  [4793] "Klrb1a"          "Klrb1c"          "Klrb1b"          "Gm44066"        
+    ##  [4797] "Gm44067"         "Gm26656"         "BC035044"        "Clec2i"         
+    ##  [4801] "Clec2g"          "Gm15987"         "Klrb1f"          "Clec2d"         
+    ##  [4805] "2310001H17Rik"   "Cd69"            "Clec12a"         "Gabarapl1"      
+    ##  [4809] "Klre1"           "Klrd1"           "Klrk1"           "Klrc3"          
+    ##  [4813] "Klrc2"           "Klrc1"           "Klri1"           "Klri2"          
+    ##  [4817] "Gm156"           "Klra5"           "Klra7"           "Klra3"          
+    ##  [4821] "Klra1"           "Magohb"          "Ybx3"            "Smim10l1"       
+    ##  [4825] "Etv6"            "Bcl2l14"         "Lrp6"            "Gm43949"        
+    ##  [4829] "Mansc1"          "Borcs5"          "Dusp16"          "Crebl2"         
+    ##  [4833] "Gpr19"           "2810454H06Rik"   "Cdkn1b"          "Gm44238"        
+    ##  [4837] "Lockd"           "Ddx47"           "Gprc5a"          "Hebp1"          
+    ##  [4841] "Fam234b"         "Emp1"            "Gm8994"          "Atf7ip"         
+    ##  [4845] "Hist4h4"         "H2afj"           "Wbp11"           "BC049715"       
+    ##  [4849] "Art4"            "Erp27"           "Arhgdib"         "Eps8"           
+    ##  [4853] "Strap"           "Dera"            "Plekha5"         "Aebp2"          
+    ##  [4857] "Pyroxd1"         "Recql"           "Golt1b"          "Spx"            
+    ##  [4861] "Ldhb"            "Kcnj8"           "Cmas"            "St8sia1"        
+    ##  [4865] "C2cd5"           "Etnk1"           "Bcat1"           "Lrmp"           
+    ##  [4869] "Casc1"           "Lyrm5"           "Kras"            "Gm15706"        
+    ##  [4873] "Rassf8"          "Itpr2"           "Asun"            "Fgfr1op2"       
+    ##  [4877] "Tm7sf3"          "Med21"           "Stk38l"          "Arntl2"         
+    ##  [4881] "Ppfibp1"         "Rep15"           "Mrps35"          "Klhl42"         
+    ##  [4885] "Ccdc91"          "Ergic2"          "Ipo8"            "Caprin2"        
+    ##  [4889] "Fam60a"          "3010003L21Rik"   "Dennd5b"         "Mettl20"        
+    ##  [4893] "Amn1"            "2810474O19Rik"   "Bicd1"           "Gm21814"        
+    ##  [4897] "Myadm"           "Ndufa3"          "Tfpt"            "Prpf31"         
+    ##  [4901] "Cnot3"           "Leng1"           "Tmc4"            "Gm15929"        
+    ##  [4905] "Mboat7"          "Tsen34"          "Rps9"            "Lair1"          
+    ##  [4909] "D030047H15Rik"   "Leng8"           "Leng9"           "Ncr1"           
+    ##  [4913] "Rdh13"           "Ppp1r12c"        "Tnnt1"           "Dnaaf3"         
+    ##  [4917] "Tmem86b"         "Ppp6r1"          "Hspbp1"          "Suv420h2"       
+    ##  [4921] "Cox6b2"          "Tmem238"         "Rpl28"           "Ube2s"          
+    ##  [4925] "Isoc2b"          "Isoc2a"          "Zfp628"          "Nat14"          
+    ##  [4929] "Zfp579"          "Fiz1"            "Zfp524"          "Zfp865"         
+    ##  [4933] "Ccdc106"         "Zfp784"          "Zfp580"          "U2af2"          
+    ##  [4937] "Epn1"            "Zfp787"          "Zfp444"          "Zfp667"         
+    ##  [4941] "Zfp583"          "Zfp78"           "Zfp28"           "Zfp954"         
+    ##  [4945] "Zfp773"          "Zfp418"          "Zfp772"          "Clcn4"          
+    ##  [4949] "Zik1"            "Zfp551"          "Zfp606"          "Zscan18"        
+    ##  [4953] "Zfp329"          "Zfp110"          "Zfp128"          "Zscan22"        
+    ##  [4957] "Rps5"            "Rnf225"          "1810019N24Rik"   "Zfp324"         
+    ##  [4961] "Zfp446"          "Zbtb45"          "Trim28"          "Chmp2a"         
+    ##  [4965] "Ube2m"           "6330408A02Rik"   "Lig1"            "Sepw1"          
+    ##  [4969] "Gltscr2"         "Gltscr1"         "Napa"            "Kptn"           
+    ##  [4973] "Meis3"           "Dhx34"           "Inafm1"          "Ccdc9"          
+    ##  [4977] "Bbc3"            "Sae1"            "Zc3h4"           "Tmem160"        
+    ##  [4981] "Arhgap35"        "Ap2s1"           "Slc1a5"          "Fkrp"           
+    ##  [4985] "Strn4"           "Prkd2"           "Ptgir"           "Calm3"          
+    ##  [4989] "Ppp5c"           "Pglyrp1"         "Ccdc61"          "Mypop"          
+    ##  [4993] "Mypopos"         "Irf2bp1"         "Sympk"           "Six5"           
+    ##  [4997] "Fbxo46"          "Qpctl"           "Snrpd2"          "Eml2"           
+    ##  [5001] "Opa3"            "Vasp"            "1700058P15Rik"   "Ppm1n"          
+    ##  [5005] "Gm26802"         "Fosb"            "Ercc1"           "Cd3eap"         
+    ##  [5009] "Ercc2"           "Gm26852"         "Klc3"            "Ckm"            
+    ##  [5013] "A930016O22Rik"   "Mark4"           "Bloc1s3"         "Trappc6a"       
+    ##  [5017] "Ppp1r37"         "Gemin7"          "Zfp296"          "Clasrp"         
+    ##  [5021] "Gm26890"         "Relb"            "Clptm1"          "Apoe"           
+    ##  [5025] "Tomm40"          "Pvrl2"           "Bcam"            "Bcl3"           
+    ##  [5029] "Gm16174"         "Ceacam16"        "Pvr"             "Igsf23"         
+    ##  [5033] "Zfp180"          "Zfp112"          "Zfp235"          "Zfp93"          
+    ##  [5037] "Zfp61"           "Zfp94"           "Kcnn4"           "Smg9"           
+    ##  [5041] "Plaur"           "Zfp428"          "Irgq"            "Xrcc1"          
+    ##  [5045] "Zfp575"          "Ethe1"           "Phldb3"          "Gm9844"         
+    ##  [5049] "Rps19"           "Cd79a"           "Arhgef1"         "Rabac1"         
+    ##  [5053] "Atp1a3"          "Grik5"           "Zfp574"          "Pou2f2"         
+    ##  [5057] "D930028M14Rik"   "Dedd2"           "Zfp526"          "Gsk3a"          
+    ##  [5061] "9130221H12Rik"   "Erf"             "Cic"             "Pafah1b3"       
+    ##  [5065] "Lipe"            "Atp5sl"          "B3gnt8"          "Bckdha"         
+    ##  [5069] "Exosc5"          "Tmem91"          "B9d2"            "Tgfb1"          
+    ##  [5073] "Ccdc97"          "Hnrnpul1"        "Axl"             "Cyp2s1"         
+    ##  [5077] "Gm26707"         "Egln2"           "Rab4b"           "Snrpa"          
+    ##  [5081] "BC024978"        "Itpkc"           "Adck4"           "Numbl"          
+    ##  [5085] "Shkbp1"          "Blvrb"           "Sertad3"         "Sertad1"        
+    ##  [5089] "Pld3"            "2310022A10Rik"   "Akt2"            "Map3k10"        
+    ##  [5093] "C030039L03Rik"   "Zfp60"           "Zfp626"          "Zfp59"          
+    ##  [5097] "Zfp607"          "1700049G17Rik"   "Zfp780b"         "Zfp850"         
+    ##  [5101] "Psmc4"           "Fbl"             "Dyrk1b"          "Eid2"           
+    ##  [5105] "Eid2b"           "Timm50"          "Supt5"           "Rps16"          
+    ##  [5109] "Plekhg2"         "Zfp36"           "Med29"           "Paf1"           
+    ##  [5113] "Samd4b"          "Gmfg"            "Lrfn1"           "Nccrp1"         
+    ##  [5117] "Pak4"            "Fbxo27"          "Fbxo17"          "Mrps12"         
+    ##  [5121] "Sars2"           "Nfkbib"          "Sirt2"           "Rinl"           
+    ##  [5125] "Hnrnpl"          "RP23-36D15.6"    "Ech1"            "Lgals4"         
+    ##  [5129] "Lgals7"          "Actn4"           "Eif3k"           "Map4k1"         
+    ##  [5133] "Ryr1"            "RP24-484I1.3"    "Rasgrp4"         "Fam98c"         
+    ##  [5137] "1110035H17Rik"   "Psmd8"           "Kcnk6"           "Yif1b"          
+    ##  [5141] "2200002D01Rik"   "Spint2"          "Dpf1"            "Sipa1l3"        
+    ##  [5145] "Zfp84"           "Zfp30"           "Zfp790"          "Zfp940"         
+    ##  [5149] "Zfp420"          "Zfp27"           "Zfp383"          "Zfp74"          
+    ##  [5153] "Zfp568"          "Zfp14"           "Zfp82"           "Zfp566"         
+    ##  [5157] "Zfp260"          "Zfp382"          "Zfp146"          "Gm5113"         
+    ##  [5161] "Cox7a1"          "Capns1"          "Gm26810"         "Tbcb"           
+    ##  [5165] "Polr2i"          "Wdr62"           "Thap8"           "Clip3"          
+    ##  [5169] "Alkbh6"          "Sdhaf1"          "E130208F15Rik"   "Tyrobp"         
+    ##  [5173] "Hcst"            "Nfkbid"          "Aplp1"           "Nphs1"          
+    ##  [5177] "Arhgap33"        "Proser3"         "Hspb6"           "Lin37"          
+    ##  [5181] "Psenen"          "U2af1l4"         "U2af1l4.1"       "Igflr1"         
+    ##  [5185] "Kmt2b"           "Zbtb32"          "Upk1a"           "Cox6b1"         
+    ##  [5189] "Rbm42"           "Gm26610"         "Haus5"           "Tmem147"        
+    ##  [5193] "Tmem147os"       "Gm26935"         "Sbsn"            "Ffar2"          
+    ##  [5197] "Ffar1"           "Cd22"            "Gm29440"         "Usf2"           
+    ##  [5201] "Gm4673"          "Lsr"             "Fxyd5"           "Fxyd7"          
+    ##  [5205] "Fxyd1"           "Hpn"             "Scn1b"           "Gramd1a"        
+    ##  [5209] "G630030J09Rik"   "Gm10640"         "Uba2"            "Pdcd2l"         
+    ##  [5213] "Gpi1"            "Gm12762"         "Gm12758"         "4931406P16Rik"  
+    ##  [5217] "Lsm14a"          "Gm12764"         "Pepd"            "Cebpg"          
+    ##  [5221] "Cebpa"           "Slc7a10"         "Gpatch1"         "Faap24"         
+    ##  [5225] "Cep89"           "Nudt19"          "B230322F03Rik"   "Ankrd27"        
+    ##  [5229] "Pdcd5"           "Dpy19l3"         "Zfp507"          "Tshz3"          
+    ##  [5233] "Zfp536"          "Uri1"            "Ccne1"           "1600014C10Rik"  
+    ##  [5237] "Plekhf1"         "Pop4"            "Zfp619"          "Gm37494"        
+    ##  [5241] "Gm26526"         "AI987944"        "AW146154"        "2610021A01Rik"  
+    ##  [5245] "Zfp788"          "Zfp141"          "9830147E19Rik"   "Gm5595"         
+    ##  [5249] "Zfp715"          "Siglecf"         "Nkg7"            "Etfb"           
+    ##  [5253] "Vsig10l"         "Zfp658"          "Zfp719"          "Siglece"        
+    ##  [5257] "Ctu1"            "Klk8"            "RP23-361A18.4"   "Klk1b9"         
+    ##  [5261] "Klk1b11"         "Klk1b27"         "1700028J19Rik"   "2410002F23Rik"  
+    ##  [5265] "Clec11a"         "Shank1"          "Josd2"           "RP23-455C13.7"  
+    ##  [5269] "Emc10"           "Fam71e1"         "Pold1"           "Nr1h2"          
+    ##  [5273] "Napsa"           "Zfp473"          "Vrk3"            "Atf5"           
+    ##  [5277] "Nup62"           "Tbc1d17"         "Akt1s1"          "Pnkp"           
+    ##  [5281] "Ptov1"           "Med25"           "Fuz"             "Ap2a1"          
+    ##  [5285] "RP24-308M10.2"   "Prmt1"           "Gm15545"         "Bcl2l12"        
+    ##  [5289] "Irf3"            "Scaf1"           "Rras"            "Prr12"          
+    ##  [5293] "Prrg2"           "Nosip"           "Rcn3"            "Fcgrt"          
+    ##  [5297] "Rps11"           "Rpl13a"          "Flt3l"           "Aldh16a1"       
+    ##  [5301] "Pih1d1"          "Dkkl1"           "Cd37"            "Trpm4"          
+    ##  [5305] "Lin7b"           "Snrnp70"         "Ntf5"            "Ruvbl2"         
+    ##  [5309] "Gys1"            "Ftl1"            "Bax"             "Nucb1"          
+    ##  [5313] "Ppp1r15a"        "Hsd17b14"        "Bcat2"           "Car11"          
+    ##  [5317] "Dbp"             "Sphk2"           "Rpl18"           "Sult2b1"        
+    ##  [5321] "Lmtk3"           "Cyth2"           "Grwd1"           "Kdelr1"         
+    ##  [5325] "Tmem143"         "Emp3"            "Nomo1"           "Kcnc1"          
+    ##  [5329] "Sergef"          "Saal1"           "Hps5"            "Gtf2h1"         
+    ##  [5333] "Ldha"            "Tsg101"          "Uevld"           "Spty2d1"        
+    ##  [5337] "RP23-218K15.3"   "Tmem86a"         "Ptpn5"           "Zdhhc13"        
+    ##  [5341] "E2f8"            "Gm2788"          "Nav2"            "Htatip2"        
+    ##  [5345] "Prmt3"           "Slc17a6"         "Fancf"           "Gas2"           
+    ##  [5349] "Svip"            "Tubgcp5"         "Cyfip1"          "Nipa2"          
+    ##  [5353] "Nipa1"           "Herc2"           "Atp10a"          "Ube3a"          
+    ##  [5357] "Snrpn"           "Klf13"           "RP23-387F1.6"    "Mtmr10"         
+    ##  [5361] "Fan1"            "Mphosph10"       "Mcee"            "Ndnl2"          
+    ##  [5365] "Tjp1"            "Tarsl2"          "Tm2d3"           "Snrpa1"         
+    ##  [5369] "Vimp"            "Chsy1"           "Lrrk1"           "Aldh1a3"        
+    ##  [5373] "Asb7"            "Lins1"           "Lysmd4"          "Mef2a"          
+    ##  [5377] "Lrrc28"          "Igf1r"           "Pgpep1l"         "Gm16157"        
+    ##  [5381] "Fam169b"         "Gm16158"         "Arrdc4"          "RP24-339E15.5"  
+    ##  [5385] "Mctp2"           "Chd2"            "RP23-32A8.5"     "Fam174b"        
+    ##  [5389] "RP23-235M8.7"    "Slco3a1"         "Akap13"          "AU020206"       
+    ##  [5393] "Klhl25"          "Ntrk3"           "Gm9885"          "Mrpl46"         
+    ##  [5397] "Mrps11"          "Det1"            "Aen"             "Isg20"          
+    ##  [5401] "Mfge8"           "Abhd2"           "Fanci"           "Polg"           
+    ##  [5405] "Ticrr"           "Kif7"            "Pex11a"          "Ap3s2"          
+    ##  [5409] "Zfp710"          "Idh2"            "Sema4b"          "Cib1"           
+    ##  [5413] "Gdpgp1"          "Ttll13"          "Ngrn"            "Vps33b"         
+    ##  [5417] "Rccd1"           "Prc1"            "Unc45a"          "Hddc3"          
+    ##  [5421] "Man2a2"          "Fes"             "Furin"           "Blm"            
+    ##  [5425] "Crtc3"           "Gm15880"         "Iqgap1"          "Zscan2"         
+    ##  [5429] "Wdr73"           "Nmb"             "Sec11a"          "Zfp592"         
+    ##  [5433] "Alpk3"           "Pde8a"           "Rps17"           "Cpeb1"          
+    ##  [5437] "2900076A07Rik"   "Whamm"           "Fam103a1"        "3110040N11Rik"  
+    ##  [5441] "Btbd1"           "Tm6sf1"          "Hdgfrp3"         "Sh3gl3"         
+    ##  [5445] "Eftud1"          "RP23-272F2.2"    "Mex3b"           "Gm16638"        
+    ##  [5449] "Stard5"          "Il16"            "Mesdc1"          "Mesdc2"         
+    ##  [5453] "Abhd17c"         "Arnt2"           "Fah"             "Zfand6"         
+    ##  [5457] "Ctsc"            "Gm26522"         "RP24-330M21.1"   "Tmem135"        
+    ##  [5461] "l7Rn6"           "Eed"             "Picalm"          "Sytl2"          
+    ##  [5465] "Crebzf"          "Tmem126a"        "Tmem126b"        "Dlg2"           
+    ##  [5469] "Ccdc90b"         "Pcf11"           "Gm26981"         "Ddias"          
+    ##  [5473] "Prcp"            "Nars2"           "Usp35"           "Kctd21"         
+    ##  [5477] "Alg8"            "Ndufc2"          "Kctd14"          "Ints4"          
+    ##  [5481] "Aamdc"           "Rsf1"            "Clns1a"          "Aqp11"          
+    ##  [5485] "Pak1"            "Myo7a"           "Acer3"           "Lrrc32"         
+    ##  [5489] "Emsy"            "Prkrir"          "Uvrag"           "Dgat2"          
+    ##  [5493] "Map6"            "Gdpd5"           "Rps3"            "Arrb1"          
+    ##  [5497] "Tpbgl"           "Neu3"            "Spcs2"           "RP23-428N8.3"   
+    ##  [5501] "Rnf169"          "Pold3"           "Lipt2"           "Pgm2l1"         
+    ##  [5505] "Ppme1"           "C2cd3"           "Gm10603"         "Ucp2"           
+    ##  [5509] "Dnajb13"         "Coa4"            "Mrpl48"          "Rab6a"          
+    ##  [5513] "RP23-299D2.2"    "Fam168a"         "Relt"            "Fchsd2"         
+    ##  [5517] "Atg16l2"         "Stard10"         "Arap1"           "Pde2a"          
+    ##  [5521] "Art2b"           "Clpb"            "Inppl1"          "Anapc15"        
+    ##  [5525] "Lamtor1"         "Lrrc51"          "Numa1"           "Il18bp"         
+    ##  [5529] "Rnf121"          "Xndc1"           "Nup98"           "Pgap2"          
+    ##  [5533] "Rhog"            "Stim1"           "Rrm1"            "Trim21"         
+    ##  [5537] "Trim68"          "Hbb-bt"          "Hbb-bs"          "Trim34a"        
+    ##  [5541] "Trim12a"         "Trim34b"         "Trim12c"         "Trim30c"        
+    ##  [5545] "Trim30a"         "Trim30d"         "Gm5900"          "Fam160a2"       
+    ##  [5549] "Smpd1"           "Apbb1"           "Trim3"           "Arfip2"         
+    ##  [5553] "Timm10b"         "Dnhd1"           "Rrp8"            "Ilk"            
+    ##  [5557] "Taf10"           "Tpp1"            "Mrpl17"          "Gm4070"         
+    ##  [5561] "Eif3f"           "Ric3"            "Rpl27a"          "Akip1"          
+    ##  [5565] "Tmem9b"          "Dennd5a"         "Tmem41b"         "Ipo7"           
+    ##  [5569] "AA474408"        "Zfp143"          "Wee1"            "Swap70"         
+    ##  [5573] "Sbf2"            "Ampd3"           "Rnf141"          "Mrvi1"          
+    ##  [5577] "Ctr9"            "Eif4g2"          "Usp47"           "Dkk3"           
+    ##  [5581] "Mical2"          "Tead1"           "Arntl"           "Btbd10"         
+    ##  [5585] "Far1"            "Rras2"           "Copb1"           "Psma1"          
+    ##  [5589] "4933406I18Rik"   "Pde3b"           "Calca"           "1110004F10Rik"  
+    ##  [5593] "Gm4353"          "Plekha7"         "Rps13"           "RP23-335G1.1"   
+    ##  [5597] "Pik3c2a"         "Nucb2"           "RP24-143K11.2"   "Xylt1"          
+    ##  [5601] "Rps15a"          "Arl6ip1"         "Smg1"            "Itpripl2"       
+    ##  [5605] "Coq7"            "Gde1"            "Ccp110"          "9030624J02Rik"  
+    ##  [5609] "Knop1"           "Gprc5b"          "Thumpd1"         "Eri2"           
+    ##  [5613] "2610020H08Rik"   "Dcun1d3"         "Lyrm1"           "Tmem159"        
+    ##  [5617] "Uqcrc2"          "9030407P20Rik"   "BC030336"        "Eef2k"          
+    ##  [5621] "Polr3e"          "Cdr2"            "4933427G17Rik"   "Mettl9"         
+    ##  [5625] "Usp31"           "Cog7"            "Gga2"            "Ears2"          
+    ##  [5629] "Ubfd1"           "Ndufab1"         "Palb2"           "Dctn5"          
+    ##  [5633] "Gm15489"         "Plk1"            "Prkcb"           "Rbbp6"          
+    ##  [5637] "Tnrc6a"          "Arhgap17"        "Lcmt1"           "4933440M02Rik"  
+    ##  [5641] "Kdm8"            "Nsmce1"          "Il4ra"           "Il21r"          
+    ##  [5645] "Gtf3c1"          "D430042O09Rik"   "Xpo6"            "Sbk1"           
+    ##  [5649] "Lat"             "Spns1"           "Nfatc2ip"        "Rabep2"         
+    ##  [5653] "Sh2b1"           "Tufm"            "Atxn2l"          "Eif3c"          
+    ##  [5657] "Cln3"            "Apobr"           "2510046G10Rik"   "Sgf29"          
+    ##  [5661] "Slx1b"           "Bola2"           "Coro1a"          "Mapk3"          
+    ##  [5665] "Gdpd3"           "Ypel3"           "Tbx6"            "Ppp4c"          
+    ##  [5669] "Aldoa"           "Ino80e"          "Hirip3"          "Taok2"          
+    ##  [5673] "Tmem219"         "Kctd13"          "D830044I16Rik"   "Cdipt"          
+    ##  [5677] "Mvp"             "Pagr1a"          "Maz"             "Kif22"          
+    ##  [5681] "RP23-142A14.9"   "AI467606"        "Qprt"            "Spn"            
+    ##  [5685] "Cd2bp2"          "Tbc1d10b"        "Mylpf"           "Sept1"          
+    ##  [5689] "Zfp553"          "Zfp771"          "Dctpp1"          "Sephs2"         
+    ##  [5693] "RP24-443B5.7"    "Itgal"           "Zfp768"          "Zfp747"         
+    ##  [5697] "9130019O22Rik"   "E430018J23Rik"   "Zfp764"          "Zfp688"         
+    ##  [5701] "RP23-4H17.3"     "Zfp689"          "Prr14"           "Fbrs"           
+    ##  [5705] "1700008J07Rik"   "Srcap"           "Gm42715"         "Phkg2"          
+    ##  [5709] "Rnf40"           "RP24-159C12.10"  "Zfp629"          "Bcl7c"          
+    ##  [5713] "Fbxl19"          "Orai3"           "Setd1a"          "Stx4a"          
+    ##  [5717] "Zfp668"          "Zfp646"          "Vkorc1"          "Bckdk"          
+    ##  [5721] "Kat8"            "Prss36"          "Fus"             "Pycard"         
+    ##  [5725] "Itgam"           "Itgax"           "Cox6a2"          "9130023H24Rik"  
+    ##  [5729] "Armc5"           "Tgfb1i1"         "BC017158"        "Rgs10"          
+    ##  [5733] "Tial1"           "Bag3"            "Inpp5f"          "Mcmbp"          
+    ##  [5737] "Sec23ip"         "Wdr11"           "Ate1"            "Nsmce4a"        
+    ##  [5741] "Tacc2"           "Btbd16"          "Plekha1"         "2310057M21Rik"  
+    ##  [5745] "Pstk"            "Ikzf5"           "Acadsb"          "Bub3"           
+    ##  [5749] "Chst15"          "RP23-218E6.4"    "Oat"             "Lhpp"           
+    ##  [5753] "Fam53b"          "Mettl10"         "Fam175b"         "Zranb1"         
+    ##  [5757] "Ctbp2"           "Edrf1"           "Uros"            "Bccip"          
+    ##  [5761] "Dhx32"           "Adam12"          "Dock1"           "Ptpre"          
+    ##  [5765] "5830432E09Rik"   "Mki67"           "Mgmt"            "9430038I01Rik"  
+    ##  [5769] "Glrx3"           "Mapk1ip1"        "Ppp2r2d"         "Bnip3"          
+    ##  [5773] "Stk32c"          "Lrrc27"          "Pwwp2b"          "Inpp5a"         
+    ##  [5777] "Utf1"            "Adam8"           "Tubgcp2"         "Zfp511"         
+    ##  [5781] "Fuom"            "Echs1"           "Paox"            "Mtg1"           
+    ##  [5785] "Cd163l1"         "5830411N06Rik"   "Syce1"           "Bet1l"          
+    ##  [5789] "Ric8"            "Sirt3"           "Psmd13"          "Athl1"          
+    ##  [5793] "Ifitm2"          "Ifitm1"          "Ifitm3"          "B4galnt4"       
+    ##  [5797] "Pkp3"            "Sigirr"          "Ptdss2"          "Rnh1"           
+    ##  [5801] "Hras"            "Lrrc56"          "Lmntd2"          "Rassf7"         
+    ##  [5805] "Phrf1"           "Irf7"            "Deaf1"           "Tmem80"         
+    ##  [5809] "Taldo1"          "Pddc1"           "Cend1"           "Slc25a22"       
+    ##  [5813] "Pidd1"           "Rplp2"           "Pnpla2"          "Cd151"          
+    ##  [5817] "Polr2l"          "Tspan4"          "Chid1"           "Ap2a2"          
+    ##  [5821] "Tollip"          "Mob2"            "Ifitm10"         "Ctsd"           
+    ##  [5825] "Lsp1"            "Tnnt3"           "Mrpl23"          "Ascl2"          
+    ##  [5829] "Tspan32"         "Cd81"            "Tssc4"           "Kcnq1ot1"       
+    ##  [5833] "Cdkn1c"          "Nap1l4"          "Cars"            "Tnfrsf26"       
+    ##  [5837] "RP23-6I17.1"     "Tnfrsf22"        "Tnfrsf23"        "Osbpl5"         
+    ##  [5841] "Mrgpre"          "Nadsyn1"         "Dhcr7"           "Cttn"           
+    ##  [5845] "Ppfia1"          "Fadd"            "Oraov1"          "Ccnd1"          
+    ##  [5849] "Tpcn2"           "H60c"            "Ppp1r14c"        "Mthfd1l"        
+    ##  [5853] "Akap12"          "Zbtb2"           "Gm21781"         "Rmnd1"          
+    ##  [5857] "Armt1"           "Esr1"            "Syne1"           "Fbxo5"          
+    ##  [5861] "Mtrf1l"          "Ipcef1"          "Cnksr3"          "Ulbp1"          
+    ##  [5865] "Lrp11"           "Pcmt1"           "Nup43"           "Lats1"          
+    ##  [5869] "Katna1"          "Ginm1"           "B430219N15Rik"   "Ppil4"          
+    ##  [5873] "Zc3h12d"         "Tab2"            "Ust"             "Stxbp5"         
+    ##  [5877] "Rab32"           "Shprh"           "4930432B10Rik"   "Fbxo30"         
+    ##  [5881] "Gm9797"          "Utrn"            "B230208H11Rik"   "Stx11"          
+    ##  [5885] "Sf3b5"           "Plagl1"          "Ltv1"            "Phactr2"        
+    ##  [5889] "Fuca2"           "Pex3"            "Adat2"           "Aig1"           
+    ##  [5893] "Hivep2"          "Vta1"            "Cited2"          "Txlnb"          
+    ##  [5897] "Heca"            "Abracl"          "Reps1"           "Ccdc28a"        
+    ##  [5901] "Gm10827"         "Nhsl1"           "Perp"            "Tnfaip3"        
+    ##  [5905] "Ifngr1"          "Pex7"            "Map3k5"          "Map7"           
+    ##  [5909] "4933406P04Rik"   "Bclaf1"          "Mtfr2"           "Ahi1"           
+    ##  [5913] "Myb"             "Hbs1l"           "1700021A07Rik"   "Sgk1"           
+    ##  [5917] "E030030I06Rik"   "H60b"            "Gm26740"         "Slc2a12"        
+    ##  [5921] "Tbpl1"           "Rps12"           "Stx7"            "Enpp1"          
+    ##  [5925] "Med23"           "Arg1"            "Akap7"           "Epb41l2"        
+    ##  [5929] "Samd3"           "L3mbtl3"         "Arhgap18"        "Ptprk"          
+    ##  [5933] "Themis"          "Echdc1"          "Rnf146"          "Cenpw"          
+    ##  [5937] "Trmt11"          "Hint3"           "Ncoa7"           "Gm5422"         
+    ##  [5941] "Hddc2"           "Zufsp"           "Rwdd1"           "Fam26f"         
+    ##  [5945] "Dse"             "Tspyl1"          "Nt5dc1"          "Gm26564"        
+    ##  [5949] "Tspyl4"          "Amd2"            "Hdac2"           "Marcks"         
+    ##  [5953] "Fam229b"         "Tube1"           "Fyn"             "Gm16365"        
+    ##  [5957] "Traf3ip2"        "Rev3l"           "AA474331"        "BC021785"       
+    ##  [5961] "Slc16a10"        "Rpf2"            "Gtf3c6"          "Amd1"           
+    ##  [5965] "Cdk19"           "Mettl24"         "Cdc40"           "Fig4"           
+    ##  [5969] "Zbtb24"          "Mical1"          "Smpd2"           "Ppil6"          
+    ##  [5973] "Cd164"           "Ccdc162"         "Gm29095"         "Cep57l1"        
+    ##  [5977] "Sesn1"           "Armc2"           "Foxo3"           "Lace1"          
+    ##  [5981] "Snx3"            "Ostm1"           "Gm15200"         "Sec63"          
+    ##  [5985] "Scml4"           "Pdss2"           "Bend3"           "Gm9803"         
+    ##  [5989] "1700021F05Rik"   "Cd24a"           "Qrsl1"           "Rtn4ip1"        
+    ##  [5993] "Aim1"            "Atg5"            "Prdm1"           "Prep"           
+    ##  [5997] "Hace1"           "Ascc3"           "Lilr4b"          "Lilrb4a"        
+    ##  [6001] "Gopc"            "Nus1"            "Cep85l"          "Mcm9"           
+    ##  [6005] "Asf1a"           "Man1a"           "Gm16998"         "Tbc1d32"        
+    ##  [6009] "Msl3l2"          "Hsf2"            "Serinc1"         "Pkib"           
+    ##  [6013] "Smpdl3a"         "Gcc2"            "Lims1"           "Ranbp2"         
+    ##  [6017] "Ccdc138"         "Sept10"          "Sowahc"          "P4ha1"          
+    ##  [6021] "Gm10273"         "Oit3"            "Mcu"             "Micu1"          
+    ##  [6025] "Dnajb12"         "Ddit4"           "Anapc16"         "Ascc1"          
+    ##  [6029] "Spock2"          "Psap"            "Vsir"            "Gm17455"        
+    ##  [6033] "Slc29a3"         "Unc5b"           "Sgpl1"           "Adamts14"       
+    ##  [6037] "Prf1"            "Pald1"           "Eif4ebp2"        "Lrrc20"         
+    ##  [6041] "Ppa1"            "Sar1a"           "Tysnd1"          "Aifm2"          
+    ##  [6045] "H2afy2"          "Gm5424"          "2010107G23Rik"   "Hk1"            
+    ##  [6049] "Hk1os"           "Supv3l1"         "4930507D05Rik"   "Vps26a"         
+    ##  [6053] "Srgn"            "Kif1bp"          "4933428P19Rik"   "Ddx21"          
+    ##  [6057] "Ddx50"           "Stox1"           "Ccar1"           "Tet1"           
+    ##  [6061] "Slc25a16"        "Dna2"            "Rufy2"           "Hnrnph3"        
+    ##  [6065] "Pbld2"           "Herc4"           "Gm26789"         "Sirt1"          
+    ##  [6069] "Dnajc12"         "Reep3"           "Jmjd1c"          "Nrbf2"          
+    ##  [6073] "Egr2"            "Ado"             "Zfp365"          "Rtkn2"          
+    ##  [6077] "Arid5b"          "1700040L02Rik"   "Cdk1"            "Ank3"           
+    ##  [6081] "Ccdc6"           "Tfam"            "Ube2d1"          "Cisd1"          
+    ##  [6085] "Ipmk"            "Gm9923"          "Zwint"           "Bcr"            
+    ##  [6089] "Specc1l"         "Adora2a"         "Gucd1"           "Upb1"           
+    ##  [6093] "Snrpd3"          "Lrrc75b"         "Ggt1"            "Ggt5"           
+    ##  [6097] "Susd2"           "Cabin1"          "Ddt"             "Gstt3"          
+    ##  [6101] "Gstt1"           "Gstt2"           "Mif"             "Derl3"          
+    ##  [6105] "Smarcb1"         "Mmp11"           "Chchd10"         "Gm867"          
+    ##  [6109] "Gm5134"          "Zfp280b"         "Prmt2"           "S100b"          
+    ##  [6113] "Dip2a"           "Pcnt"            "Ybey"            "Mcm3ap"         
+    ##  [6117] "Lss"             "Pcbp3"           "Slc19a1"         "Pofut2"         
+    ##  [6121] "Adarb1"          "Fam207a"         "Itgb2"           "Pttg1ip"        
+    ##  [6125] "Sumo3"           "Ube2g2"          "1810043G02Rik"   "Pfkl"           
+    ##  [6129] "Icosl"           "D10Jhu81e"       "Pwp2"            "Trappc10"       
+    ##  [6133] "Agpat3"          "Gm10146"         "Rrp1"            "Cstb"           
+    ##  [6137] "Pdxk"            "Ilvbl"           "Syde1"           "2610008E11Rik"  
+    ##  [6141] "Plpp2"           "Mier2"           "Tpgs1"           "Cdc34"          
+    ##  [6145] "Gzmm"            "Bsg"             "Polrmt"          "Rnf126"         
+    ##  [6149] "Fstl3"           "Palm"            "Ptbp1"           "Med16"          
+    ##  [6153] "R3hdm4"          "Arid3a"          "Wdr18"           "Tmem259"        
+    ##  [6157] "Cnn2"            "Abca7"           "Hmha1"           "Polr2e"         
+    ##  [6161] "Gpx4"            "Sbno2"           "Stk11"           "Cbarp"          
+    ##  [6165] "Atp5d"           "Midn"            "Cirbp"           "1600002K03Rik"  
+    ##  [6169] "Mum1"            "Ndufs7"          "Gamt"            "Dazap1"         
+    ##  [6173] "Rps15"           "2310011J03Rik"   "Pcsk4"           "Mex3d"          
+    ##  [6177] "Mbd3"            "Uqcr11"          "Tcf3"            "Rexo1"          
+    ##  [6181] "Klf16"           "Abhd17a"         "Adat3"           "Scamp4"         
+    ##  [6185] "Csnk1g2"         "Btbd2"           "Mknk2"           "Gm26541"        
+    ##  [6189] "Mob3a"           "Izumo4"          "Ap3d1"           "Dot1l"          
+    ##  [6193] "Plekhj1"         "Sf3a2"           "Oaz1"            "Lsm7"           
+    ##  [6197] "Sppl2b"          "Timm13"          "Lmnb2"           "Gadd45b"        
+    ##  [6201] "Slc39a3"         "Sgta"            "Thop1"           "Map2k2"         
+    ##  [6205] "Zbtb7a"          "Pias4"           "Eef2"            "Dapk3"          
+    ##  [6209] "Atcayos"         "Atcay"           "Zfr2"            "Matk"           
+    ##  [6213] "Mrpl54"          "Apba3"           "Tjp3"            "Pip5k1c"        
+    ##  [6217] "Cactin"          "Tbxa2r"          "Hmg20b"          "Mfsd12"         
+    ##  [6221] "4930404N11Rik"   "Fzr1"            "Dohh"            "Smim24"         
+    ##  [6225] "Nfic"            "Gm16104"         "Celf5"           "Ncln"           
+    ##  [6229] "S1pr4"           "Gna15"           "Gna11"           "Aes"            
+    ##  [6233] "BC025920"        "Sirt6"           "Ankrd24"         "Gm10778"        
+    ##  [6237] "Zfp433"          "Zfp873"          "AU041133"        "Zfp938"         
+    ##  [6241] "Gm4924"          "1190007I07Rik"   "Tdg"             "Hcfc2"          
+    ##  [6245] "Nfyb"            "Txnrd1"          "Chst11"          "Slc41a2"        
+    ##  [6249] "D10Wsu102e"      "A230046K03Rik"   "Appl2"           "1500009L16Rik"  
+    ##  [6253] "Tcp11l2"         "Gm17249"         "Polr3b"          "Ric8b"          
+    ##  [6257] "Tmem263"         "Mterf2"          "Cry1"            "Gm8394"         
+    ##  [6261] "Btbd11"          "Pwp1"            "Prdm4"           "Rtcb"           
+    ##  [6265] "Fbxo7"           "1810014B01Rik"   "Hsp90b1"         "Ttc41"          
+    ##  [6269] "Fabp3-ps1"       "Nt5dc3"          "Parpbp"          "Nup37"          
+    ##  [6273] "Ccdc53"          "Dram1"           "Gnptab"          "Chpt1"          
+    ##  [6277] "Arl1"            "Utp20"           "Gas2l3"          "Scyl2"          
+    ##  [6281] "Actr6"           "Uhrf1bp1l"       "Apaf1"           "Ikbip"          
+    ##  [6285] "Slc25a3"         "Tmpo"            "Nedd1"           "Cfap54"         
+    ##  [6289] "Cdk17"           "Elk3"            "Lta4h"           "Hal"            
+    ##  [6293] "Amdhd1"          "Ccdc38"          "Snrpf"           "Ntn4"           
+    ##  [6297] "Gm15915"         "Usp44"           "Metap2"          "Vezt"           
+    ##  [6301] "Fgd6"            "Nr2c1"           "Ndufa12"         "Tmcc3"          
+    ##  [6305] "Cep83os"         "Cep83"           "Plxnc1"          "Cradd"          
+    ##  [6309] "Socs2"           "5730420D15Rik"   "Mrpl42"          "Ube2n"          
+    ##  [6313] "Nudt4"           "4732465J04Rik"   "Eea1"            "Gm5426"         
+    ##  [6317] "Btg1"            "Atp2b1"          "Poc1b"           "Galnt4"         
+    ##  [6321] "Dusp6"           "Kitl"            "Tmtc3"           "Cep290"         
+    ##  [6325] "4930430F08Rik"   "Mettl25"         "Ccdc59"          "Ppp1r12a"       
+    ##  [6329] "E2f7"            "Csrp2"           "Zdhhc17"         "Rpl6l"          
+    ##  [6333] "Osbpl8"          "Bbs10"           "Nap1l1"          "Phlda1"         
+    ##  [6337] "Krr1"            "Glipr1"          "Atxn7l3b"        "Gm26596"        
+    ##  [6341] "Tbc1d15"         "Rab21"           "Tmem19"          "Thap2"          
+    ##  [6345] "Zfc3h1"          "Tspan8"          "Kcnmb4"          "Kcnmb4os2"      
+    ##  [6349] "Cnot2"           "Rab3ip"          "Cct2"            "Frs2"           
+    ##  [6353] "Yeats4"          "Lyz2"            "Cpsf6"           "Cpm"            
+    ##  [6357] "Mdm2"            "Slc35e3"         "Nup107"          "Rap1b"          
+    ##  [6361] "Mdm1"            "Il22"            "Ifng"            "Dyrk2"          
+    ##  [6365] "Cand1"           "Helb"            "Irak3"           "Tmbim4"         
+    ##  [6369] "Llph"            "Hmga2"           "Msrb3"           "Lemd3"          
+    ##  [6373] "Tbc1d30"         "Gns"             "Rassf3"          "Tbk1"           
+    ##  [6377] "Xpot"            "BC048403"        "Tmem5"           "Ppm1h"          
+    ##  [6381] "Mon2"            "Usp15"           "Xrcc6bp1"        "Ctdsp2"         
+    ##  [6385] "Tsfm"            "Mettl1"          "March9"          "Cdk4"           
+    ##  [6389] "Tspan31"         "Agap2"           "Os9"             "B4galnt1"       
+    ##  [6393] "Dtx3"            "Pip4k2c"         "Dctn2"           "Mbd6"           
+    ##  [6397] "Ddit3"           "Mars"            "Arhgap9"         "R3hdm2"         
+    ##  [6401] "Stac3"           "Shmt2"           "Stat6"           "Nab2"           
+    ##  [6405] "Tmem194"         "Gm16230"         "Zbtb39"          "Prim1"          
+    ##  [6409] "Naca"            "Ptges3"          "Atp5b"           "Baz2a"          
+    ##  [6413] "Rbms2"           "Gls2"            "Spryd4"          "Gm26847"        
+    ##  [6417] "Timeless"        "Stat2"           "Pan2"            "Cnpy2"          
+    ##  [6421] "Cs"              "Coq10a"          "Ankrd52"         "Nabp2"          
+    ##  [6425] "Rnf41"           "Smarcc2"         "Myl6"            "Myl6b"          
+    ##  [6429] "A430046D13Rik"   "Esyt1"           "Zc3h10"          "Rpl41"          
+    ##  [6433] "Pa2g4"           "Erbb3"           "Rps26"           "Ikzf4"          
+    ##  [6437] "Suox"            "Rab5b"           "Cdk2"            "Dgka"           
+    ##  [6441] "Pym1"            "Tmem198b"        "Dnajc14"         "Ormdl2"         
+    ##  [6445] "Sarnp"           "Gdf11"           "Cd63"            "Rdh5"           
+    ##  [6449] "Bloc1s1"         "Itga7"           "Tespa1"          "Insr"           
+    ##  [6453] "A430078G23Rik"   "Arhgef18"        "Pex11g"          "Zfp358"         
+    ##  [6457] "Mcoln1"          "Pnpla6"          "Xab2"            "Pet100"         
+    ##  [6461] "Stxbp2"          "Trappc5"         "Evi5l"           "Prr36"          
+    ##  [6465] "Map2k7"          "Tgfbr3l"         "Snapc2"          "Ctxn1"          
+    ##  [6469] "Timm44"          "Elavl1"          "Ccl25"           "Cers4"          
+    ##  [6473] "Zfp958"          "Shcbp1"          "Arglu1"          "Lig4"           
+    ##  [6477] "Abhd13"          "Tnfsf13b"        "Irs2"            "Rab20"          
+    ##  [6481] "E230013L22Rik"   "Carkd"           "Cars2"           "Ing1"           
+    ##  [6485] "Ankrd10"         "Arhgef7"         "Tubgcp3"         "Atp11a"         
+    ##  [6489] "Pcid2"           "Cul4a"           "Lamp1"           "Dcun1d2"        
+    ##  [6493] "Tmco3"           "Tfdp1"           "Rasa3"           "Cdc16"          
+    ##  [6497] "Upf3a"           "Champ1"          "Coprs"           "Gm7676"         
+    ##  [6501] "Fbxo25"          "Tdrp"            "Erich1"          "Cln8"           
+    ##  [6505] "Arhgef10"        "Kbtbd11"         "5830468F06Rik"   "Mcph1"          
+    ##  [6509] "Angpt2"          "Agpat5"          "Xkr5"            "Gm6483"         
+    ##  [6513] "Gm26853"         "Gm21092"         "Alg11"           "Nek3"           
+    ##  [6517] "Ckap2"           "Vps36"           "Slc25a15"        "Mrps31"         
+    ##  [6521] "Smim19"          "Slc20a2"         "Gm17491"         "Vdac3"          
+    ##  [6525] "Polb"            "Gm26909"         "Ikbkb"           "Plat"           
+    ##  [6529] "Ap3m2"           "1700041G16Rik"   "Kat6a"           "Gpat4"          
+    ##  [6533] "Gins4"           "Golga7"          "Adam9"           "Tm2d2"          
+    ##  [6537] "Plekha2"         "Tacc1"           "Fgfr1"           "Letm2"          
+    ##  [6541] "Whsc1l1"         "Plpp5"           "Ddhd2"           "Gm17484"        
+    ##  [6545] "Bag4"            "Lsm1"            "Star"            "Ash2l"          
+    ##  [6549] "Hgsnat"          "Pomk"            "Fnta"            "Hook3"          
+    ##  [6553] "Rnf170"          "Thap1"           "Zfp703"          "Erlin2"         
+    ##  [6557] "Proscos"         "Prosc"           "Brf2"            "Rab11fip1"      
+    ##  [6561] "Eif4ebp1"        "Rnf122"          "Tti2"            "Mak16"          
+    ##  [6565] "Fut10"           "Gm5117"          "Wrn"             "Purg"           
+    ##  [6569] "Tex15"           "Ppp2cb"          "Ubxn8"           "Gsr"            
+    ##  [6573] "Gtf2e2"          "Rbpms"           "Dctn6"           "Gm26768"        
+    ##  [6577] "Mboat4"          "Leprotl1"        "Saraf"           "Gm29243"        
+    ##  [6581] "Dusp4"           "Tnks"            "Ppp1r3b"         "Eri1"           
+    ##  [6585] "Mfhas1"          "D8Ertd82e"       "Lonrf1"          "AI429214"       
+    ##  [6589] "Tusc3"           "Micu3"           "Zdhhc2"          "Cnot7"          
+    ##  [6593] "Vps37a"          "Mtmr7"           "Slc7a2"          "Mtus1"          
+    ##  [6597] "Pcm1"            "Asah1"           "Frg1"            "Cyp4v3"         
+    ##  [6601] "Tlr3"            "1700029J07Rik"   "Ufsp2"           "Ankrd37"        
+    ##  [6605] "Snx25"           "Cfap97"          "Gm15634"         "Slc25a4"        
+    ##  [6609] "Acsl1"           "Cenpu"           "Primpol"         "Casp3"          
+    ##  [6613] "Irf2"            "Trappc11"        "Rwdd4a"          "Ing2"           
+    ##  [6617] "AA386476"        "Cdkn2aip"        "E030037K01Rik"   "Dctd"           
+    ##  [6621] "Aga"             "Neil3"           "Spcs3"           "Cep44"          
+    ##  [6625] "Fbxo8"           "Sap30"           "2500002B13Rik"   "Hmgb2"          
+    ##  [6629] "Galnt7"          "2700029M09Rik"   "Clcn3"           "B230317F23Rik"  
+    ##  [6633] "Nek1"            "Sh3rf1"          "Cbr4"            "Palld"          
+    ##  [6637] "Ddx60"           "Cpe"             "Msmo1"           "Klhl2"          
+    ##  [6641] "Tmem192"         "Tma16"           "Naf1"            "Nat2"           
+    ##  [6645] "Gm9755"          "Csgalnact1"      "Ints10"          "Lpl"            
+    ##  [6649] "Atp6v1b2"        "Lzts1"           "Zfp930"          "D130040H23Rik"  
+    ##  [6653] "Gm10033"         "Gm10311"         "Zfp868"          "Zfp964"         
+    ##  [6657] "Zfp869"          "Zfp963"          "Zfp866"          "Atp13a1"        
+    ##  [6661] "Gmip"            "Lpar2"           "Pbx4"            "Yjefn3"         
+    ##  [6665] "Ndufa13"         "Tssk6"           "Gatad2a"         "Mau2"           
+    ##  [6669] "Sugp1"           "Tm6sf2"          "Rfxank"          "Nr2c2ap"        
+    ##  [6673] "Borcs8"          "Tmem161a"        "Slc25a42"        "Armc6"          
+    ##  [6677] "Sugp2"           "Homer3"          "Ddx49"           "Cope"           
+    ##  [6681] "Upf1"            "Crtc1"           "Klhl26"          "2810428I15Rik"  
+    ##  [6685] "Uba52"           "Kxd1"            "Fkbp8"           "Ell"            
+    ##  [6689] "Isyna1"          "Ssbp4"           "Lrrc25"          "Pgpep1"         
+    ##  [6693] "Lsm4"            "Jund"            "Gm3336"          "Pde4c"          
+    ##  [6697] "Rab3a"           "Mpv17l2"         "Ifi30"           "Pik3r2"         
+    ##  [6701] "2010320M18Rik"   "Mast3"           "Il12rb1"         "Arrdc2"         
+    ##  [6705] "Ccdc124"         "Rpl18a"          "Map1s"           "Haus8"          
+    ##  [6709] "Myo9b"           "Use1"            "Ocel1"           "Nr2f6"          
+    ##  [6713] "Babam1"          "Ankle1"          "Abhd8"           "Mrpl34"         
+    ##  [6717] "Dda1"            "Ano8"            "Gtpbp3"          "Bst2"           
+    ##  [6721] "Mvb12a"          "Tmem221"         "Slc27a1"         "Pgls"           
+    ##  [6725] "Fam129c"         "Colgalt1"        "Unc13a"          "Jak3"           
+    ##  [6729] "B3gnt3"          "Fcho1"           "Zfp709"          "Zfp882"         
+    ##  [6733] "Zfp617"          "Zfp961"          "Cyp4f18"         "Tpm4"           
+    ##  [6737] "Rab8a"           "Hsh2d"           "Fam32a"          "Ap1m1"          
+    ##  [6741] "Gm10282"         "Klf2"            "Eps15l1"         "1700030K09Rik"  
+    ##  [6745] "Cherp"           "Slc35e1"         "Gm17435"         "Med26"          
+    ##  [6749] "Smim7"           "Tmem38a"         "Sin3b"           "F2rl3"          
+    ##  [6753] "Large"           "Hmgxb4"          "Tom1"            "Hmox1"          
+    ##  [6757] "Mcm5"            "Nr3c2"           "Arhgap10"        "0610038B21Rik"  
+    ##  [6761] "Prmt10"          "Tmem184c"        "Rbmxl1"          "Slc10a7"        
+    ##  [6765] "Lsm6"            "Zfp827"          "Mmaa"            "Gm4890"         
+    ##  [6769] "Smad1"           "Otud4"           "Abce1"           "Anapc10"        
+    ##  [6773] "Smarca5"         "Usp38"           "Inpp4b"          "Il15"           
+    ##  [6777] "Zfp330"          "Elmod2"          "Scoc"            "Ndufb7"         
+    ##  [6781] "Tecr"            "Dnajb1"          "Gipc1"           "Pkn1"           
+    ##  [6785] "Ddx39"           "Adgre5"          "Adgrl1"          "Gm10644"        
+    ##  [6789] "Asf1b"           "Prkaca"          "Samd1"           "2210011C24Rik"  
+    ##  [6793] "Palm3"           "Il27ra"          "Rln3"            "Gm10643"        
+    ##  [6797] "C330011M18Rik"   "Rfx1"            "Dcaf15"          "Podnl1"         
+    ##  [6801] "Cc2d1a"          "4930432K21Rik"   "Nanos3"          "Gm26887"        
+    ##  [6805] "Gm26532"         "Zswim4"          "D8Ertd738e"      "Mri1"           
+    ##  [6809] "Ccdc130"         "Cacna1a"         "Ier2"            "Gm26664"        
+    ##  [6813] "Nacc1"           "Trmt1"           "Nfix"            "Lyl1"           
+    ##  [6817] "G430095P16Rik"   "Dand5"           "Gadd45gip1"      "Rad23a"         
+    ##  [6821] "Calr"            "Farsa"           "Syce2"           "Gcdh"           
+    ##  [6825] "Dnase2a"         "Mast1"           "Rnaseh2a"        "Prdx2"          
+    ##  [6829] "Junb"            "Hook2"           "Asna1"           "2310036O22Rik"  
+    ##  [6833] "Tnpo2"           "Fbxw9"           "Dhps"            "Wdr83"          
+    ##  [6837] "Wdr83os"         "Man2b1"          "Cks1brt"         "Vps35"          
+    ##  [6841] "Orc6"            "4921524J17Rik"   "Gpt2"            "Dnaja2"         
+    ##  [6845] "Neto2"           "Itfg1"           "Phkb"            "Lonp2"          
+    ##  [6849] "Siah1a"          "N4bp1"           "Cnep1r1"         "Heatr3"         
+    ##  [6853] "Papd5"           "Adcy7"           "Brd7"            "Snx20"          
+    ##  [6857] "Nod2"            "Cyld"            "Chd9"            "Rbl2"           
+    ##  [6861] "Aktip"           "Rpgrip1l"        "Fto"             "Amfr"           
+    ##  [6865] "Nudt21"          "Ogfod1"          "Bbs2"            "Mt3"            
+    ##  [6869] "Mt2"             "Mt1"             "Nup93"           "Slc12a3"        
+    ##  [6873] "Herpud1"         "9330175E14Rik"   "Nlrc5"           "Cpne2"          
+    ##  [6877] "Fam192a"         "Rspry1"          "Arl2bp"          "Ciapin1"        
+    ##  [6881] "Coq9"            "Polr2c"          "Dok4"            "Ccdc102a"       
+    ##  [6885] "Adgrg5"          "Adgrg1"          "Adgrg3"          "Katnb1"         
+    ##  [6889] "Kifc3"           "Zfp319"          "Usb1"            "Mmp15"          
+    ##  [6893] "Cfap20"          "Csnk2a2"         "Gins3"           "Ndrg4"          
+    ##  [6897] "Setd6"           "Cnot1"           "Gm10094"         "Slc38a7"        
+    ##  [6901] "Got2"            "Gm8730"          "Tk2"             "Cklf"           
+    ##  [6905] "Cmtm3"           "Cmtm4"           "Dync1li2"        "Nae1"           
+    ##  [6909] "Car7"            "Pdp2"            "Rrad"            "Fam96b"         
+    ##  [6913] "Cbfb"            "D230025D16Rik"   "B3gnt9"          "Tradd"          
+    ##  [6917] "Fbxl8"           "Hsf4"            "4931428F04Rik"   "Exoc3l"         
+    ##  [6921] "E2f4"            "Elmo3"           "Lrrc29"          "Tmem208"        
+    ##  [6925] "Fhod1"           "Slc9a5"          "Tppp3"           "Zdhhc1"         
+    ##  [6929] "Atp6v0d1"        "Gm38250"         "Agrp"            "Fam65a"         
+    ##  [6933] "Gm5914"          "Ctcf"            "Rltpr"           "Acd"            
+    ##  [6937] "Pard6a"          "Enkd1"           "Gfod2"           "Ranbp10"        
+    ##  [6941] "Cenpt"           "Thap11"          "Nutf2"           "Edc4"           
+    ##  [6945] "Nrn1l"           "Pskh1"           "Ctrl"            "Psmb10"         
+    ##  [6949] "Slc12a4"         "Dpep2"           "Dus2"            "Ddx28"          
+    ##  [6953] "Nfatc3"          "Pla2g15"         "Slc7a6"          "Slc7a6os"       
+    ##  [6957] "Prmt7"           "Zfp90"           "Gm10073"         "Cdh1"           
+    ##  [6961] "Tango6"          "Chtf8"           "Cirh1a"          "Sntb2"          
+    ##  [6965] "Vps4a"           "Pdf"             "Cog8"            "Nip7"           
+    ##  [6969] "Terf2"           "Cyb5b"           "Rps18-ps3"       "Nfat5"          
+    ##  [6973] "Nqo1"            "Nob1"            "Wwp2"            "Rps26-ps1"      
+    ##  [6977] "Psmd7"           "Dhx38"           "Txnl4b"          "Dhodh"          
+    ##  [6981] "Ist1"            "Zfp821"          "Atxn1l"          "Ap1g1"          
+    ##  [6985] "Phlpp2"          "Zfp612"          "Cmtr2"           "Vac14"          
+    ##  [6989] "Sf3b3"           "Cog4"            "Fuk"             "St3gal2"        
+    ##  [6993] "Ddx19a"          "Ddx19b"          "Aars"            "Pdpr"           
+    ##  [6997] "Glg1"            "Rfwd3"           "Mlkl"            "Wdr59"          
+    ##  [7001] "Znrf1"           "Ldhd"            "Zfp1"            "Cfdp1"          
+    ##  [7005] "Tmem170"         "Tmem231"         "Gabarapl2"       "Adat1"          
+    ##  [7009] "Kars"            "Terf2ip"         "Gm6793"          "Mon1b"          
+    ##  [7013] "Nudt7"           "Vat1l"           "4933408N05Rik"   "Wwox"           
+    ##  [7017] "Maf"             "Cdyl2"           "Cmc2"            "Cenpn"          
+    ##  [7021] "Atmin"           "Gcsh"            "Gan"             "Cmip"           
+    ##  [7025] "Sdr42e1"         "Mphosph6"        "Cdh13"           "Hsbp1"          
+    ##  [7029] "Mlycd"           "Osgin1"          "Slc38a8"         "Mbtps1"         
+    ##  [7033] "Hsdl1"           "Taf1c"           "Cotl1"           "Klhl36"         
+    ##  [7037] "Usp10"           "Crispld2"        "Zdhhc7"          "A130014A01Rik"  
+    ##  [7041] "Gse1"            "Gins2"           "1190005I06Rik"   "Emc8"           
+    ##  [7045] "Cox4i1"          "Irf8"            "Mthfsd"          "Fbxo31"         
+    ##  [7049] "Map1lc3b"        "Klhdc4"          "Slc7a5"          "Banp"           
+    ##  [7053] "Zfpm1"           "Zc3h18"          "Cyba"            "Mvd"            
+    ##  [7057] "Snai3"           "Rnf166"          "Ctu2"            "Piezo1"         
+    ##  [7061] "Cdt1"            "Aprt"            "Galns"           "Trappc2l"       
+    ##  [7065] "Cbfa2t3"         "Acsf3"           "Cdh15"           "Ankrd11"        
+    ##  [7069] "Spg7"            "Rpl13"           "Cpne7"           "Chmp1a"         
+    ##  [7073] "Cdk10"           "Spata2l"         "Vps9d1"          "Zfp276"         
+    ##  [7077] "Fanca"           "Tcf25"           "Tubb3"           "Def8"           
+    ##  [7081] "Afg3l1"          "Gas8"            "Rab4a"           "2810455O05Rik"  
+    ##  [7085] "Ccsap"           "Nup133"          "Abcb10"          "Taf5l"          
+    ##  [7089] "Urb2"            "Galnt2"          "Cog2"            "2310022B05Rik"  
+    ##  [7093] "Ttc13"           "Arv1"            "Fam89a"          "2810004N23Rik"  
+    ##  [7097] "Gnpat"           "Exoc8"           "Sprtn"           "Egln1"          
+    ##  [7101] "Tsnax"           "Sipa1l2"         "Map10"           "Ntpcr"          
+    ##  [7105] "Coa6"            "Gm17296"         "Gm26759"         "Irf2bp2"        
+    ##  [7109] "Tomm20"          "Rbm34"           "Pard3"           "Nrp1"           
+    ##  [7113] "Itgb1"           "2610044O15Rik8"  "D830030K20Rik"   "Gm3002"         
+    ##  [7117] "2610042L04Rik"   "Gm3278"          "Gm3488"          "Gm3468"         
+    ##  [7121] "Gm3411"          "Gm3636"          "Gm3667"          "Gm3696"         
+    ##  [7125] "Gm3512"          "Gm3739"          "Gm3752"          "Gm3558"         
+    ##  [7129] "Flnb"            "Abhd6"           "Rpp14"           "Pxk"            
+    ##  [7133] "Pdhb"            "Kctd6"           "4930452B06Rik"   "Fhit"           
+    ##  [7137] "Rpl21-ps4"       "Gm3839"          "3830406C13Rik"   "Gm11100"        
+    ##  [7141] "Thoc7"           "Atxn7"           "Psmd6"           "Il3ra"          
+    ##  [7145] "Slc4a7"          "Oxsm"            "Ngly1"           "Top2b"          
+    ##  [7149] "Thrb"            "Nr1d2"           "Rpl15"           "Nkiras1"        
+    ##  [7153] "Ube2e1"          "Ube2e2"          "Gm2244"          "Gm2237"         
+    ##  [7157] "Nid2"            "2700060E02Rik"   "Gng2"            "Saysd1"         
+    ##  [7161] "Kcnk5"           "Nudt13"          "Ecd"             "Fam149b"        
+    ##  [7165] "Dnajc9"          "Mrps16"          "Anxa7"           "Mss51"          
+    ##  [7169] "Ppp3cb"          "1810062O18Rik"   "Usp54"           "2810402E24Rik"  
+    ##  [7173] "Sec24c"          "6230400D17Rik"   "Fut11"           "Chchd1"         
+    ##  [7177] "Zswim8"          "Ndst2"           "Camk2g"          "Plau"           
+    ##  [7181] "Vcl"             "Ap3m1"           "Adk"             "Kat6b"          
+    ##  [7185] "Samd8"           "Vdac2"           "Comtd1"          "Dlg5"           
+    ##  [7189] "Polr3a"          "Rps24"           "Zmiz1os1"        "Zmiz1"          
+    ##  [7193] "Gm26772"         "Ppif"            "Zcchc24"         "Anxa11"         
+    ##  [7197] "Anxa11os"        "Cphx3"           "Slmap"           "Dennd6a"        
+    ##  [7201] "Arf4"            "Pde12"           "9930004E17Rik"   "Appl1"          
+    ##  [7205] "Hesx1"           "Il17rd"          "Arhgef3"         "Fam208a"        
+    ##  [7209] "Ccdc66"          "Selk"            "Actr8"           "Il17rb"         
+    ##  [7213] "Chdh"            "Cacna1d"         "Dcp1a"           "Tkt"            
+    ##  [7217] "Prkcd"           "Rft1"            "Sfmbt1"          "Tmem110"        
+    ##  [7221] "Mustn1"          "Nek4"            "Spcs1"           "Glt8d1"         
+    ##  [7225] "Gnl3"            "Pbrm1"           "Smim4"           "Nt5dc2"         
+    ##  [7229] "Stab1"           "Nisch"           "Phf7"            "Bap1"           
+    ##  [7233] "Capn7"           "Sh3bp5"          "Mettl6"          "Eaf1"           
+    ##  [7237] "Colq"            "Hacl1"           "Btd"             "Ankrd28"        
+    ##  [7241] "Dph3"            "Oxnad1"          "Ncoa4"           "Timm23"         
+    ##  [7245] "Parg"            "Ercc6"           "1810011H11Rik"   "Mapk8"          
+    ##  [7249] "Rpl23a-ps3"      "Fam35a"          "Glud1"           "Bmpr1a"         
+    ##  [7253] "Wapl"            "Ccser2"          "Ghitm"           "Tspan14"        
+    ##  [7257] "Fam213a"         "Gm17173"         "Ptger2"          "Txndc16"        
+    ##  [7261] "Gpr137c"         "Ero1l"           "Psmc6"           "Styx"           
+    ##  [7265] "Gnpnat1"         "Ddhd1"           "Cdkn3"           "Cnih1"          
+    ##  [7269] "Gmfb"            "Gm10101"         "Cgrrf1"          "Samd4"          
+    ##  [7273] "Gch1"            "Wdhd1"           "Socs4"           "Mapk1ip1l"      
+    ##  [7277] "Lgals3"          "Dlgap5"          "Fbxo34"          "Atg14"          
+    ##  [7281] "Ktn1"            "Tmem260"         "Exoc5"           "Ap5m1"          
+    ##  [7285] "Naa30"           "Ttc5"            "Ccnb1ip1"        "Parp2"          
+    ##  [7289] "Tep1"            "Gm26782"         "Osgep"           "Apex1"          
+    ##  [7293] "Tmem55b"         "Pnp"             "Rnase4"          "Ang"            
+    ##  [7297] "Mettl17"         "Ndrg2"           "Arhgef40"        "Zfp219"         
+    ##  [7301] "Hnrnpc"          "Rpgrip1"         "Supt16"          "Chd8"           
+    ##  [7305] "Rab2b"           "Tox4"            "Mettl3"          "Sall2"          
+    ##  [7309] "Trav1"           "Trav2"           "Trav3-1"         "Trav5-1"        
+    ##  [7313] "Trav7-1"         "Trav6-2"         "Trav7d-2"        "Trav4d-2"       
+    ##  [7317] "Trav7d-3"        "Trav6d-4"        "Trav7d-4"        "Trav8d-1"       
+    ##  [7321] "Trav9d-1"        "Trav6d-5"        "Trav10d"         "Trav13d-1"      
+    ##  [7325] "Trav8d-2"        "Trav16d-dv11"    "Trav13d-4"       "Trav14d-3-dv8"  
+    ##  [7329] "Trav10n"         "Trav6n-6"        "Trav9n-4"        "Trav8n-2"       
+    ##  [7333] "Trav16n"         "Trav13n-4"       "Trav14n-3"       "Trav4-2"        
+    ##  [7337] "Trav7-3"         "Trav6-4"         "Trav7-4"         "Trav9-1"        
+    ##  [7341] "Trav6-5"         "Trav10"          "Trav11"          "Trav7-5"        
+    ##  [7345] "Trav12-1"        "Trav13-1"        "Trav14-1"        "Trav15-1-dv6-1" 
+    ##  [7349] "Trav9-2"         "Trav4-3"         "Trav12-2"        "Trav12-3"       
+    ##  [7353] "Trav13-2"        "Trav14-2"        "Trav3-3"         "Trav9-4"        
+    ##  [7357] "Trav4-4-dv10"    "Trav5-4"         "Trav6-7-dv9"     "Trav16"         
+    ##  [7361] "Trav3-4"         "Trav17"          "Trav19"          "Trav21-dv12"    
+    ##  [7365] "Trdv1"           "Gm43647"         "Trdv2-1"         "Trdv2-2"        
+    ##  [7369] "Trdv3"           "Trdc"            "Trac"            "Dad1"           
+    ##  [7373] "Abhd4"           "Oxa1l"           "Slc7a7"          "Mrpl52"         
+    ##  [7377] "Mmp14"           "Lrp10"           "Rem2"            "Prmt5"          
+    ##  [7381] "Haus4"           "4931414P19Rik"   "Psmb5"           "Acin1"          
+    ##  [7385] "4930579G18Rik"   "1700123O20Rik"   "Slc7a8"          "Homez"          
+    ##  [7389] "Bcl2l2"          "Pabpn1"          "Slc22a17"        "Ngdn"           
+    ##  [7393] "Thtpa"           "Zfhx2"           "Ap1g2"           "Dhrs4"          
+    ##  [7397] "Pck2"            "A730061H03Rik"   "Dcaf11"          "Psme1"          
+    ##  [7401] "Emc9"            "Psme2"           "Rnf31"           "Irf9"           
+    ##  [7405] "Ipo4"            "Tm9sf1"          "Tssk4"           "Mdp1"           
+    ##  [7409] "Nedd8"           "Gmpr2"           "Tinf2"           "Rabggta"        
+    ##  [7413] "Dhrs1"           "Nop9"            "Ltb4r1"          "Ripk3"          
+    ##  [7417] "Khnyn"           "Sdr39u1"         "Gzmd"            "Gzmg"           
+    ##  [7421] "Gzmf"            "Gzmc"            "Gzmb"            "Cenpj"          
+    ##  [7425] "Parp4"           "Mphosph8"        "Gm16973"         "Pspc1"          
+    ##  [7429] "Zmym5"           "2410022M11Rik"   "Zmym2"           "Gjb2"           
+    ##  [7433] "Cryl1"           "Ift88"           "N6amt2"          "1700039M10Rik"  
+    ##  [7437] "Xpo4"            "Lats2"           "Sap18"           "Ska3"           
+    ##  [7441] "Mrpl57"          "Zdhhc20"         "Micu2"           "3110083C13Rik"  
+    ##  [7445] "Rpl13-ps3"       "Rcbtb1"          "Gm6904"          "Phf11a"         
+    ##  [7449] "Phf11b"          "Phf11d"          "Phf11c"          "Setdb2"         
+    ##  [7453] "Cab39l"          "Cdadc1"          "Atp8a2"          "Nupl1"          
+    ##  [7457] "Mtmr6"           "Spata13"         "Mipep"           "Tnfrsf19"       
+    ##  [7461] "Sacs"            "Arl11"           "Ebpl"            "Kpna3"          
+    ##  [7465] "Spryd7"          "Trim13"          "Gm27010"         "Gm27017"        
+    ##  [7469] "Dleu7"           "Rnaseh2b"        "Ints6"           "Wdfy2"          
+    ##  [7473] "Ctsb"            "Fdft1"           "Neil2"           "Mtmr9"          
+    ##  [7477] "Xkr6"            "Pinx1"           "Msra"            "Kif13b"         
+    ##  [7481] "Hmbox1"          "Ints9"           "Extl3"           "Zfp395"         
+    ##  [7485] "Elp3"            "Pbk"             "Esco2"           "Ccdc25"         
+    ##  [7489] "Ptk2b"           "Trim35"          "Dpysl2"          "Gm5464"         
+    ##  [7493] "Bnip3l"          "Ppp2r2a"         "Cdca2"           "Kctd9"          
+    ##  [7497] "Gnrh1"           "Dock5"           "Nefl"            "Slc25a37"       
+    ##  [7501] "Loxl2"           "R3hcc1"          "Chmp7"           "4930480K23Rik"  
+    ##  [7505] "Tnfrsf10b"       "Rhobtb2"         "Bin3"            "Ccar2"          
+    ##  [7509] "9930012K11Rik"   "Pdlim2"          "Ppp3cc"          "Slc39a14"       
+    ##  [7513] "Polr3d"          "Reep4"           "Nudt18"          "Fam160b2"       
+    ##  [7517] "Xpo7"            "Dok2"            "Gfra2"           "Fndc3a"         
+    ##  [7521] "Cysltr2"         "Rcbtb2"          "Rb1"             "Lpar6"          
+    ##  [7525] "Itm2b"           "Med4"            "Nudt15"          "Sucla2"         
+    ##  [7529] "Esd"             "Lrch1"           "5031414D18Rik"   "Lcp1"           
+    ##  [7533] "Zc3h13"          "Siah3"           "Cog3"            "Slc25a30"       
+    ##  [7537] "Gm4285"          "Tpt1"            "Gtf2f2"          "Gpalpp1"        
+    ##  [7541] "Nufip1"          "Rps2-ps6"        "Tsc22d1"         "Serp2"          
+    ##  [7545] "Ccdc122"         "Dnajc15"         "Epsti1"          "Tnfsf11"        
+    ##  [7549] "Akap11"          "Dgkh"            "Vwa8"            "Rgcc"           
+    ##  [7553] "Naa16"           "Mtrf1"           "Kbtbd7"          "Kbtbd6"         
+    ##  [7557] "Wbp4"            "Elf1"            "Sugt1"           "Pcdh17"         
+    ##  [7561] "Diaph3"          "Tdrd3"           "Gm10110"         "Mzt1"           
+    ##  [7565] "Bora"            "Dis3"            "Pibf1"           "Klf12"          
+    ##  [7569] "Tbc1d4"          "Commd6"          "Uchl3"           "Kctd12"         
+    ##  [7573] "Cln5"            "Fbxl3"           "Mycbp2"          "Slain1"         
+    ##  [7577] "Ednrb"           "Pou4f1"          "Rnf219"          "Rbm26"          
+    ##  [7581] "Ndfip2"          "Gm10076"         "Spry2"           "Tpm3-rs7"       
+    ##  [7585] "Mir17hg"         "Tgds"            "Gpr180"          "Abcc4"          
+    ##  [7589] "Cldn10"          "Dzip1"           "Dnajc3"          "Uggt2"          
+    ##  [7593] "Mbnl2"           "Rap2a"           "Ipo5"            "Farp1"          
+    ##  [7597] "Stk24"           "Dock9"           "1810041H14Rik"   "Ubac2"          
+    ##  [7601] "Gpr18"           "Gpr183"          "Tm9sf2"          "Clybl"          
+    ##  [7605] "Pcca"            "Ggact"           "Tmtc4"           "Gm26870"        
+    ##  [7609] "Alkbh8"          "Cwf19l2"         "Aasdhppt"        "Kbtbd3"         
+    ##  [7613] "Msantd4"         "Casp1"           "Casp4"           "Dync2h1"        
+    ##  [7617] "Dcun1d5"         "Mmp10"           "Gm10709"         "Tmem123"        
+    ##  [7621] "Birc2"           "Birc3"           "Jrkl"            "Ccdc82"         
+    ##  [7625] "Phxr4"           "Maml2"           "Mtmr2"           "Cep57"          
+    ##  [7629] "Fam76b"          "Sesn3"           "Endod1"          "Kdm4d"          
+    ##  [7633] "Cwc15"           "Amotl1"          "Ankrd49"         "Mre11a"         
+    ##  [7637] "Gpr83"           "Izumo1r"         "Panx1"           "Med17"          
+    ##  [7641] "4931406C07Rik"   "Taf1d"           "Cep295"          "Smco4"          
+    ##  [7645] "Slc36a4"         "Gm5611"          "Chordc1"         "Zfp317"         
+    ##  [7649] "Gm7808"          "Zfp560"          "Gm26733"         "Zfp26"          
+    ##  [7653] "Zfp426"          "Zfp266"          "Zfp846"          "Fbxl12os"       
+    ##  [7657] "Fbxl12"          "Ubl5"            "Pin1"            "A230050P20Rik"  
+    ##  [7661] "Angptl6"         "Ppan"            "Eif3g"           "Dnmt1"          
+    ##  [7665] "S1pr2"           "Mrpl4"           "Icam1"           "Icam4"          
+    ##  [7669] "Icam5"           "Zglp1"           "Fdx1l"           "Raver1"         
+    ##  [7673] "1700084C06Rik"   "Tyk2"            "Cdc37"           "Pde4a"          
+    ##  [7677] "Keap1"           "S1pr5"           "Atg4d"           "Kri1"           
+    ##  [7681] "Cdkn2d"          "Ap1m2"           "Slc44a2"         "Ilf3"           
+    ##  [7685] "Qtrt1"           "Dnm2"            "Tmed1"           "AB124611"       
+    ##  [7689] "Carm1"           "Yipf2"           "1810026J23Rik"   "Smarca4"        
+    ##  [7693] "Gm26511"         "Ldlr"            "Spc24"           "Dock6"          
+    ##  [7697] "Rab3d"           "Tmem205"         "Plppr2"          "Swsap1"         
+    ##  [7701] "Prkcsh"          "Zfp653"          "Gm16845"         "Ecsit"          
+    ##  [7705] "Elof1"           "Acp5"            "Pigyl"           "Zfp809"         
+    ##  [7709] "Zfp599"          "Zfp810"          "Anln"            "9530077C05Rik"  
+    ##  [7713] "Rp9"             "Bbs9"            "Dpy19l1"         "Herpud2"        
+    ##  [7717] "Sept7"           "Eepd1"           "Acad8"           "Thyn1"          
+    ##  [7721] "Vps26b"          "Ncapd3"          "Igsf9b"          "Snx19"          
+    ##  [7725] "Zbtb44"          "St14"            "Aplp2"           "Prdm10"         
+    ##  [7729] "Nfrkb"           "Fli1"            "Ets1"            "Gm27162"        
+    ##  [7733] "St3gal4"         "Dcps"            "Tirap"           "Srpr"           
+    ##  [7737] "Foxred1"         "Fam118b"         "Rpusd4"          "Cdon"           
+    ##  [7741] "Ddx25"           "Pus3"            "Hyls1"           "Pate2"          
+    ##  [7745] "Chek1"           "Stt3a"           "Ei24"            "Tmem218"        
+    ##  [7749] "Slc37a2"         "Ccdc15"          "Msantd2"         "Nrgn"           
+    ##  [7753] "Spa17"           "Siae"            "Tbrg1"           "Vwa5a"          
+    ##  [7757] "Olfr920"         "Gramd1b"         "Hspa8"           "Crtam"          
+    ##  [7761] "Ubash3b"         "Sorl1"           "Gm16214"         "Sc5d"           
+    ##  [7765] "Tbcel"           "Arhgef12"        "Tmem136"         "Oaf"            
+    ##  [7769] "Thy1"            "Rnf26"           "Usp2"            "Gm26737"        
+    ##  [7773] "Cbl"             "Nlrx1"           "Hinfp"           "C2cd2l"         
+    ##  [7777] "Dpagt1"          "H2afx"           "Hmbs"            "Vps11"          
+    ##  [7781] "Hyou1"           "Slc37a4"         "Trappc4"         "Rps25"          
+    ##  [7785] "Ccdc84"          "Gm9830"          "C030014I23Rik"   "Bcl9l"          
+    ##  [7789] "Cxcr5"           "Ddx6"            "Phldb1"          "Arcn1"          
+    ##  [7793] "Ift46"           "Kmt2a"           "Atp5l"           "Ube4a"          
+    ##  [7797] "Cd3g"            "Cd3d"            "Cd3e"            "Mpzl2"          
+    ##  [7801] "Mpzl3"           "Amica1"          "BC049352"        "Il10ra"         
+    ##  [7805] "Cep164"          "Bace1"           "Gm16536"         "Rnf214"         
+    ##  [7809] "Pcsk7"           "Sidt2"           "Pafah1b2"        "Sik3"           
+    ##  [7813] "Zpr1"            "Bud13"           "Cadm1"           "Nxpe4"          
+    ##  [7817] "Gm5616"          "Rexo2"           "Rbm7"            "Gm5617"         
+    ##  [7821] "Zbtb16"          "Usp28"           "Zw10"            "Ncam1"          
+    ##  [7825] "Rpl10-ps3"       "Pts"             "Il18"            "Sdhd"           
+    ##  [7829] "Timm8b"          "AU019823"        "Pih1d2"          "Dlat"           
+    ##  [7833] "Hspb2"           "Cryab"           "1110032A03Rik"   "Fdxacb1"        
+    ##  [7837] "Alg9"            "Ppp2r1b"         "Sik2"            "Pou2af1"        
+    ##  [7841] "2010007H06Rik"   "Fdx1"            "Rdx"             "Ddx10"          
+    ##  [7845] "Exph5"           "Kdelc2"          "Atm"             "Npat"           
+    ##  [7849] "Acat1"           "Cul5"            "Gm16124"         "Slc35f2"        
+    ##  [7853] "Cib2"            "Idh3a"           "Acsbg1"          "Dnaja4"         
+    ##  [7857] "Wdr61"           "Ireb2"           "Hykk"            "AY074887"       
+    ##  [7861] "Psma4"           "Ube2q2"          "Fbxo22"          "Nrg4"           
+    ##  [7865] "Etfa"            "Scaper"          "Rcn2"            "Pstpip1"        
+    ##  [7869] "Tspan3"          "Peak1"           "Hmg20a"          "Snx33"          
+    ##  [7873] "Imp3"            "Snupn"           "Ptpn9"           "Sin3a"          
+    ##  [7877] "2700012I20Rik"   "Man2c1os"        "Man2c1"          "Neil1"          
+    ##  [7881] "Commd4"          "1700017B05Rik"   "Ppcdc"           "Cox5a"          
+    ##  [7885] "Gm26631"         "Fam219b"         "Mpi"             "Scamp2"         
+    ##  [7889] "Ulk3"            "Csk"             "Edc3"            "Clk3"           
+    ##  [7893] "Arid3b"          "Ubl7"            "Sema7a"          "Islr"           
+    ##  [7897] "Pml"             "Stoml1"          "Nptn"            "Rec114"         
+    ##  [7901] "Adpgk"           "Bbs4"            "Arih1"           "Hexa"           
+    ##  [7905] "Parp6"           "Pkm"             "Senp8"           "Myo9a"          
+    ##  [7909] "Lrrc49"          "Gm10655"         "Tle3"            "Rplp1"          
+    ##  [7913] "Kif23"           "Glce"            "Anp32a"          "Coro2b"         
+    ##  [7917] "Fem1b"           "Gm26609"         "Cln6"            "Pias1"          
+    ##  [7921] "Map2k5"          "2300009A05Rik"   "Aagab"           "Smad3"          
+    ##  [7925] "Zwilch"          "Rpl4"            "Snapc5"          "Map2k1"         
+    ##  [7929] "Uchl4"           "Tipin"           "Dis3l"           "Rab11a"         
+    ##  [7933] "Dennd4a"         "Vwa9"            "Hacd3"           "Dpp8"           
+    ##  [7937] "Parp16"          "Clpx"            "Pdcd7"           "Mtfmt"          
+    ##  [7941] "Spg21"           "Plekho2"         "Pif1"            "Rbpms2"         
+    ##  [7945] "Oaz2"            "Zfp609"          "Trip4"           "2810417H13Rik"  
+    ##  [7949] "Csnk1g1"         "Ppib"            "Snx22"           "Snx1"           
+    ##  [7953] "Fam96a"          "Dapk2"           "Herc1"           "Fbxl22"         
+    ##  [7957] "Usp3"            "Car12"           "Aph1b"           "Aph1c"          
+    ##  [7961] "Rab8b"           "Rps27l"          "Lactb"           "Tpm1"           
+    ##  [7965] "Vps13c"          "Rora"            "Ice2"            "Gm4978"         
+    ##  [7969] "Anxa2"           "Gm28731"         "Bnip2"           "Gtf2a2"         
+    ##  [7973] "Fam81a"          "Myo1e"           "Ccnb2"           "Rnf111"         
+    ##  [7977] "Sltm"            "Fam63b"          "Gm10642"         "Adam10"         
+    ##  [7981] "Aqp9"            "Polr2m"          "Tcf12"           "Zfp280d"        
+    ##  [7985] "Mns1"            "Tex9"            "Rfx7"            "Nedd4"          
+    ##  [7989] "Dyx1c1"          "Ccpg1os"         "Ccpg1"           "Pigb"           
+    ##  [7993] "Rab27a"          "Khdc3"           "Rsl24d1"         "Fam214a"        
+    ##  [7997] "Arpp19"          "Myo5a"           "Mapk6"           "4933433G15Rik"  
+    ##  [8001] "A130057D12Rik"   "Leo1"            "Tmod3"           "Lysmd2"         
+    ##  [8005] "Lrrc1"           "Gclc"            "Elovl5"          "Fbxo9"          
+    ##  [8009] "Ick"             "C920006O11Rik"   "Gsta4"           "4930542C12Rik"  
+    ##  [8013] "Ddx43"           "Mb21d1"          "Gm17324"         "Mto1"           
+    ##  [8017] "Eef1a1"          "Slc17a5"         "Cd109"           "Cox7a2"         
+    ##  [8021] "Tmem30a"         "Filip1"          "Senp6"           "Gm17477"        
+    ##  [8025] "Myo6"            "Impg1"           "Irak1bp1"        "Phip"           
+    ##  [8029] "Hmgn3"           "Lca5"            "Sh3bgrl2"        "Ttk"            
+    ##  [8033] "Bckdhb"          "Fam46a"          "Ibtk"            "Ube2cbp"        
+    ##  [8037] "Dopey1"          "Pgm3"            "Rwdd2a"          "Cyb5r4"         
+    ##  [8041] "Cep162"          "Nt5e"            "Snx14"           "Syncrip"        
+    ##  [8045] "Zfp949"          "Mthfsl"          "Gm10634"         "Bcl2a1d"        
+    ##  [8049] "Gm29562"         "Bcl2a1a"         "Bcl2a1b"         "Mthfs"          
+    ##  [8053] "Tmed3"           "Ctsh"            "Morf4l1"         "Gm26882"        
+    ##  [8057] "Tbc1d2b"         "Plscr1"          "Plscr4"          "Plod2"          
+    ##  [8061] "1190002N15Rik"   "Slc9a9"          "Chst2"           "U2surp"         
+    ##  [8065] "Gm28424"         "Trpc1"           "Pls1"            "1700065D16Rik"  
+    ##  [8069] "Atr"             "Gm16794"         "Xrn1"            "Gk5"            
+    ##  [8073] "Tfdp2"           "Atp1b3"          "BC043934"        "Rnf7"           
+    ##  [8077] "Rasa2"           "Zbtb38"          "A930006L05Rik"   "Pxylp1"         
+    ##  [8081] "Gm19325"         "Gm26767"         "Slc25a36"        "Nmnat3"         
+    ##  [8085] "Rbp1"            "Copb2"           "Mrps22"          "Faim"           
+    ##  [8089] "Gm1123"          "Pik3cb"          "Cep70"           "Armc8"          
+    ##  [8093] "Dbr1"            "Il20rb"          "Nck1"            "Stag1"          
+    ##  [8097] "Pccb"            "Msl2"            "Ppp2r3a"         "Cep63"          
+    ##  [8101] "Anapc13"         "Ryk"             "Rab6b"           "Srprb"          
+    ##  [8105] "Trf"             "1300017J02Rik"   "Topbp1"          "Cdv3"           
+    ##  [8109] "Tmem108"         "Uba5"            "Acad11"          "Dnajc13"        
+    ##  [8113] "Acpp"            "Cpne4"           "Mrpl3"           "Nudt16"         
+    ##  [8117] "Aste1"           "Atp2c1"          "Gm19667"         "Pik3r4"         
+    ##  [8121] "Col6a4"          "Glyctk"          "Wdr82"           "Ppm1m"          
+    ##  [8125] "Twf2"            "Alas1"           "Poc1a"           "Dusp7"          
+    ##  [8129] "Rpl29"           "Acy1"            "Abhd14a"         "Abhd14b"        
+    ##  [8133] "Pcbp4"           "Parp3"           "Rrp9"            "Tex264"         
+    ##  [8137] "Rad54l2"         "Vprbp"           "Manf"            "Rbm15b"         
+    ##  [8141] "4930524O07Rik"   "Mapkapk3"        "Cish"            "Gm17041"        
+    ##  [8145] "Hemk1"           "6430571L13Rik"   "Cacna2d2"        "Tmem115"        
+    ##  [8149] "Cyb561d2"        "Nprl2"           "Zmynd10"         "Gm34106"        
+    ##  [8153] "Rassf1"          "Gm9917"          "Tusc2"           "Hyal2"          
+    ##  [8157] "Hyal1"           "Nat6"            "Hyal3"           "Ifrd2"          
+    ##  [8161] "Gnai2"           "Rbm5"            "Rbm6"            "Mon1a"          
+    ##  [8165] "Traip"           "Uba7"            "Fam212a"         "Ip6k1"          
+    ##  [8169] "Gmppb"           "Rnf123"          "Amigo3"          "Apeh"           
+    ##  [8173] "Bsn"             "Dag1"            "Nicn1"           "Amt"            
+    ##  [8177] "Tcta"            "Rhoa"            "Gm37401"         "Gpx1"           
+    ##  [8181] "Usp4"            "1700102P08Rik"   "Klhdc8b"         "Ccdc71"         
+    ##  [8185] "Lamb2"           "Usp19"           "Qars"            "Qrich1"         
+    ##  [8189] "Impdh2"          "Ndufaf3"         "4833445I07Rik"   "Dalrd3"         
+    ##  [8193] "Wdr6"            "P4htm"           "Arih2"           "Slc25a20"       
+    ##  [8197] "Prkar2a"         "Ip6k2"           "Nckipsd"         "Slc26a6"        
+    ##  [8201] "Uqcrc1"          "Pfkfb4"          "Shisa5"          "Gm42641"        
+    ##  [8205] "Atrip"           "Tma7"            "Ccdc51"          "Plxnb1"         
+    ##  [8209] "Nme6"            "Cdc25a"          "Map4"            "Dhx30"          
+    ##  [8213] "Smarcc1"         "Cspg5"           "Elp6"            "Scap"           
+    ##  [8217] "Ptpn23"          "Klhl18"          "Kif9"            "Setd2"          
+    ##  [8221] "Nradd"           "Nbeal2"          "Ccdc12"          "Tmie"           
+    ##  [8225] "Als2cl"          "Tdgf1"           "Ccrl2"           "Lrrfip2"        
+    ##  [8229] "Mlh1"            "Epm2aip1"        "Pdcd6ip"         "Clasp2"         
+    ##  [8233] "Ubp1"            "Fbxl2"           "Bcl2a1c"         "Crtap"          
+    ##  [8237] "Glb1"            "Tmppe"           "Ccr4"            "Cnot10"         
+    ##  [8241] "Dync1li1"        "Cmtm6"           "Cmtm7"           "Gm9888"         
+    ##  [8245] "Gpd1l"           "Rps27rt"         "Stt3b"           "Tgfbr2"         
+    ##  [8249] "Gm26614"         "Azi2"            "Cmc1"            "Gm17399"        
+    ##  [8253] "Eomes"           "Golga4"          "Itga9"           "Ctdspl"         
+    ##  [8257] "Plcd1"           "Acaa1b"          "Gm10608"         "Oxsr1"          
+    ##  [8261] "Myd88"           "Acaa1a"          "Xylb"            "Exog"           
+    ##  [8265] "Wdr48"           "Cx3cr1"          "Gorasp1"         "Csrnp1"         
+    ##  [8269] "Ccr8"            "Slc25a38"        "Rpsa"            "Eif1b"          
+    ##  [8273] "Rpl14"           "5830454E08Rik"   "Ctnnb1"          "Trak1"          
+    ##  [8277] "Vipr1"           "Sec22c"          "Deb1"            "Nktr"           
+    ##  [8281] "Higd1a"          "1700048O20Rik"   "Snrk"            "Ano10"          
+    ##  [8285] "Gm26797"         "Abhd5"           "Tcaim"           "Zfp445"         
+    ##  [8289] "Zkscan7"         "1110059G10Rik"   "Kif15"           "Tmem42"         
+    ##  [8293] "Zdhhc3"          "Exosc7"          "Clec3b"          "Tmem158"        
+    ##  [8297] "Lars2"           "Limd1"           "Sacm1l"          "Slc6a20b"       
+    ##  [8301] "Ccr9"            "Lztfl1"          "Fyco1"           "Cxcr6"          
+    ##  [8305] "Xcr1"            "Ccr1"            "Ccr3"            "Ccr2"           
+    ##  [8309] "Ccr5"            "2010315B03Rik"   "Ppp2r3d"         "Sfi1"           
+    ##  [8313] "Drg1"            "Eif4enif1"       "Patz1"           "Pik3ip1"        
+    ##  [8317] "Limk2"           "Rnf185"          "Selm"            "Smtn"           
+    ##  [8321] "Morc2a"          "Dusp18"          "Slc35e4"         "Tcn2"           
+    ##  [8325] "Pes1"            "Mtfp1"           "Sec14l2"         "Rnf215"         
+    ##  [8329] "Ccdc157"         "Sf3a1"           "Tbc1d10a"        "Gatsl3"         
+    ##  [8333] "Osm"             "Lif"             "Hormad2"         "Mtmr3"          
+    ##  [8337] "Ascc2"           "Uqcr10"          "Zmat5"           "Nf2"            
+    ##  [8341] "Nipsnap1"        "Thoc5"           "Nefh"            "Ap1b1"          
+    ##  [8345] "Gas2l1"          "Ewsr1"           "Rhbdd3"          "Emid1"          
+    ##  [8349] "Kremen1"         "Znrf3"           "Xbp1"            "Ccdc117"        
+    ##  [8353] "Mrps24"          "Urgcp"           "Dbnl"            "Polm"           
+    ##  [8357] "Pold2"           "Gck"             "Ykt6"            "Camk2b"         
+    ##  [8361] "Nudcd3"          "A730071L15Rik"   "Ddx56"           "Tmed4"          
+    ##  [8365] "Ogdh"            "Zmiz2"           "Ppia"            "H2afv"          
+    ##  [8369] "Purb"            "Gm11973"         "Myo1g"           "Ccm2"           
+    ##  [8373] "Tbrg4"           "Ramp3"           "Hus1"            "Upp1"           
+    ##  [8377] "Zpbp"            "Gm11998"         "Ikzf1"           "Fignl1"         
+    ##  [8381] "Ddc"             "Sec61g"          "Fbxo48"          "Plek"           
+    ##  [8385] "Cnrip1"          "Ppp3r1"          "Wdr92"           "Pno1"           
+    ##  [8389] "C1d"             "Etaa1"           "Etaa1os"         "Spred2"         
+    ##  [8393] "Actr2"           "Rab1a"           "Cep68"           "Slc1a4"         
+    ##  [8397] "Sertad2"         "Aftph"           "Lgalsl"          "Peli1"          
+    ##  [8401] "Vps54"           "Ugp2"            "Mdh1"            "Wdpcp"          
+    ##  [8405] "Ehbp1"           "Tmem17"          "Gm28048"         "B3gnt2"         
+    ##  [8409] "Commd1"          "Zrsr1"           "Cct4"            "Xpo1"           
+    ##  [8413] "Usp34"           "Ahsa2"           "0610010F05Rik"   "Pex13"          
+    ##  [8417] "Pus10"           "Rel"             "Papolg"          "Fancl"          
+    ##  [8421] "Vrk2"            "Pnpt1"           "Smek2"           "Cfap36"         
+    ##  [8425] "Ccdc88a"         "Prorsd1"         "Gm12089"         "Mtif2"          
+    ##  [8429] "Rps27a"          "Rtn4"            "Sptbn1"          "Acyp2"          
+    ##  [8433] "Psme4"           "Asb3"            "Erlec1"          "Chac2"          
+    ##  [8437] "Stc2"            "Bod1"            "Gm12107"         "Cpeb4"          
+    ##  [8441] "Nsg2"            "Il9r"            "Snrnp25"         "Nprl3"          
+    ##  [8445] "Mpg"             "Hba-a1"          "Hba-a2"          "Sh3pxd2b"       
+    ##  [8449] "Ubtd2"           "Efcab9"          "Stk10"           "Fbxw11"         
+    ##  [8453] "Npm1"            "Kcnmb1"          "Lcp2"            "Dock2"          
+    ##  [8457] "Spdl1"           "Pank3"           "Rars"            "Wwc1"           
+    ##  [8461] "Mat2b"           "Hmmr"            "Nudcd2"          "Ccng1"          
+    ##  [8465] "Pttg1"           "Slu7"            "Pwwp2a"          "Ttc1"           
+    ##  [8469] "Ublcp1"          "Rnf145"          "Ebf1"            "Clint1"         
+    ##  [8473] "Lsm11"           "Thg1l"           "Gm12166"         "Adam19"         
+    ##  [8477] "Gm16033"         "Cyfip2"          "Itk"             "Gm12167"        
+    ##  [8481] "Fam71b"          "Med7"            "2310031A07Rik"   "Havcr2"         
+    ##  [8485] "Gnb2l1"          "Trim41"          "Gm12184"         "Trim7"          
+    ##  [8489] "Irgm1"           "Gm12185"         "Psme2b"          "9930111J21Rik1" 
+    ##  [8493] "Olfr56"          "Tgtp1"           "9930111J21Rik2"  "Tgtp2"          
+    ##  [8497] "Ifi47"           "Btnl9"           "Zfp62"           "Mgat1"          
+    ##  [8501] "Cnot6"           "Gfpt2"           "Mapk9"           "Rnf130"         
+    ##  [8505] "Tbc1d9b"         "Gm12195"         "3010026O09Rik"   "Sqstm1"         
+    ##  [8509] "Mgat4b"          "Gm26542"         "Maml1"           "Canx"           
+    ##  [8513] "Hnrnph1"         "Rufy1"           "Zfp354c"         "Clk4"           
+    ##  [8517] "Col23a1"         "Phykpl"          "Hnrnpab"         "Nhp2"           
+    ##  [8521] "Rmnd5b"          "N4bp3"           "D930048N14Rik"   "0610009B22Rik"  
+    ##  [8525] "Sec24a"          "Sar1b"           "Jade2"           "Gm26551"        
+    ##  [8529] "Cdkn2aipnl"      "Ube2b"           "Gm12204"         "Cdkl3"          
+    ##  [8533] "Ppp2ca"          "9430098F02Rik"   "Skp1a"           "Tcf7"           
+    ##  [8537] "A630014C17Rik"   "Vdac1"           "9530068E07Rik"   "Hspa4"          
+    ##  [8541] "Zcchc10"         "Aff4"            "Uqcrq"           "Gdf9"           
+    ##  [8545] "Sept8"           "Kif3a"           "Il4"             "Il13"           
+    ##  [8549] "Rad50"           "Irf1"            "Gm17334"         "Gm12216"        
+    ##  [8553] "Slc22a5"         "Slc22a21"        "Slc22a4"         "Pdlim4"         
+    ##  [8557] "P4ha2"           "Csf2"            "Fnip1"           "Rapgef6"        
+    ##  [8561] "Cdc42se2"        "Lyrm7"           "Hint1"           "Tnip1"          
+    ##  [8565] "Anxa6"           "Ccdc69"          "Gm2a"            "Slc36a3"        
+    ##  [8569] "Slc36a3os"       "Slc36a1"         "Atox1"           "G3bp1"          
+    ##  [8573] "Glra1"           "Fam114a2"        "Mfap3"           "Galnt10"        
+    ##  [8577] "Sap30l"          "Larp1"           "Cnot8"           "Gemin5"         
+    ##  [8581] "Mrpl22"          "Igtp"            "Irgm2"           "Zfp692"         
+    ##  [8585] "Zfp672"          "Sh3bp5l"         "Gm12258"         "2810021J22Rik"  
+    ##  [8589] "Zfp39"           "Rnf187"          "Hist3h2ba"       "Hist3h2a"       
+    ##  [8593] "Trim11"          "Iba57"           "Guk1"            "Mrpl55"         
+    ##  [8597] "2310033P09Rik"   "Arf1"            "Snap47"          "Jmjd4"          
+    ##  [8601] "Zfp867"          "Zkscan17"        "Mprip"           "Flcn"           
+    ##  [8605] "Gm16062"         "Cops3"           "Nt5m"            "Med9"           
+    ##  [8609] "Rasd1"           "Pemt"            "Rai1"            "4930412M03Rik"  
+    ##  [8613] "Srebf1"          "Tom1l2"          "Atpaf2"          "Gid4"           
+    ##  [8617] "Drg2"            "Alkbh5"          "Llgl1"           "Flii"           
+    ##  [8621] "Mief2"           "Top3a"           "Smcr8"           "Shmt1"          
+    ##  [8625] "Dhrs7b"          "Tmem11"          "Gm26534"         "Natd1"          
+    ##  [8629] "Map2k3os"        "Map2k3"          "Tnfrsf13b"       "Usp22"          
+    ##  [8633] "Aldh3a2"         "Slc47a2"         "Mapk7"           "B9d1"           
+    ##  [8637] "Epn2"            "Grap"            "Fam83g"          "Prpsap2"        
+    ##  [8641] "Ulk2"            "A530017D24Rik"   "Gm26964"         "Akap10"         
+    ##  [8645] "Specc1"          "Adora2b"         "Zswim7"          "Ttc19"          
+    ##  [8649] "Ncor1"           "Pigl"            "Cenpv"           "Ubb"            
+    ##  [8653] "Trpv2"           "Lrrc75aos2"      "Mmgt2"           "Zfp287"         
+    ##  [8657] "Gm27194"         "Zfp286"          "Trim16"          "Fbxw10"         
+    ##  [8661] "Tvp23b"          "Hs3st3b1"        "Cox10"           "2810001G20Rik"  
+    ##  [8665] "Elac2"           "Map2k4"          "Zkscan6"         "Tmem220"        
+    ##  [8669] "Adprm"           "Sco1"            "Gas7"            "Stx8"           
+    ##  [8673] "C78197"          "Ntn1"            "Pik3r5"          "Myh10"          
+    ##  [8677] "Ndel1"           "Rpl26"           "Slc25a35"        "Rangrf"         
+    ##  [8681] "Pfas"            "Ctc1"            "Aurkb"           "9330160F10Rik"  
+    ##  [8685] "Borcs6"          "Tmem107"         "Vamp2"           "Per1"           
+    ##  [8689] "Hes7"            "Alox8"           "Cntrob"          "Trappc1"        
+    ##  [8693] "Kcnab3"          "Chd3os"          "Chd3"            "Cyb5d1"         
+    ##  [8697] "Naa38"           "Tmem88"          "Kdm6b"           "Efnb3"          
+    ##  [8701] "Wrap53"          "Trp53"           "Fxr2"            "Mpdu1"          
+    ##  [8705] "Cd68"            "Eif4a1"          "Senp3"           "Polr2a"         
+    ##  [8709] "Zbtb4"           "Chrnb1"          "Nlgn2"           "Tmem256"        
+    ##  [8713] "Plscr3"          "Kctd11"          "Acap1"           "2810408A11Rik"  
+    ##  [8717] "Neurl4"          "Gps2"            "Eif5a"           "Elp5"           
+    ##  [8721] "Ctdnep1"         "Gabarap"         "Phf23"           "Dvl2"           
+    ##  [8725] "Acadvl"          "Dlg4"            "Slc16a11"        "Slc16a13"       
+    ##  [8729] "0610010K14Rik"   "Gm21988"         "Rnasek"          "Pelp1"          
+    ##  [8733] "Arrb2"           "Med11"           "Cxcl16"          "Zmynd15"        
+    ##  [8737] "Tm4sf5"          "Psmb6"           "Pld2"            "Mink1"          
+    ##  [8741] "Chrne"           "Slc25a11"        "Rnf167"          "Pfn1"           
+    ##  [8745] "Eno3"            "Spag7"           "Camta2"          "Kif1c"          
+    ##  [8749] "Zfp3"            "Scimp"           "Rabep1"          "Nup88"          
+    ##  [8753] "Rpain"           "C1qbp"           "Dhx33"           "Derl2"          
+    ##  [8757] "Mis12"           "6330403K07Rik"   "Fam64a"          "4933427D14Rik"  
+    ##  [8761] "Txndc17"         "Med31"           "Xaf1"            "Mybbp1a"        
+    ##  [8765] "Spns3"           "Ube2g1"          "Ankfy1"          "Cyb5d2"         
+    ##  [8769] "Zzef1"           "Atp2a3"          "Camkk1"          "Ncbp3"          
+    ##  [8773] "Itgae"           "Gsg2"            "Emc6"            "Tax1bp3"        
+    ##  [8777] "Ctns"            "Shpk"            "Rap1gap2"        "Cluh"           
+    ##  [8781] "Pafah1b1"        "Mettl16"         "Mnt"             "Sgsm2"          
+    ##  [8785] "Tsr1"            "Srr"             "Smg6"            "Hic1"           
+    ##  [8789] "Ovca2"           "Rtn4rl1"         "Rpa1"            "Smyd4"          
+    ##  [8793] "Serpinf1"        "Wdr81"           "Tlcd2"           "Prpf8"          
+    ##  [8797] "Slc43a2"         "Pitpna"          "Inpp5k"          "Myo1c"          
+    ##  [8801] "Crk"             "Ywhae"           "Rph3al"          "1700016K19Rik"  
+    ##  [8805] "Fam101b"         "Vps53"           "Glod4"           "Fam57a"         
+    ##  [8809] "Gemin4"          "Rnmtl1"          "Nxn"             "Timm22"         
+    ##  [8813] "Abr"             "Gosr1"           "Cpd"             "Tmigd1"         
+    ##  [8817] "Blmh"            "Nsrp1"           "Ssh2"            "Ankrd13b"       
+    ##  [8821] "Git1"            "Trp53i13"        "Abhd15"          "Gm10392"        
+    ##  [8825] "Taok1"           "Nufip2"          "Myo18a"          "Pipox"          
+    ##  [8829] "Phf12"           "Dhrs13"          "Flot2"           "Eral1"          
+    ##  [8833] "Fam222b"         "Traf4"           "Nek8"            "Tlcd1"          
+    ##  [8837] "Rpl23a"          "Rab34"           "Supt6"           "Sdf2"           
+    ##  [8841] "2610507B11Rik"   "Spag5"           "Aldoc"           "Pigs"           
+    ##  [8845] "Unc119"          "Slc46a1"         "Sarm1"           "Tmem199"        
+    ##  [8849] "Poldip2"         "Tnfaip1"         "Ift20"           "Tmem97"         
+    ##  [8853] "Nlk"             "Fam58b"          "Lyrm9"           "Lgals9"         
+    ##  [8857] "Ksr1"            "Wsb1"            "Nf1"             "Gm21975"        
+    ##  [8861] "Evi2b"           "Evi2a"           "Rab11fip4"       "Rab11fip4os1"   
+    ##  [8865] "Gm11205"         "Utp6"            "Suz12"           "Gm26563"        
+    ##  [8869] "Crlf3"           "Atad5"           "Tefm"            "Rnf135"         
+    ##  [8873] "Rhot1"           "Rhbdl3"          "5730455P16Rik"   "Zfp207"         
+    ##  [8877] "Psmd11"          "Cdk5r1"          "Ccl12"           "Ccl1"           
+    ##  [8881] "Cct6b"           "Zfp830"          "Gm11423"         "Lig3"           
+    ##  [8885] "Rffl"            "Rad51d"          "Nle1"            "Slfn5"          
+    ##  [8889] "Slfn9"           "Slfn8"           "Slfn2"           "Slfn1"          
+    ##  [8893] "Slfn3"           "AI662270"        "Pex12"           "Ap2b1"          
+    ##  [8897] "1700020L24Rik"   "Taf15"           "Heatr9"          "Ccl5"           
+    ##  [8901] "Ccl9"            "Ccl6"            "Ccl3"            "Ccl4"           
+    ##  [8905] "Wfdc17"          "Heatr6"          "Ddx52"           "Synrg"          
+    ##  [8909] "Dusp14"          "Tada2a"          "Acaca"           "Aatf"           
+    ##  [8913] "Mrm1"            "Dhrs11"          "Ggnbp2"          "Pigw"           
+    ##  [8917] "Myo19"           "Znhit3"          "Usp32"           "Appbp2"         
+    ##  [8921] "Appbp2os"        "Ppm1d"           "Bcas3"           "Brip1"          
+    ##  [8925] "Brip1os"         "Ints2"           "Med13"           "Rnft1"          
+    ##  [8929] "Rps6kb1"         "Tubd1"           "Vmp1"            "Ptrh2"          
+    ##  [8933] "Cltc"            "Dhx40"           "Ypel2"           "Smg8"           
+    ##  [8937] "Prr11"           "Ska2"            "Gm11491"         "Trim37"         
+    ##  [8941] "Rad51c"          "Sept4"           "Mtmr4"           "Rnf43"          
+    ##  [8945] "Supt4a"          "Mir142hg"        "Bzrap1"          "Mks1"           
+    ##  [8949] "Dynll2"          "2010015M23Rik"   "Srsf1"           "Gm15892"        
+    ##  [8953] "Vezf1"           "Cuedc1"          "Mrps23"          "Msi2"           
+    ##  [8957] "C030037D09Rik"   "Akap1"           "Scpep1"          "Coil"           
+    ##  [8961] "Trim25"          "Dgke"            "Dgkeos"          "Pctp"           
+    ##  [8965] "Mmd"             "Hlf"             "Stxbp4"          "Cox11"          
+    ##  [8969] "Utp18"           "Mbtd1"           "Nme2"            "Gm20390"        
+    ##  [8973] "Nme1"            "Spag9"           "Tob1"            "Wfikkn2"        
+    ##  [8977] "Luc7l3"          "Ankrd40"         "Rsad1"           "Acsf2"          
+    ##  [8981] "Lrrc59"          "Eme1"            "Mrpl27"          "Xylt2"          
+    ##  [8985] "Col1a1"          "Ppp1r9b"         "Pdk2"            "Itga3"          
+    ##  [8989] "Kat7"            "Gm11520"         "Fam117a"         "Slc35b1"        
+    ##  [8993] "Spop"            "Phb"             "Gm26830"         "Zfp652"         
+    ##  [8997] "B130006D01Rik"   "Abi3"            "Gngt2"           "Snf8"           
+    ##  [9001] "Ube2z"           "Atp5g1"          "Hoxb4"           "Skap1"          
+    ##  [9005] "2010300F17Rik"   "Snx11"           "Cbx1"            "Nfe2l1"         
+    ##  [9009] "Copz2"           "Cdk5rap3"        "Pnpo"            "Sp2"            
+    ##  [9013] "Sp6"             "Scrn2"           "Mrpl10"          "Osbpl7"         
+    ##  [9017] "Tbx21"           "Tbkbp1"          "Kpnb1"           "Npepps"         
+    ##  [9021] "Mrpl45"          "Socs7"           "E130012A19Rik"   "Mllt6"          
+    ##  [9025] "Cisd3"           "Pcgf2"           "Psmb3"           "Pip4k2b"        
+    ##  [9029] "Cwc25"           "1700001P01Rik"   "Rpl23"           "Lasp1"          
+    ##  [9033] "B230217C12Rik"   "Plxdc1"          "Arl5c"           "Cacnb1"         
+    ##  [9037] "Rpl19"           "Stac2"           "Fbxl20"          "Med1"           
+    ##  [9041] "Cdk12"           "Stard3"          "Pgap3"           "Mien1"          
+    ##  [9045] "Grb7"            "Ikzf3"           "Zpbp2"           "Ormdl3"         
+    ##  [9049] "Gm12355"         "Psmd3"           "Med24"           "Thra"           
+    ##  [9053] "Nr1d1"           "Msl1"            "Gm12359"         "Casc3"          
+    ##  [9057] "Wipf2"           "Cdc6"            "Rara"            "Top2a"          
+    ##  [9061] "Igfbp4"          "Tns4"            "Ccr7"            "Smarce1"        
+    ##  [9065] "Krt222"          "Krt10"           "Krt17"           "Eif1"           
+    ##  [9069] "Hap1"            "Jup"             "P3h4"            "Nt5c3b"         
+    ##  [9073] "Klhl10"          "Klhl11"          "Acly"            "Cnp"            
+    ##  [9077] "Dnajc7"          "Nkiras2"         "Dhx58"           "Kat2a"          
+    ##  [9081] "Hspb9"           "Rab5c"           "Ghdc"            "Stat5b"         
+    ##  [9085] "Stat5a"          "Stat3"           "Atp6v0a1"        "Naglu"          
+    ##  [9089] "Coasy"           "Mlx"             "Psmc3ip"         "Fam134c"        
+    ##  [9093] "Tubg1"           "Tubg2"           "Plekhh3"         "Cntnap1"        
+    ##  [9097] "Ccr10"           "Ezh1"            "Ramp2"           "Vps25"          
+    ##  [9101] "Coa3"            "Cntd1"           "Becn1"           "Psme3"          
+    ##  [9105] "Aoc2"            "Gm27029"         "Aarsd1"          "Ptges3l"        
+    ##  [9109] "Rundc1"          "Rpl27"           "Ifi35"           "Vat1"           
+    ##  [9113] "Brca1"           "Nbr1"            "Tmem106a"        "Rdm1"           
+    ##  [9117] "Arl4d"           "Dhx8"            "Gm11551"         "Dusp3"          
+    ##  [9121] "Mpp2"            "Tmem101"         "Lsm12"           "G6pc3"          
+    ##  [9125] "Hdac5"           "BC030867"        "Tmub2"           "Atxn7l3"        
+    ##  [9129] "Ubtf"            "Rundc3a"         "Slc25a39"        "Grn"            
+    ##  [9133] "Gpatch8"         "Ccdc43"          "Eftud2"          "Kif18b"         
+    ##  [9137] "Dcakd"           "Nmt1"            "Acbd4"           "Hexim1"         
+    ##  [9141] "Hexim2"          "Fmnl1"           "Map3k14"         "Arhgap27"       
+    ##  [9145] "Arhgap27os3"     "Arhgap27os2"     "Plekhm1"         "Gosr2"          
+    ##  [9149] "Wnt3"            "Nsf"             "Arf2"            "Mapt"           
+    ##  [9153] "Kansl1"          "Cdc27"           "Myl4"            "Itgb3"          
+    ##  [9157] "Mettl2"          "1700052K11Rik"   "Tlk2"            "Tanc2"          
+    ##  [9161] "Dcaf7"           "Taco1os"         "Taco1"           "Map3k3"         
+    ##  [9165] "Limd2"           "Strada"          "Ccdc47"          "Ddx42"          
+    ##  [9169] "Ftsj3"           "Psmc5"           "Smarcd2"         "Cd79b"          
+    ##  [9173] "Icam2"           "Ern1"            "Tex2"            "Pecam1"         
+    ##  [9177] "Milr1"           "Polg2"           "Ddx5"            "Cep95"          
+    ##  [9181] "Smurf2"          "Gm11707"         "Kpna2"           "1810010H24Rik"  
+    ##  [9185] "Bptf"            "Nol11"           "Pitpnc1"         "Gm11713"        
+    ##  [9189] "Psmd12"          "Helz"            "Prkca"           "Axin2"          
+    ##  [9193] "Rgs9"            "Gm11696"         "Gna13"           "9930022D16Rik"  
+    ##  [9197] "Amz2"            "Slc16a6"         "Arsg"            "Prkar1a"        
+    ##  [9201] "Fam20a"          "1700012B07Rik"   "Abca5"           "Map2k6"         
+    ##  [9205] "2610035D17Rik"   "Slc39a11"        "Cog1"            "Fam104a"        
+    ##  [9209] "D11Wsu47e"       "Cdc42ep4"        "Rpl38"           "Ttyh2"          
+    ##  [9213] "AF251705"        "Rab37"           "Cd300lf"         "Slc9a3r1"       
+    ##  [9217] "Nat9"            "Tmem104"         "Fdxr"            "Hid1"           
+    ##  [9221] "Ict1"            "Ict1os"          "Atp5h"           "Kctd2"          
+    ##  [9225] "Slc16a5"         "Armc7"           "Nt5c"            "Hn1"            
+    ##  [9229] "Sumo2"           "Nup85"           "Gga3"            "Mrps7"          
+    ##  [9233] "Mif4gd"          "Slc25a19"        "Grb2"            "Tmem94"         
+    ##  [9237] "Caskin2"         "Tsen54"          "Llgl2"           "Recql5"         
+    ##  [9241] "Sap30bp"         "Galk1"           "H3f3b"           "Unk"            
+    ##  [9245] "Unc13d"          "Wbp2"            "Trim65"          "Mrpl38"         
+    ##  [9249] "Fbf1"            "Acox1"           "Ten1"            "Srp68"          
+    ##  [9253] "Exoc7"           "Rnf157"          "Ubald2"          "Prpsap1"        
+    ##  [9257] "Ube2o"           "Rhbdf2"          "1810032O08Rik"   "St6galnac2"     
+    ##  [9261] "Jmjd6"           "Mettl23"         "Srsf2"           "Mfsd11"         
+    ##  [9265] "Snhg20"          "Sec14l1"         "Sept9"           "Tnrc6c"         
+    ##  [9269] "Tmc6"            "Tmc8"            "6030468B19Rik"   "Syngr2"         
+    ##  [9273] "Tk1"             "Afmid"           "Birc5"           "Tha1"           
+    ##  [9277] "Gm11725"         "Socs3"           "Pgs1"            "Cyth1"          
+    ##  [9281] "Usp36"           "Timp2"           "Lgals3bp"        "Cant1"          
+    ##  [9285] "Engase"          "Cbx2"            "Cbx8"            "Cbx4"           
+    ##  [9289] "Tbc1d16"         "Gm26888"         "Ccdc40"          "Gaa"            
+    ##  [9293] "Eif4a3"          "Sgsh"            "Slc26a11"        "Rnf213"         
+    ##  [9297] "Endov"           "Rptor"           "Chmp6"           "Gm11767"        
+    ##  [9301] "Baiap2"          "Cep131"          "Enthd2"          "1810043H04Rik"  
+    ##  [9305] "Slc38a10"        "Actg1"           "0610009L18Rik"   "Faap100"        
+    ##  [9309] "Nploc4"          "Oxld1"           "Ccdc137"         "Arl16"          
+    ##  [9313] "Hgs"             "Mrpl12"          "Slc25a10"        "Fam195b"        
+    ##  [9317] "P4hb"            "Arhgdia"         "Alyref"          "Anapc11"        
+    ##  [9321] "Npb"             "Pcyt2"           "Sirt7"           "Mafg"           
+    ##  [9325] "Gm17586"         "Aspscr1"         "Stra13"          "Lrrc45"         
+    ##  [9329] "Rac3"            "Dcxr"            "Hmga1-rs1"       "Rfng"           
+    ##  [9333] "Gps1"            "Dus1l"           "Fasn"            "Slc16a3"        
+    ##  [9337] "Csnk1d"          "Cd7"             "Sectm1a"         "Ogfod3"         
+    ##  [9341] "Hexdc"           "BC017643"        "Narf"            "Foxk2"          
+    ##  [9345] "Wdr45b"          "Fn3krp"          "Fn3k"            "Tbcd"           
+    ##  [9349] "B3gntl1"         "Metrnl"          "Gm16505"         "2810429I04Rik"  
+    ##  [9353] "Gdi2"            "Fam208b"         "Asb13"           "Net1"           
+    ##  [9357] "Akr1c13"         "Akr1e1"          "Klf6"            "Pitrm1"         
+    ##  [9361] "Pfkp"            "Wdr37"           "Idi1"            "Gtpbp4"         
+    ##  [9365] "Larp4b"          "Dip2c"           "Gm26601"         "Zmynd11"        
+    ##  [9369] "Mtr"             "Actn2"           "Heatr1"          "Lgals8"         
+    ##  [9373] "Edaradd"         "Ero1lb"          "Gpr137b-ps"      "Gpr137b"        
+    ##  [9377] "Lyst"            "B3galnt2"        "Tbce"            "Ggps1"          
+    ##  [9381] "Arid4b"          "Mrpl32"          "Psma2"           "AW209491"       
+    ##  [9385] "Mplkip"          "Cdk13"           "Rala"            "Yae1d1"         
+    ##  [9389] "Vdac3-ps1"       "Vps41"           "Amph"            "Tcrg-C1"        
+    ##  [9393] "Tcrg-C3"         "Tcrg-C2"         "Trgv2"           "Gm16602"        
+    ##  [9397] "Tcrg-C4"         "Stard3nl"        "Epdr1"           "Elmo1"          
+    ##  [9401] "Trim27"          "Zscan12"         "Zkscan3"         "Pgbd1"          
+    ##  [9405] "Zscan26"         "Nkapl"           "AK157302"        "Gm11273"        
+    ##  [9409] "Zkscan8"         "Hist1h2bl"       "Hist1h2ai"       "Hist1h3h"       
+    ##  [9413] "Hist1h2bm"       "Hist1h4j"        "Hist1h4k"        "Hist1h2ak"      
+    ##  [9417] "Hist1h2bn"       "Hist1h1b"        "Hist1h3i"        "Hist1h2an"      
+    ##  [9421] "Hist1h2bp"       "Hist1h2ao"       "Hist1h4n"        "Hist1h2ap"      
+    ##  [9425] "Prss16"          "Hist1h2bk"       "Hist1h4i"        "Hist1h2ag"      
+    ##  [9429] "Hist1h2bj"       "Zfp322a"         "Abt1"            "Hist1h4h"       
+    ##  [9433] "Hist1h2af"       "Hist1h3g"        "Hist1h2bh"       "Hist1h3f"       
+    ##  [9437] "Hist1h4f"        "Hist1h1d"        "Hist1h3e"        "Hist1h2ae"      
+    ##  [9441] "Hist1h2bg"       "Hist1h2bf"       "Hist1h2ad"       "Hist1h3d"       
+    ##  [9445] "Hist1h4d"        "Hist1h2be"       "Hist1h1e"        "Hist1h2ac"      
+    ##  [9449] "Hist1h2bc"       "Hist1h4c"        "Hfe"             "Hist1h1c"       
+    ##  [9453] "Hist1h3c"        "Hist1h2bb"       "Hist1h2ab"       "Hist1h3b"       
+    ##  [9457] "Hist1h4b"        "Hist1h4a"        "Hist1h3a"        "Hist1h1a"       
+    ##  [9461] "Lrrc16a"         "Cmah"            "Gm11342"         "Fam65b"         
+    ##  [9465] "C530050E15Rik"   "Gmnn"            "BC005537"        "Acot13"         
+    ##  [9469] "Tdp2"            "Aldh5a1"         "Gpld1"           "Mrs2"           
+    ##  [9473] "Sox4"            "Cdkal1"          "E2f3"            "Mboat1"         
+    ##  [9477] "Uqcrfs1"         "Dusp22"          "Irf4"            "Exoc2"          
+    ##  [9481] "Gmds"            "Wrnip1"          "Serpinb1a"       "Serpinb6b"      
+    ##  [9485] "Serpinb9"        "Serpinb9b"       "Serpinb6a"       "1110046J04Rik"  
+    ##  [9489] "Nqo2"            "Ripk1"           "Bphl"            "Tubb2a"         
+    ##  [9493] "Tubb2b"          "Psmg4"           "Pxdc1"           "Prpf4b"         
+    ##  [9497] "Eci2"            "Cdyl"            "Rpp40"           "Lyrm4"          
+    ##  [9501] "Fars2"           "Nrn1"            "Rreb1"           "Ssr1"           
+    ##  [9505] "Cage1"           "Riok1"           "Dsp"             "Snrnp48"        
+    ##  [9509] "Txndc5"          "Bloc1s5"         "Eef1e1"          "Slc35b3"        
+    ##  [9513] "Gm26514"         "Tfap2a"          "Gcnt2"           "Pak1ip1"        
+    ##  [9517] "Tmem14c"         "Smim13"          "Nedd9"           "Tmem170b"       
+    ##  [9521] "Gm28707"         "Hivep1"          "Tbc1d7"          "Gfod1"          
+    ##  [9525] "Sirt5"           "Nol7"            "Ranbp9"          "Mcur1"          
+    ##  [9529] "Cd83"            "Jarid2"          "Dtnbp1"          "Mylip"          
+    ##  [9533] "Gmpr"            "Atxn1"           "5033430I15Rik"   "Cap2"           
+    ##  [9537] "Fam8a1"          "Nup153"          "Kif13a"          "Nhlrc1"         
+    ##  [9541] "Tpmt"            "Kdm1b"           "Dek"             "Zfp169"         
+    ##  [9545] "A830005F24Rik"   "6720427I07Rik"   "Ptpdc1"          "Phf2"           
+    ##  [9549] "Fam120a"         "Fam120aos"       "Ninj1"           "Card19"         
+    ##  [9553] "Susd3"           "Fgd3"            "Bicd2"           "Ippk"           
+    ##  [9557] "Cenpp"           "Nol8"            "Iars"            "Fbxw17"         
+    ##  [9561] "Spin1"           "Nxnl2"           "Hist1h2al"       "Cks2"           
+    ##  [9565] "Secisbp2"        "Gm15440"         "Sema4d"          "Gadd45g"        
+    ##  [9569] "Auh"             "Nfil3"           "Sptlc1"          "Sfxn1"          
+    ##  [9573] "Hrh2"            "Cplx2"           "Thoc3"           "Simc1"          
+    ##  [9577] "4833439L19Rik"   "Arl10"           "Nop16"           "Higd2a"         
+    ##  [9581] "Cltb"            "Faf2"            "Rnf44"           "Sncb"           
+    ##  [9585] "Tspan17"         "Uimc1"           "Zfp346"          "Nsd1"           
+    ##  [9589] "Rab24"           "Prelid1"         "Mxd3"            "Lman2"          
+    ##  [9593] "Rgs14"           "Grk6"            "Prr7"            "Pdlim7"         
+    ##  [9597] "Dok3"            "Ddx41"           "Fam193b"         "Tmed9"          
+    ##  [9601] "B4galt7"         "Caml"            "Ddx46"           "B230219D22Rik"  
+    ##  [9605] "Txndc15"         "Pcbd2"           "Catsper3"        "H2afy"          
+    ##  [9609] "Fbxl21"          "Smad5"           "Klhl3"           "Hnrnpa0"        
+    ##  [9613] "Idnk"            "Ubqln1"          "Gkap1"           "2210016F16Rik"  
+    ##  [9617] "Hnrnpk"          "Rmi1"            "Slc28a3"         "Agtpbp1"        
+    ##  [9621] "Naa35"           "Golm1"           "Isca1"           "Zcchc6"         
+    ##  [9625] "Dapk1"           "4930486L24Rik"   "Ctla2b"          "Ctla2a"         
+    ##  [9629] "Zfp808"          "Gm3604"          "Zfp935"          "6720489N17Rik"  
+    ##  [9633] "Gm5141"          "2010111I01Rik"   "Fancc"           "Ptch1"          
+    ##  [9637] "Ercc6l2"         "Slc35d2"         "Zfp367"          "Habp4"          
+    ##  [9641] "Cdc14b"          "1810034E14Rik"   "Aaed1"           "Ctsl"           
+    ##  [9645] "Cdk20"           "Hiatl1"          "Zfp369"          "Uqcrb"          
+    ##  [9649] "Gm10767"         "Mterf3"          "Ptdss1"          "Zfp712"         
+    ##  [9653] "Gm28557"         "Zfp759"          "Rsl1"            "Zfp455"         
+    ##  [9657] "Zfp458"          "Zfp595"          "Zfp953"          "Gm28041"        
+    ##  [9661] "Zfp456"          "Zfp429"          "Zfp459"          "Zfp874a"        
+    ##  [9665] "Zfp874b"         "Zfp58"           "Zfp87"           "Zfp748"         
+    ##  [9669] "9430065F17Rik"   "Zfp729b"         "Gm37276"         "Zfp729a"        
+    ##  [9673] "Zfp738"          "Zfp65"           "Zfp85"           "Zfp273"         
+    ##  [9677] "Mtrr"            "Fastkd3"         "Papd7"           "Nsun2"          
+    ##  [9681] "Srd5a1"          "Med10"           "Gm26819"         "Ice1"           
+    ##  [9685] "Gm10263"         "Ndufs6"          "Mrpl36"          "Lpcat1"         
+    ##  [9689] "Clptm1l"         "Slc12a7"         "Nkd2"            "Trip13"         
+    ##  [9693] "Brd9"            "Gm15912"         "Cep72"           "Exoc3"          
+    ##  [9697] "Pdcd6"           "Sdha"            "Ccdc127"         "Gm10116"        
+    ##  [9701] "Zfp825"          "Erap1"           "Cast"            "Ell2"           
+    ##  [9705] "Glrx"            "Rfesd"           "Arsk"            "Ttc37"          
+    ##  [9709] "Mctp1"           "Slf1"            "2210408I21Rik"   "Fam172a"        
+    ##  [9713] "Pou5f2"          "Arrdc3"          "Lysmd3"          "Polr3g"         
+    ##  [9717] "Mblac2"          "Gm17259"         "Cetn3"           "Tmem161b"       
+    ##  [9721] "Ccnh"            "Rasa1"           "Cox7c"           "Xrcc4"          
+    ##  [9725] "Tmem167"         "Rps23"           "Atg10"           "A830009L08Rik"  
+    ##  [9729] "Ssbp2"           "Zcchc9"          "Rasgrf2"         "Msh3"           
+    ##  [9733] "Dhfr"            "Zfyve16"         "Serinc5"         "Mtx3"           
+    ##  [9737] "Cmya5"           "Papd4"           "Homer1"          "Jmy"            
+    ##  [9741] "Arsb"            "Lhfpl2"          "Scamp1"          "Gm9776"         
+    ##  [9745] "Ap3b1"           "Tbca"            "Wdr41"           "Zbed3"          
+    ##  [9749] "Aggf1"           "F2rl1"           "F2r"             "Iqgap2"         
+    ##  [9753] "F2rl2"           "Sv2c"            "Poc5"            "Polk"           
+    ##  [9757] "Col4a3bp"        "Hmgcr"           "Gm6169"          "Nsa2"           
+    ##  [9761] "Gfm2"            "Hexb"            "Enc1"            "Gm26619"        
+    ##  [9765] "Gm10260"         "Utp15"           "Ankra2"          "Btf3"           
+    ##  [9769] "Gm9828"          "Gm10320"         "Tmem171"         "Fcho2"          
+    ##  [9773] "Tnpo1"           "Ptcd2"           "Mrps27"          "Map1b"          
+    ##  [9777] "Mccc2"           "Bdp1"            "Serf1"           "Smn1"           
+    ##  [9781] "Naip2"           "Naip5"           "Gtf2h2"          "Marveld2"       
+    ##  [9785] "Rad17"           "Ak6"             "Taf9"            "Ccdc125"        
+    ##  [9789] "Cdk7"            "Mrps36"          "Cenph"           "Ccnb1"          
+    ##  [9793] "Slc30a5"         "Pik3r1"          "Mast4"           "Srek1"          
+    ##  [9797] "Erbb2ip"         "Nln"             "Sgtb"            "Trappc13"       
+    ##  [9801] "Trim23"          "Ppwd1"           "Cenpk"           "Adamts6"        
+    ##  [9805] "Cwc27"           "2610204G07Rik"   "Srek1ip1"        "Ipo11"          
+    ##  [9809] "Dimt1"           "Kif2a"           "Apoo-ps"         "Zswim6"         
+    ##  [9813] "Smim15"          "Ndufaf2"         "Ercc8"           "Elovl7"         
+    ##  [9817] "Depdc1b"         "Pde4d"           "Plk2"            "Gpbp1"          
+    ##  [9821] "Mier3"           "Map3k1"          "Gm15326"         "Ankrd55"        
+    ##  [9825] "Il6st"           "Slc38a9"         "Plpp1"           "Skiv2l2"        
+    ##  [9829] "Dhx29"           "Ccno"            "Gpx8"            "Gzma"           
+    ##  [9833] "Gzmk"            "Esm1"            "Snx18"           "Arl15"          
+    ##  [9837] "Ndufs4"          "Mocs2"           "Itga2"           "Itga1"          
+    ##  [9841] "Pelo"            "Parp8"           "Gm17509"         "Emb"            
+    ##  [9845] "Mrps30"          "B430218F22Rik"   "Nnt"             "Paip1"          
+    ##  [9849] "4833420G17Rik"   "3110070M22Rik"   "Gm7120"          "Gm21967"        
+    ##  [9853] "Hmgcs1"          "Nim1k"           "Zfp131"          "Gm21818"        
+    ##  [9857] "BC147527"        "Rab10os"         "Rab10"           "Gm26520"        
+    ##  [9861] "Kif3c"           "1110002L01Rik"   "Asxl2"           "Dtnb"           
+    ##  [9865] "Dnmt3a"          "Pomc"            "Dnajc27"         "Adcy3"          
+    ##  [9869] "Cenpo"           "Ptrhd1"          "Ncoa1"           "Itsn2"          
+    ##  [9873] "Gm17541"         "Sf3b6"           "BC068281"        "Mfsd2b"         
+    ##  [9877] "Ubxn2a"          "Atad2b"          "Ldah"            "Hs1bp3"         
+    ##  [9881] "Rhob"            "Pum2"            "Sdc1"            "Laptm4a"        
+    ##  [9885] "Wdr35"           "Ttc32"           "Rdh14"           "Pgk1-rs7"       
+    ##  [9889] "Gen1"            "Smc6"            "Fam49a"          "Rpl36-ps3"      
+    ##  [9893] "Ddx1"            "Nbas"            "Trib2"           "Lpin1"          
+    ##  [9897] "E2f6"            "Rock2"           "Pqlc3"           "Kcnf1"          
+    ##  [9901] "Pdia6"           "Nol10"           "Odc1"            "Hpcal1"         
+    ##  [9905] "Asap2"           "Itgb1bp1"        "Cpsf3"           "Iah1"           
+    ##  [9909] "Adam17"          "Ywhaq"           "Gm4419"          "Gm16372"        
+    ##  [9913] "Taf1b"           "Grhl1"           "Klf11"           "Rrm2"           
+    ##  [9917] "Mboat2"          "Kidins220"       "Id2"             "Rnf144a"        
+    ##  [9921] "Rsad2"           "Cmpk2"           "Dcdc2c"          "Rps7"           
+    ##  [9925] "Rnaseh1"         "Adi1"            "Trappc12"        "Tssc1"          
+    ##  [9929] "Tmem18"          "Acp1"            "Sh3yl1"          "Dld"            
+    ##  [9933] "Cbll1"           "Bcap29"          "Dus4l"           "Cog5"           
+    ##  [9937] "Hbp1"            "Prkar2b"         "Pik3cg"          "Ccdc71l"        
+    ##  [9941] "Nampt"           "Gdap10"          "4933406C10Rik"   "Sypl"           
+    ##  [9945] "Atxn7l1"         "Twistnb"         "Gm18025"         "Snx13"          
+    ##  [9949] "Ahr"             "Tspan13"         "Bzw2"            "Ankmy2"         
+    ##  [9953] "Lrrc72"          "Sostdc1"         "D630036H23Rik"   "Ispd"           
+    ##  [9957] "Arl4a"           "Scin"            "Gm17056"         "Ifrd1"          
+    ##  [9961] "Zfp277"          "Dock4"           "Immp2l"          "Lrrn3"          
+    ##  [9965] "Dnajb9"          "Pnpla8"          "Gm1818"          "G2e3"           
+    ##  [9969] "Scfd1"           "Coch"            "Strn3"           "Ap4s1"          
+    ##  [9973] "Hectd1"          "Heatr5a"         "Gm26517"         "Dtd2"           
+    ##  [9977] "Nubpl"           "Arhgap5"         "1700031P21Rik"   "Egln3"          
+    ##  [9981] "Sptssa"          "Eapp"            "Snx6"            "Cfl2"           
+    ##  [9985] "Baz1a"           "2700097O09Rik"   "Fam177a"         "Srp54b"         
+    ##  [9989] "1700047I17Rik2"  "Ppp2r3c"         "1110008L16Rik"   "Psma6"          
+    ##  [9993] "Nfkbia"          "Ralgapa1"        "Brms1l"          "Mbip"           
+    ##  [9997] "Prps1l3"         "Mipol1"          "Gm17529"         "Sec23a"         
+    ## [10001] "Gemin2"          "Trappc6b"        "Pnn"             "Gm5786"         
+    ## [10005] "Ctage5"          "Fbxo33"          "Gm527"           "Klhl28"         
+    ## [10009] "Fam179b"         "Prpf39"          "Fkbp3"           "Fancm"          
+    ## [10013] "Mis18bp1"        "Rpl10l"          "Mdga2"           "Rps29"          
+    ## [10017] "Lrr1"            "Rpl36al"         "Mgat2"           "Dnaaf2"         
+    ## [10021] "9330151L19Rik"   "Pole2"           "Klhdc1"          "Klhdc2"         
+    ## [10025] "Nemf"            "Gm9887"          "Arf6"            "Vcpkmt"         
+    ## [10029] "Sos2"            "L2hgdh"          "Atp5s"           "Map4k5"         
+    ## [10033] "Sav1"            "Nin"             "Pygl"            "Tmx1"           
+    ## [10037] "Frmd6"           "Actr10"          "Psma3"           "3110056K07Rik"  
+    ## [10041] "Arid4a"          "Timm9"           "2700049A03Rik"   "Daam1"          
+    ## [10045] "Gpr135"          "Jkamp"           "Pcnxl4"          "Dhrs7"          
+    ## [10049] "Ppm1a"           "Mnat1"           "Trmt5"           "Slc38a6"        
+    ## [10053] "Tmem30b"         "Prkch"           "Hif1a"           "Snapc1"         
+    ## [10057] "Ppp2r5e"         "Wdr89"           "Sgpp1"           "Syne2"          
+    ## [10061] "Mthfd1"          "Akap5"           "Zbtb25"          "Zbtb1"          
+    ## [10065] "4930426I24Rik"   "Hspa2"           "Gm10451"         "Plekhg3"        
+    ## [10069] "Churc1"          "Fntb"            "Max"             "Fut8"           
+    ## [10073] "Gphn"            "Mpp5"            "Atp6v1d"         "Eif2s1"         
+    ## [10077] "Tmem229b"        "Pigh"            "Arg2"            "Vti1b"          
+    ## [10081] "Rdh11"           "Rdh12"           "Zfyve26"         "Rad51b"         
+    ## [10085] "Zfp36l1"         "Gm26669"         "2310015A10Rik"   "Actn1"          
+    ## [10089] "Dcaf5"           "Exd2"            "Erh"             "Slc39a9"        
+    ## [10093] "Susd6"           "Gm26545"         "Srsf5"           "Gm20498"        
+    ## [10097] "Cox16"           "Gm4787"          "Adam4"           "Synj2bp"        
+    ## [10101] "Med6"            "Map3k9"          "Pcnx"            "Sipa1l1"        
+    ## [10105] "Dcaf4"           "Zfyve1"          "Rbm25"           "Gm29361"        
+    ## [10109] "Psen1"           "Numb"            "2410016O06Rik"   "Acot2"          
+    ## [10113] "Acot6"           "Dnal1"           "Elmsan1"         "Ptgr2"          
+    ## [10117] "Zfp410"          "Fam161b"         "Coq6"            "Entpd5"         
+    ## [10121] "Bbof1"           "Rnf113a2"        "Aldh6a1"         "Lin52"          
+    ## [10125] "Abcd4"           "Npc2"            "Isca2"           "Arel1"          
+    ## [10129] "Fcf1"            "Ylpm1"           "Prox2"           "Dlst"           
+    ## [10133] "Rps6kl1"         "Eif2b2"          "Mlh3"            "Acyp1"          
+    ## [10137] "Nek9"            "Tmed10"          "Fos"             "Jdp2"           
+    ## [10141] "Batf"            "0610007P14Rik"   "Ttll5"           "Tgfb3"          
+    ## [10145] "Ift43"           "Gpatch2l"        "Angel1"          "Irf2bpl"        
+    ## [10149] "Gm26698"         "Cipc"            "Pomt2"           "Gstz1"          
+    ## [10153] "Tmed8"           "Samd15"          "Noxred1"         "Vipas39"        
+    ## [10157] "Ahsa1"           "Sptlc2"          "Gm26764"         "Alkbh1"         
+    ## [10161] "Slirp"           "Snw1"            "Adck1"           "Cep128"         
+    ## [10165] "Gtf2a1"          "Sel1l"           "Gm9726"          "Galc"           
+    ## [10169] "Gpr65"           "Spata7"          "Ptpn21"          "Zc3h14"         
+    ## [10173] "Eml5"            "Ttc8"            "Foxn3"           "Efcab11"        
+    ## [10177] "Tdp1"            "Psmc1"           "Nrde2"           "Calm1"          
+    ## [10181] "Ttc7b"           "Rps6ka5"         "9030617O03Rik"   "Gpr68"          
+    ## [10185] "Ccdc88c"         "Smek1"           "D130020L05Rik"   "Trip11"         
+    ## [10189] "Atxn3"           "Cpsf2"           "Rin3"            "Lgmn"           
+    ## [10193] "Golga5"          "Itpk1"           "Gm20069"         "Gm20604"        
+    ## [10197] "Tmem251"         "AK010878"        "Ubr7"            "Btbd7"          
+    ## [10201] "Unc79"           "Asb2"            "Otub2"           "Ddx24"          
+    ## [10205] "Ifi27"           "Ifi27l2a"        "Serpina9"        "Serpina3f"      
+    ## [10209] "Serpina3g"       "Dicer1"          "Gm28875"         "Syne3"          
+    ## [10213] "Glrx5"           "D430019H16Rik"   "Atg2b"           "Gskip"          
+    ## [10217] "Papola"          "Vrk1"            "Gm16084"         "Gm2800"         
+    ## [10221] "Bcl11b"          "Setd3"           "Ccnk"            "Evl"            
+    ## [10225] "Degs2"           "Yy1"             "Slc25a29"        "Wars"           
+    ## [10229] "Wdr25"           "Meg3"            "Ppp2r5c"         "Dync1h1"        
+    ## [10233] "Hsp90aa1"        "Wdr20"           "Zfp839"          "Cinp"           
+    ## [10237] "Tecpr2"          "Ankrd9"          "Rcor1"           "Traf3"          
+    ## [10241] "Cdc42bpb"        "A230065H16Rik"   "Eif5"            "2810029C07Rik"  
+    ## [10245] "Mark3"           "Ckb"             "Trmt61a"         "Bag5"           
+    ## [10249] "Apopt1"          "Klc1"            "Xrcc3"           "Zfyve21"        
+    ## [10253] "Ppp1r13b"        "2010107E04Rik"   "Inf2"            "Adssl1"         
+    ## [10257] "Siva1"           "Akt1"            "Zbtb42"          "Cep170b"        
+    ## [10261] "Pld4"            "BC022687"        "Cdca4"           "Gpr132"         
+    ## [10265] "Nudt14"          "Gm26583"         "Brf1"            "Btbd6"          
+    ## [10269] "9230104M06Rik"   "Pacs2"           "Tex22"           "Mta1"           
+    ## [10273] "Crip2"           "Crip1"           "4930427A07Rik"   "Tmem121"        
+    ## [10277] "Ighd"            "Ighm"            "Ighv1-76"        "Zfp386"         
+    ## [10281] "Vipr2"           "Wdr60"           "Gm11027"         "Esyt2"          
+    ## [10285] "Ncapg2"          "Cdca7l"          "Sp4"             "Itgb8"          
+    ## [10289] "Gm6768"          "Sepp1"           "Fbxo4"           "AW549877"       
+    ## [10293] "Oxct1"           "Card6"           "Rpl37"           "Gm10250"        
+    ## [10297] "Prkaa1"          "Ttc33"           "Ptger4"          "Fyb"            
+    ## [10301] "Gm2245"          "Rictor"          "Wdr70"           "Nup155"         
+    ## [10305] "2410089E03Rik"   "Nipbl"           "Nadk2"           "Skp2"           
+    ## [10309] "Lmbrd2"          "Capsl"           "Il7r"            "Spef2"          
+    ## [10313] "Dnajc21"         "Brix1"           "Rad1"            "Rai14"          
+    ## [10317] "4930556M19Rik.1" "Amacr"           "Tars"            "Sub1"           
+    ## [10321] "Zfr"             "Mtmr12"          "Golph3"          "6030458C11Rik"  
+    ## [10325] "Drosha"          "Acot10"          "Basp1"           "Myo10"          
+    ## [10329] "Fam134b"         "Zfp622"          "Gm6576"          "Ank"            
+    ## [10333] "Otulin"          "Fam105a"         "Trio"            "Dap"            
+    ## [10337] "Ropn1l"          "March6"          "Cct5"            "Fam173b"        
+    ## [10341] "Cpq"             "Mtdh"            "Laptm4b"         "Rpl30"          
+    ## [10345] "Hrsp12"          "Pop1"            "Stk3"            "Vps13b"         
+    ## [10349] "Cox6c"           "Polr2k"          "Spag1"           "Rnf19a"         
+    ## [10353] "Ankrd46"         "Pabpc1"          "Ywhaz"           "Zfp706"         
+    ## [10357] "Ncald"           "Rrm2b"           "Ubr5"            "Klf10"          
+    ## [10361] "Azin1"           "Atp6v1c1"        "Fzd6"            "Slc25a32"       
+    ## [10365] "Dcaf13"          "Lrp12"           "Oxr1"            "Eif3e"          
+    ## [10369] "Emc2"            "Nudcd1"          "Eny2"            "Pkhd1l1"        
+    ## [10373] "Ebag9"           "Trps1"           "Eif3h"           "Utp23"          
+    ## [10377] "Rad21"           "Gm10020"         "Med30"           "Ext1"           
+    ## [10381] "Enpp2"           "Taf2"            "Dscc1"           "Deptor"         
+    ## [10385] "Mrpl13"          "Mtbp"            "Sntb1"           "Zhx2"           
+    ## [10389] "Derl1"           "Tbc1d31"         "9130401M01Rik"   "Gm29394"        
+    ## [10393] "Zhx1"            "Atad2"           "Wdyhv1"          "Fbxo32"         
+    ## [10397] "D15Ertd621e"     "Tmem65"          "Trmt12"          "Rnf139"         
+    ## [10401] "Tatdn1"          "Ndufb9"          "Mtss1"           "Sqle"           
+    ## [10405] "E430025E21Rik"   "Nsmce2"          "Trib1"           "Fam84b"         
+    ## [10409] "Myc"             "Pvt1"            "Fam49b"          "Asap1"          
+    ## [10413] "Efr3a"           "Lrrc6"           "Tmem71"          "Phf20l1"        
+    ## [10417] "Tg"              "Sla"             "Wisp1"           "Ndrg1"          
+    ## [10421] "St3gal1"         "Zfat"            "Khdrbs3"         "Trappc9"        
+    ## [10425] "Chrac1"          "Ago2"            "Ptk2"            "Dennd3"         
+    ## [10429] "Slc45a4"         "Ptp4a3"          "Arc"             "Jrk"            
+    ## [10433] "Them6"           "Lynx1"           "Ly6k"            "Ly6e"           
+    ## [10437] "Ly6a"            "Ly6c1"           "Ly6c2"           "Zfp41"          
+    ## [10441] "Top1mt"          "Zc3h3"           "Gsdmd"           "Naprt"          
+    ## [10445] "Eef1d"           "Pycrl"           "Tsta3"           "Zfp623"         
+    ## [10449] "Zfp707"          "Ccdc166"         "Scrib"           "Puf60"          
+    ## [10453] "Nrbp2"           "Plec"            "Parp10"          "Grina"          
+    ## [10457] "Smpd5"           "Oplah"           "Exosc4"          "Gpaa1"          
+    ## [10461] "Cyc1"            "Sharpin"         "Maf1"            "Hgh1"           
+    ## [10465] "Mroh1"           "Bop1"            "Hsf1"            "Dgat1"          
+    ## [10469] "Scrt1"           "Fbxl6"           "Slc52a2"         "Adck5"          
+    ## [10473] "Cpsf1"           "Slc39a4"         "Tonsl"           "Cyhr1"          
+    ## [10477] "Kifc2"           "Ppp1r16a"        "Gpt"             "Mfsd3"          
+    ## [10481] "Recql4"          "Lrrc14"          "Lrrc24"          "Arhgap39"       
+    ## [10485] "Zfp251"          "Zfp7"            "Commd5"          "Rpl8"           
+    ## [10489] "1110038F14Rik"   "Rbfox2"          "Apol9a"          "Apol10a"        
+    ## [10493] "Apol7c"          "Apol10b"         "Apol11b"         "Apol7e"         
+    ## [10497] "Apol9b"          "Myh9"            "Txn2"            "Foxred2"        
+    ## [10501] "Eif3d"           "Ift27"           "Ncf4"            "Tst"            
+    ## [10505] "Mpst"            "Kctd17"          "Il2rb"           "C1qtnf6"        
+    ## [10509] "Rac2"            "Cyth4"           "Mfng"            "Card10"         
+    ## [10513] "Gga1"            "Sh3bp1"          "Lgals1"          "Nol12"          
+    ## [10517] "Triobp"          "H1f0"            "Gcat"            "Ankrd54"        
+    ## [10521] "Eif3l"           "Micall1"         "Polr2f"          "Gm10863"        
+    ## [10525] "Pick1"           "Baiap2l2"        "Pla2g6"          "Maff"           
+    ## [10529] "Tmem184b"        "Csnk1e"          "Kdelr3"          "Ddx17"          
+    ## [10533] "Cby1"            "Tomm22"          "Josd1"           "Gm26884"        
+    ## [10537] "Gtpbp1"          "Sun2"            "Gm16576"         "Dnal4"          
+    ## [10541] "Cbx6"            "Apobec3"         "Cbx7"            "Pdgfb"          
+    ## [10545] "Rpl3"            "Syngr1"          "Tab1"            "Mief1"          
+    ## [10549] "Atf4"            "Rps19bp1"        "Grap2"           "Tnrc6b"         
+    ## [10553] "Adsl"            "Sgsm3"           "Mkl1"            "Slc25a17"       
+    ## [10557] "St13"            "Xpnpep3"         "Rbx1"            "Gm5218"         
+    ## [10561] "Ep300"           "L3mbtl2"         "Chadl"           "Rangap1"        
+    ## [10565] "Zc3h7b"          "Tef"             "Tob2"            "Phf5a"          
+    ## [10569] "Aco2"            "Polr3h"          "Pmm1"            "Xrcc6"          
+    ## [10573] "Desi1"           "Nhp2l1"          "Ccdc134"         "Srebf2"         
+    ## [10577] "Tnfrsf13c"       "Cenpm"           "Naga"            "Smdt1"          
+    ## [10581] "Ndufa6"          "Cyp2d22"         "Tcf20"           "Gm20324"        
+    ## [10585] "Serhl"           "Rrp7a"           "Poldip3"         "Cyb5r3"         
+    ## [10589] "Arfgap3"         "Pacsin2"         "Ttll1"           "Bik"            
+    ## [10593] "Mcat"            "Tspo"            "Ttll12"          "Scube1"         
+    ## [10597] "Sult4a1"         "Samm50"          "Parvb"           "Parvg"          
+    ## [10601] "Ldoc1l"          "Prr5"            "Phf21b"          "Gm29666"        
+    ## [10605] "Nup50"           "5031439G07Rik"   "Fam118a"         "Fbln1"          
+    ## [10609] "Atxn10"          "Cdpf1"           "Ttc38"           "Gtse1"          
+    ## [10613] "Trmu"            "Celsr1"          "Gramd4"          "Cerk"           
+    ## [10617] "Tbc1d22a"        "Brd1"            "Zbed4"           "Alg12"          
+    ## [10621] "Creld2"          "Pim3"            "Ttll8"           "Trabd"          
+    ## [10625] "Selo"            "Tubgcp6"         "Hdac10"          "Mapk12"         
+    ## [10629] "Mapk11"          "Dennd6b"         "Gm26798"         "Ppp6r2"         
+    ## [10633] "Sbf1"            "Lmf2"            "Ncaph2"          "Sco2"           
+    ## [10637] "Chkb"            "C730034F03Rik"   "Mapk8ip2"        "Arsa"           
+    ## [10641] "C230037L18Rik"   "Rabl2"           "Alg10b"          "Cpne8"          
+    ## [10645] "Lrrk2"           "Gxylt1"          "Yaf2"            "Zcrb1"          
+    ## [10649] "Pphln1"          "Prickle1"        "Pus7l"           "Irak4"          
+    ## [10653] "Twf1"            "A130051J06Rik"   "Ano6"            "2610037D02Rik"  
+    ## [10657] "Arid2"           "Scaf11"          "Slc38a1"         "Slc38a2"        
+    ## [10661] "Amigo2"          "Pced1b"          "Rpap3"           "Rapgef3"        
+    ## [10665] "Slc48a1"         "Hdac7"           "Vdr"             "Tmem106c"       
+    ## [10669] "Senp1"           "Pfkm"            "Gm26513"         "Asb8"           
+    ## [10673] "Ccdc184"         "Lalba"           "Kansl2"          "Ccnt1"          
+    ## [10677] "9330020H09Rik"   "4930415O20Rik"   "Adcy6"           "Cacnb3"         
+    ## [10681] "Ddx23"           "Rnd1"            "Fkbp11"          "Arf3"           
+    ## [10685] "B130046B21Rik"   "Prkag1"          "Kmt2d"           "Rhebl1"         
+    ## [10689] "Lmbr1l"          "Tuba1b"          "Tuba1a"          "4930578M01Rik"  
+    ## [10693] "Tuba1c"          "Troap"           "Spats2"          "Kcnh3"          
+    ## [10697] "Mcrs1"           "Fam186b"         "Prpf40b"         "Fmnl3"          
+    ## [10701] "Tmbim6"          "Nckap5l"         "Bcdin3d"         "Racgap1"        
+    ## [10705] "Smarcd1"         "Cox14"           "Cers5"           "Gm17058"        
+    ## [10709] "Lima1"           "Larp4"           "2310068J16Rik"   "Dip2b"          
+    ## [10713] "Atf1"            "Mettl7a1"        "Mettl7a2"        "Slc11a2"        
+    ## [10717] "Gm5475"          "5330439K02Rik"   "Letmd1"          "Csrnp2"         
+    ## [10721] "Tfcp2"           "Pou6f1"          "C330013E15Rik"   "Dazap2"         
+    ## [10725] "Bin2"            "Cela1"           "Galnt6"          "Slc4a8"         
+    ## [10729] "Scn8a"           "Acvr1b"          "A330009N23Rik"   "Grasp"          
+    ## [10733] "Nr4a1"           "Atg101"          "5430421N21Rik"   "Krt6b"          
+    ## [10737] "Krt18"           "Eif4b"           "Tns2"            "Spryd3"         
+    ## [10741] "Igfbp6"          "Soat2"           "Csad"            "Zfp740"         
+    ## [10745] "Itgb7"           "Rarg"            "Mfsd5"           "Espl1"          
+    ## [10749] "Pfdn5"           "Myg1"            "Aaas"            "Sp1"            
+    ## [10753] "Gm26518"         "Prr13"           "Pcbp2"           "Map3k12"        
+    ## [10757] "Tarbp2"          "Npff"            "Atf7"            "Atp5g2"         
+    ## [10761] "Calcoco1"        "Smug1"           "Cbx5"            "Hnrnpa1"        
+    ## [10765] "Copz1"           "Itga5"           "Gtsf1"           "Nckap1l"        
+    ## [10769] "Pde1b"           "Zfp263"          "Zfp174"          "Zfp597"         
+    ## [10773] "Naa60"           "1700037C18Rik"   "Cluap1"          "Gm15537"        
+    ## [10777] "Nlrc3"           "Slx4"            "Gm15879"         "Trap1"          
+    ## [10781] "Crebbp"          "Adcy9"           "Tfap4"           "Glis2"          
+    ## [10785] "Pam16"           "Coro7"           "Dnaja3"          "Nmral1"         
+    ## [10789] "Hmox2"           "Gm15859"         "Cdip1"           "Ubald1"         
+    ## [10793] "Mgrn1"           "Gm16861"         "Nudt16l1"        "Anks3"          
+    ## [10797] "Rogdi"           "Glyr1"           "Ubn1"            "Nagpa"          
+    ## [10801] "Alg1"            "Eef2kmt"         "Mettl22"         "Abat"           
+    ## [10805] "Tmem186"         "Pmm2"            "Carhsp1"         "Usp7"           
+    ## [10809] "1810013L24Rik"   "Rpl39l"          "Nubp1"           "Ciita"          
+    ## [10813] "Dexi"            "Clec16a"         "Socs1"           "Tnp2"           
+    ## [10817] "Gm26822"         "Rmi2"            "Litaf"           "Snn"            
+    ## [10821] "Txndc11"         "Zc3h7a"          "Rsl1d1"          "2610020C07Rik"  
+    ## [10825] "Gspt1"           "Snx29"           "Cpped1"          "Ercc4"          
+    ## [10829] "Mkl2"            "Parn"            "Bfar"            "3110001I22Rik"  
+    ## [10833] "Rrn3"            "Ntan1"           "Pdxdc1"          "Mpv17l"         
+    ## [10837] "Marf1"           "Nde1"            "Myh11"           "Fopnl"          
+    ## [10841] "Abcc1"           "Snai2"           "Ube2v2"          "Mcm4"           
+    ## [10845] "Prkdc"           "Mzt2"            "Spidr"           "Yars2"          
+    ## [10849] "Dnm1l"           "Fgd4"            "Vpreb1"          "Top3b"          
+    ## [10853] "Ppm1f"           "Mapk1"           "1700056N10Rik"   "Ypel1"          
+    ## [10857] "Ppil2"           "2610318N02Rik"   "Sdf2l1"          "Ccdc116"        
+    ## [10861] "Ydjc"            "Ube2l3"          "Gm15648"         "Hic2"           
+    ## [10865] "Tmem191c"        "Pi4ka"           "Snap29"          "Crkl"           
+    ## [10869] "Lztr1"           "Thap7"           "Slc7a4"          "Smpd4"          
+    ## [10873] "Med15"           "Klhl22"          "Dgcr2"           "Dgcr14"         
+    ## [10877] "Slc25a1"         "Dgcr6"           "Prodh"           "Zdhhc8"         
+    ## [10881] "Ranbp1"          "Trmt2a"          "Dgcr8"           "Tango2"         
+    ## [10885] "Arvcf"           "Comt"            "Txnrd2"          "Gnb1l"          
+    ## [10889] "Cdc45"           "Ufd1l"           "2510002D24Rik"   "Mrpl40"         
+    ## [10893] "Hira"            "Iglc3"           "B3gnt5"          "Klhl6"          
+    ## [10897] "Klhl24"          "Yeats2"          "Parl"            "Abcc5"          
+    ## [10901] "Eif2b5"          "Dvl3"            "Ap2m1"           "Abcf3"          
+    ## [10905] "Alg3"            "Ece2"            "Psmd2"           "Eif4g1"         
+    ## [10909] "Fam131a"         "Clcn2"           "Polr2h"          "Vps8"           
+    ## [10913] "2510009E07Rik"   "Ehhadh"          "1300002E11Rik"   "Tmem41a"        
+    ## [10917] "Senp2"           "Igf2bp2"         "Tra2b"           "Etv5"           
+    ## [10921] "Dgkg"            "Tbccd1"          "Dnajb11"         "Fetub"          
+    ## [10925] "Eif4a2"          "Rfc4"            "Adipoq"          "BC106179"       
+    ## [10929] "St6gal1"         "Rtp4"            "Bcl6"            "Lppos"          
+    ## [10933] "Lpp"             "Il1rap"          "Ccdc50"          "Opa1"           
+    ## [10937] "Hes1"            "Atp13a3"         "Lsg1"            "Fam43a"         
+    ## [10941] "Xxylt1"          "Acap2"           "Ppp1r2"          "Bdh1"           
+    ## [10945] "Gm15743"         "Dlg1"            "Pigz"            "0610012G03Rik"  
+    ## [10949] "Ncbp2"           "Senp5"           "Pak2"            "Pigx"           
+    ## [10953] "Cep19"           "Nrros"           "Fbxo45"          "Wdr53"          
+    ## [10957] "Rnf168"          "Ubxn7"           "Tctex1d2"        "Pcyt1a"         
+    ## [10961] "Tfrc"            "Tnk2"            "Muc4"            "Rubcn"          
+    ## [10965] "Fyttd1"          "Lrch3"           "Iqcg"            "Rpl35a"         
+    ## [10969] "Lmln"            "Osbpl11"         "Snx4"            "1700007L15Rik"  
+    ## [10973] "Zfp148"          "Slc12a8"         "Heg1"            "Itgb5"          
+    ## [10977] "Umps"            "Gm15829"         "Ccdc14"          "Hacd2"          
+    ## [10981] "Sec22a"          "Dirc2"           "Hspbap1"         "Parp14"         
+    ## [10985] "Dtx3l"           "Parp9"           "Kpna1"           "Wdr5b"          
+    ## [10989] "Fam162a"         "Ccdc58"          "Stfa3"           "Cd86"           
+    ## [10993] "Ildr1"           "Eaf2"            "Iqcb1"           "Golgb1"         
+    ## [10997] "Hcls1"           "Polq"            "Gtf2e1"          "Rabl3"          
+    ## [11001] "Ndufb4"          "Lrrc58"          "Gsk3b"           "Cox17"          
+    ## [11005] "Popdc2"          "Pla1a"           "Adprh"           "D930030I03Rik"  
+    ## [11009] "Cd80"            "Timmdc1"         "Poglut1"         "Tmem39a"        
+    ## [11013] "Arhgap31"        "B4galt4"         "Lsamp"           "Zbtb20"         
+    ## [11017] "Tigit"           "Qtrtd1"          "Ccdc191"         "Zdhhc23"        
+    ## [11021] "Gramd1c"         "Atp6v1a"         "Naa50"           "Usf3"           
+    ## [11025] "Sidt1"           "Gm26732"         "Spice1"          "Nepro"          
+    ## [11029] "Gtpbp8"          "Cd200r1"         "Cd200r4"         "Cd200r3"        
+    ## [11033] "Ccdc80"          "Slc35a5"         "Atg3"            "Btla"           
+    ## [11037] "Cd200"           "Abhd10"          "Plcxd2"          "Cd96"           
+    ## [11041] "Gm4737"          "Morc1"           "Trat1"           "Dzip3"          
+    ## [11045] "C330027C09Rik"   "Ift57"           "Gm15518"         "Cd47"           
+    ## [11049] "Bbx"             "Dubr"            "Cblb"            "Alcam"          
+    ## [11053] "Nfkbiz"          "Nxpe3"           "Cep97"           "Rpl24"          
+    ## [11057] "Zbtb11os1"       "Zbtb11"          "Pcnp"            "Trmt10c"        
+    ## [11061] "Senp7"           "Impg2"           "Abi3bp"          "Tfg"            
+    ## [11065] "Tomm70a"         "Nit2"            "Tbc1d23"         "Cmss1"          
+    ## [11069] "Filip1l"         "Dcbld2"          "St3gal6"         "Cpox"           
+    ## [11073] "Gpr15"           "Cldnd1"          "Mina"            "Crybg3"         
+    ## [11077] "Arl6"            "Nsun3"           "Arl13b"          "Pros1"          
+    ## [11081] "Epha3"           "4930453N24Rik"   "Zfp654"          "Cggbp1"         
+    ## [11085] "Chmp2b"          "Gbe1"            "Rbm11"           "Hspa13"         
+    ## [11089] "Samsn1"          "Nrip1"           "Gm9843"          "RP23-185P17.2"  
+    ## [11093] "Usp25"           "Btg3"            "D16Ertd472e"     "Gm21833"        
+    ## [11097] "Mir155hg"        "Mrpl39"          "Atp5j"           "Gabpa"          
+    ## [11101] "App"             "N6amt1"          "Ltn1"            "Rwdd2b"         
+    ## [11105] "Usp16"           "Cct8"            "Bach1"           "Tiam1"          
+    ## [11109] "Sod1"            "Scaf4"           "Mis18a"          "Gm17518"        
+    ## [11113] "Urb1"            "1110004E09Rik"   "Synj1"           "Gm15965"        
+    ## [11117] "Paxbp1"          "4932438H23Rik"   "Ifnar2"          "Il10rb"         
+    ## [11121] "Ifnar1"          "Ifngr2"          "Tmem50b"         "Dnajc28"        
+    ## [11125] "Gart"            "Son"             "Donson"          "Atp5o"          
+    ## [11129] "Cryzl1"          "Itsn1"           "Mrps6"           "Slc5a3"         
+    ## [11133] "Smim11"          "Rcan1"           "Runx1"           "Setd4"          
+    ## [11137] "Cbr1"            "Dopey2"          "Morc3"           "Chaf1b"         
+    ## [11141] "Hlcs"            "Ripply3"         "Pigp"            "Ttc3"           
+    ## [11145] "Dscr3"           "Dyrk1a"          "Ets2"            "Gm15340"        
+    ## [11149] "Psmg1"           "Brwd1"           "Hmgn1"           "Wrb"            
+    ## [11153] "B3galt5"         "Bace2"           "Mx1"             "Fam3b"          
+    ## [11157] "Gm9242"          "Prdm15"          "C2cd2"           "Zbtb21"         
+    ## [11161] "C030010L15Rik"   "B230307C23Rik"   "Scaf8"           "Tfb1m"          
+    ## [11165] "Arid1b"          "Tmem242"         "3300005D01Rik"   "Snx9"           
+    ## [11169] "Synj2"           "Serac1"          "Gtf2h5"          "Tulp4"          
+    ## [11173] "Tmem181a"        "Dynlt1a"         "Gm26848"         "Dynlt1b"        
+    ## [11177] "Dynlt1c"         "Dynlt1f"         "Sytl3"           "Ezr"            
+    ## [11181] "Gm2885"          "Rsph3b"          "Tagap1"          "Rnaset2b"       
+    ## [11185] "Rps6ka2"         "E430024P14Rik"   "Tagap"           "Rsph3a"         
+    ## [11189] "Rnaset2a"        "Fgfr1op"         "Ccr6"            "Mpc1"           
+    ## [11193] "Sft2d1"          "Prr18"           "Gm16702"         "1700010I14Rik"  
+    ## [11197] "Qk"              "Agpat4"          "Map3k4"          "4732491K20Rik"  
+    ## [11201] "Slc22a2"         "Igf2r"           "Airn"            "Mrpl18"         
+    ## [11205] "Tcp1"            "Acat3"           "Acat2"           "Wtap"           
+    ## [11209] "Sod2"            "Mllt4"           "Smoc2"           "1600012H06Rik"  
+    ## [11213] "Phf10"           "Gm3448"          "Ermard"          "Tcte3"          
+    ## [11217] "Gm28873"         "Fam120b"         "Psmb1"           "Tbp"            
+    ## [11221] "Pdcd2"           "Prdm9"           "Chd1"            "Rgmb"           
+    ## [11225] "BC002059"        "Zfp960"          "Zfp97"           "Gm6712"         
+    ## [11229] "Gm26873"         "Lix1"            "Lnpep"           "Spaca6"         
+    ## [11233] "Gm7535"          "Gm5145"          "Ppp2r1a"         "Zfp160"         
+    ## [11237] "Zfp677"          "Zfp54"           "Zfp51"           "Zfp53"          
+    ## [11241] "Zfp52"           "3110052M02Rik"   "Zfp760"          "Zfp820"         
+    ## [11245] "2210404O09Rik"   "Zfp942"          "Zfp943"          "Zfp947"         
+    ## [11249] "Gm4944"          "Zfp944"          "Zfp758"          "Zfp946"         
+    ## [11253] "Gm16386"         "Zfp945"          "Zfp40"           "Zfp213"         
+    ## [11257] "Mmp25"           "Ccdc64b"         "Thoc6"           "Hcfc1r1"        
+    ## [11261] "Tnfrsf12a"       "Pkmyt1"          "Paqr4"           "Kremen2"        
+    ## [11265] "9530082P21Rik"   "Flywch1"         "Flywch2"         "D930048G16Rik"  
+    ## [11269] "Srrm2"           "Tceb2"           "Prss41"          "Gm15947"        
+    ## [11273] "Prss30"          "Prss27"          "Kctd5"           "Pdpk1"          
+    ## [11277] "Amdhd2"          "Gm43796"         "Atp6v0c"         "Tbc1d24"        
+    ## [11281] "1600002H07Rik"   "Ccnf"            "Abca3"           "Rnps1"          
+    ## [11285] "Eci1"            "Dnase1l2"        "E4f1"            "Pgp"            
+    ## [11289] "Mlst8"           "Traf7"           "Rab26"           "Rab26os"        
+    ## [11293] "Pkd1"            "Tsc2"            "Nthl1"           "Slc9a3r2"       
+    ## [11297] "Zfp598"          "Syngr3"          "Gfer"            "Noxo1"          
+    ## [11301] "Tbl3"            "Rps2"            "Snhg9"           "Ndufb10"        
+    ## [11305] "Msrb1"           "Hagh"            "Fahd1"           "Nubp2"          
+    ## [11309] "Spsb3"           "Eme2"            "Mapk8ip3"        "Mrps34"         
+    ## [11313] "Nme3"            "Hn1l"            "Cramp1l"         "Ift140"         
+    ## [11317] "Telo2"           "Clcn7"           "BC003965"        "Unkl"           
+    ## [11321] "Gnptg"           "Tsr3"            "Ube2i"           "Lmf1"           
+    ## [11325] "Chtf18"          "Rpusd1"          "Narfl"           "Haghl"          
+    ## [11329] "Ccdc78"          "Fam173a"         "Metrn"           "Wdr24"          
+    ## [11333] "Jmjd8"           "Stub1"           "Rhot2"           "Wdr90"          
+    ## [11337] "Fam195a"         "0610011F06Rik"   "Rab40c"          "Pigq"           
+    ## [11341] "Capn15"          "1700022N22Rik"   "Rab11fip3"       "Decr2"          
+    ## [11345] "Nme4"            "Gm8186"          "Tmem8"           "Mrpl28"         
+    ## [11349] "Axin1"           "Rgs11"           "Fam234a"         "Luc7l"          
+    ## [11353] "Neurl1b"         "Dusp1"           "Gm8225"          "Ergic1"         
+    ## [11357] "Atp6v0e"         "Crebrf"          "Bnip1"           "Kifc5b"         
+    ## [11361] "Phf1"            "Cuta"            "Ggnbp1"          "Bak1"           
+    ## [11365] "Itpr3"           "Uqcc2"           "Lemd2"           "Gm26724"        
+    ## [11369] "Gm10505"         "Hmga1"           "AI413582"        "Nudt3"          
+    ## [11373] "Rps10"           "Gm15420"         "Pacsin1"         "D17Wsu92e"      
+    ## [11377] "Snrpc"           "Uhrf1bp1"        "Taf11"           "Anks1"          
+    ## [11381] "Tcp11"           "Zfp523"          "Def6"            "Ppard"          
+    ## [11385] "Fance"           "Rpl10a"          "Fkbp5"           "Gm20109"        
+    ## [11389] "E230001N04Rik"   "Srpk1"           "Mapk14"          "Brpf3"          
+    ## [11393] "Kctd20"          "Stk38"           "Gm16196"         "Srsf3"          
+    ## [11397] "Cdkn1a"          "Cpne5"           "Ppil1"           "BC004004"       
+    ## [11401] "Mtch1"           "Gm26885"         "Pim1"            "Tbc1d22b"       
+    ## [11405] "Rnf8"            "Cmtr1"           "Ccdc167"         "Zfand3"         
+    ## [11409] "Btbd9"           "Glo1"            "1700097N02Rik"   "Dnah8"          
+    ## [11413] "Abcg1"           "Tff3"            "Tff1"            "Tmprss3"        
+    ## [11417] "Ubash3a"         "Rsph1"           "Slc37a1"         "Wdr4"           
+    ## [11421] "Ndufv3"          "Pknox1"          "U2af1"           "Sik1"           
+    ## [11425] "Hsf2bp"          "Rrp1b"           "Brd4"            "Gm26549"        
+    ## [11429] "Akap8"           "Akap8l"          "Wiz"             "Rasal3"         
+    ## [11433] "Pglyrp2"         "Cyp4f16"         "Zfp871"          "Zfp811"         
+    ## [11437] "Zfp799"          "Zfp870"          "Cyp4f13"         "Zfp472"         
+    ## [11441] "Zfp952"          "Zfp763"          "Zfp563"          "Zfp955a"        
+    ## [11445] "Zfp955b"         "Zfp81"           "Zfp101"          "Adamts10"       
+    ## [11449] "Myo1f"           "Zfp414"          "Hnrnpm"          "March2"         
+    ## [11453] "Rab11b"          "Angptl4"         "Kank3"           "Rps28"          
+    ## [11457] "Ndufa7"          "Cd320"           "Kifc1"           "BC051226"       
+    ## [11461] "Daxx"            "Tapbp"           "Zbtb22"          "Gm19412"        
+    ## [11465] "Rgl2"            "Pfdn6"           "Wdr46"           "B3galt4"        
+    ## [11469] "Rps18"           "Vps52"           "H2-K1"           "Ring1"          
+    ## [11473] "H2-Ke6"          "Slc39a7"         "Rxrb"            "Col11a2"        
+    ## [11477] "BC051537"        "H2-Oa"           "Brd2"            "H2-DMa"         
+    ## [11481] "H2-DMb2"         "H2-DMb1"         "Psmb9"           "Tap1"           
+    ## [11485] "Psmb8"           "Tap2"            "H2-Ob"           "H2-Ab1"         
+    ## [11489] "H2-Aa"           "H2-Eb1"          "Notch4"          "Gpsm3"          
+    ## [11493] "Pbx2"            "Ager"            "Rnf5"            "Agpat1"         
+    ## [11497] "Egfl8"           "Ppt2"            "Prrt1"           "Fkbpl"          
+    ## [11501] "Atf6b"           "Stk19"           "Dxo"             "Skiv2l"         
+    ## [11505] "Nelfe"           "C2"              "Zbtb12"          "Ehmt2"          
+    ## [11509] "Neu1"            "Hspa1b"          "Hspa1a"          "Gm10501"        
+    ## [11513] "Lsm2"            "Vars"            "Sapcd1"          "Msh5"           
+    ## [11517] "Clic1"           "Ddah2"           "Abhd16a"         "Ly6g5b"         
+    ## [11521] "Csnk2b"          "Gpank1"          "Gm20522"         "D17H6S53E"      
+    ## [11525] "Bag6"            "Prrc2a"          "Aif1"            "Lst1"           
+    ## [11529] "Ltb"             "Tnf"             "Lta"             "Nfkbil1"        
+    ## [11533] "Atp6v1g2"        "Ddx39b"          "H2-D1"           "H2-Q1"          
+    ## [11537] "H2-Q2"           "Gm11131"         "H2-Q4"           "H2-Q6"          
+    ## [11541] "H2-Q7"           "H2-Q10"          "Tcf19"           "Cchcr1"         
+    ## [11545] "Vars2"           "Gtf2h4"          "Ddr1"            "Gm20442"        
+    ## [11549] "Ier3"            "Flot1"           "Tubb5"           "Mdc1"           
+    ## [11553] "Nrm"             "Ppp1r18"         "Dhx16"           "2310061I04Rik"  
+    ## [11557] "Gm16279"         "Atat1"           "Mrps18b"         "Ppp1r10"        
+    ## [11561] "Abcf1"           "Prr3"            "Gnl1"            "A930015D03Rik"  
+    ## [11565] "H2-T24"          "H2-T23"          "H2-T22"          "Gm6034"         
+    ## [11569] "Gm11127"         "Gm19684"         "Gm8909"          "Gm20478"        
+    ## [11573] "H2-T3"           "Rpp21"           "Trim39"          "Trim26"         
+    ## [11577] "Ppp1r11"         "Znrd1"           "Znrd1as"         "Gabbr1"         
+    ## [11581] "H2-M3"           "Gm26917"         "Gm42418"         "AY036118"       
+    ## [11585] "Cenpq"           "Mut"             "Cd2ap"           "Slc25a27"       
+    ## [11589] "Cyp39a1"         "Enpp5"           "Enpp4"           "Clic5"          
+    ## [11593] "Runx2"           "Runx2os1"        "Supt3"           "Cdc5l"          
+    ## [11597] "B230354K17Rik"   "Spats1"          "Aars2"           "Nfkbie"         
+    ## [11601] "Slc35b2"         "Hsp90ab1"        "Slc29a1"         "Tmem63b"        
+    ## [11605] "Mrpl14"          "Vegfa"           "Mrps18a"         "Rsph9"          
+    ## [11609] "Mad2l1bp"        "Gtpbp2"          "Polh"            "Xpo5"           
+    ## [11613] "Polr1c"          "Yipf3"           "Lrrc73"          "Tjap1"          
+    ## [11617] "Gm26785"         "Abcc10"          "Zfp318"          "Gm5093"         
+    ## [11621] "Dnph1"           "Cul9"            "Srf"             "Klc4"           
+    ## [11625] "Mrpl2"           "Cul7"            "Rrp36"           "Klhdc3"         
+    ## [11629] "Mea1"            "Ppp2r5d"         "Pex6"            "Cnpy3"          
+    ## [11633] "Ptcra"           "2310039H08Rik"   "Rpl7l1"          "Gltscr1l"       
+    ## [11637] "A330017A19Rik"   "Tbcc"            "Ubr2"            "Mrps10"         
+    ## [11641] "Guca1a"          "Taf8"            "Ccnd3"           "Bysl"           
+    ## [11645] "Med20"           "Gm20517"         "Usp49"           "Tomm6"          
+    ## [11649] "Tomm6os"         "Frs3"            "Tfeb"            "Foxp4"          
+    ## [11653] "Treml2"          "B430306N03Rik"   "Nfya"            "Oard1"          
+    ## [11657] "Unc5cl"          "Mocs1"           "Rftn1"           "Plcl2"          
+    ## [11661] "Gm7334"          "Tbc1d5"          "Satb1"           "Gm19585"        
+    ## [11665] "Rab5a"           "Kat2b"           "Sgol1"           "Pot1b"          
+    ## [11669] "Zfp119a"         "Zfp959"          "Zfp119b"         "Ebi3"           
+    ## [11673] "Gm16712"         "Ccdc94"          "Mpnd"            "Sh3gl1"         
+    ## [11677] "Chaf1a"          "Ubxn6"           "Hdgfrp2"         "Tnfaip8l1"      
+    ## [11681] "Mydgf"           "Dpp9"            "Fem1a"           "Ticam1"         
+    ## [11685] "Plin3"           "Uhrf1"           "Kdm4b"           "Ptprs"          
+    ## [11689] "Safb2"           "Safb"            "2410015M20Rik"   "Rpl36"          
+    ## [11693] "Lonp1"           "Catsperd"        "Ranbp3"          "Vmac"           
+    ## [11697] "Ndufa11"         "Dus3l"           "Rfx2"            "1700061G19Rik"  
+    ## [11701] "Mllt1"           "Clpp"            "Alkbh7"          "Gtf2f1"         
+    ## [11705] "Khsrp"           "Slc25a23"        "Crb3"            "Dennd1c"        
+    ## [11709] "Tubb4a"          "Gm11110"         "Tnfsf9"          "Cd70"           
+    ## [11713] "Tnfsf14"         "Gpr108"          "Trip10"          "Vav1"           
+    ## [11717] "Rpl7a-ps5"       "Fbxl17"          "Fer"             "Pja2"           
+    ## [11721] "Man2a1"          "Vapa"            "Rab31"           "Ppp4r1"         
+    ## [11725] "Ralbp1"          "Twsg1"           "Ankrd12"         "Ndufv2"         
+    ## [11729] "Wash1"           "Ddx11"           "Rab12"           "Zbtb14"         
+    ## [11733] "A930029G22Rik"   "C030034I22Rik"   "Tgif1"           "Gm28727"        
+    ## [11737] "Gm26510"         "Myl12b"          "Myl12a"          "Lpin2"          
+    ## [11741] "Emilin2"         "Smchd1"          "Gm4707"          "Ndc80"          
+    ## [11745] "Wdr43"           "Clip4"           "Ypel5"           "Lbh"            
+    ## [11749] "Lclat1"          "Galnt14"         "Ehd3"            "Xdh"            
+    ## [11753] "Memo1"           "Dpy30"           "Spast"           "Slc30a6"        
+    ## [11757] "Nlrc4"           "Yipf4"           "Birc6"           "Ttc27"          
+    ## [11761] "Fam98a"          "Crim1"           "Fez2"            "Gm10093"        
+    ## [11765] "Strn"            "Heatr5b"         "Gpatch11"        "Eif2ak2"        
+    ## [11769] "Cebpzos"         "Cebpz"           "Ndufaf7"         "Prkd3"          
+    ## [11773] "Qpct"            "Cdc42ep3"        "Gm17315"         "Rmdn2"          
+    ## [11777] "Atl2"            "Hnrnpll"         "Galm"            "Srsf7"          
+    ## [11781] "Gemin6"          "Dhx57"           "Morn2"           "Sos1"           
+    ## [11785] "Map4k3"          "Thumpd2"         "Eml4"            "Cox7a2l"        
+    ## [11789] "Mta3"            "Haao"            "C430042M11Rik"   "Zfp36l2"        
+    ## [11793] "Thada"           "Dync2li1"        "Lrpprc"          "1110020A21Rik"  
+    ## [11797] "Ppm1b"           "Prepl"           "Camkmt"          "Srbd1"          
+    ## [11801] "Prkce"           "Epas1"           "Rhoq"            "Pigf"           
+    ## [11805] "Cript"           "Socs5"           "Mcfd2"           "4833418N02Rik"  
+    ## [11809] "Ttc7"            "Calm2"           "Epcam"           "Msh2"           
+    ## [11813] "Msh6"            "Fbxo11"          "Foxn2"           "Ppp1r21"        
+    ## [11817] "Gm10184"         "Mettl4"          "Gm1976"          "Gm26734"        
+    ## [11821] "Gm20939"         "Erdr1"           "Crem"            "Gm6225"         
+    ## [11825] "Cul2"            "Bambi"           "Map3k8"          "Mtpap"          
+    ## [11829] "Svil"            "Zfp438"          "Zeb1"            "Arhgap12"       
+    ## [11833] "Kif5b"           "Rpl27-ps3"       "Epc1"            "Gm28529"        
+    ## [11837] "Rab18"           "Mpp7"            "Wac"             "Ccny"           
+    ## [11841] "Gm17430"         "Thoc1"           "Usp14"           "Rock1"          
+    ## [11845] "Esco1"           "Snrpd1"          "Abhd3"           "Mib1"           
+    ## [11849] "Rbbp8"           "Cables1"         "Tmem241"         "Riok3"          
+    ## [11853] "3110002H16Rik"   "Npc1"            "Gm15956"         "Ankrd29"        
+    ## [11857] "Ttc39c"          "Osbpl1a"         "Impact"          "Hrh4"           
+    ## [11861] "Gm5160"          "Ss18"            "Taf4b"           "Kctd1"          
+    ## [11865] "Gm10036"         "Dsc2"            "Dsg2"            "Gm10269"        
+    ## [11869] "B4galt6"         "Trappc8"         "Rnf125"          "Rnf138"         
+    ## [11873] "Mapre2"          "Zfp397"          "Zfp35"           "Zfp24"          
+    ## [11877] "Ino80c"          "Galnt1"          "2700062C07Rik"   "Rprd1a"         
+    ## [11881] "Slc39a6"         "Elp2"            "Mocos"           "Tpgs2"          
+    ## [11885] "AW554918"        "Celf4"           "Pik3c3"          "Slc25a46"       
+    ## [11889] "Sap130"          "Ammecr1l"        "Gm26533"         "Polr2d"         
+    ## [11893] "Wdr33"           "Sft2d3"          "Iws1"            "Map3k2"         
+    ## [11897] "Ercc3"           "Bin1"            "Gypc"            "Wdr36"          
+    ## [11901] "Camk4"           "Stard4"          "Epb41l4aos"      "Epb41l4a"       
+    ## [11905] "Apc"             "Srp19"           "Reep5"           "Pkd2l2"         
+    ## [11909] "Fam13b"          "4933408B17Rik"   "Brd8"            "Kif20a"         
+    ## [11913] "Cdc23"           "Cdc25c"          "Gm3550"          "2010110K18Rik"  
+    ## [11917] "Fam53c"          "Kdm3b"           "Gm26538"         "Reep2"          
+    ## [11921] "Egr1"            "Etf1"            "Hspa9"           "Ctnna1"         
+    ## [11925] "Sil1"            "Gm5239"          "Gm28285"         "Matr3"          
+    ## [11929] "Paip2"           "Slc23a1"         "Spata24"         "Dnajc18"        
+    ## [11933] "1700066B19Rik"   "Tmem173"         "Ube2d2a"         "Cxxc5"          
+    ## [11937] "Nrg2"            "Pura"            "Cystm1"          "Pfdn1"          
+    ## [11941] "Hbegf"           "Ankhd1"          "Sra1"            "Slc35a4"        
+    ## [11945] "Tmco6"           "Ndufa2"          "Ik"              "Wdr55"          
+    ## [11949] "Dnd1"            "Hars"            "Hars2"           "Zmat2"          
+    ## [11953] "Taf7"            "Pcdhgb4"         "Pcdhga12"        "Pcdhgc3"        
+    ## [11957] "Pcdhga8.1"       "Pcdhgc5"         "Gm29994"         "Diaph1"         
+    ## [11961] "Hdac3"           "Rell2"           "Fchsd1"          "Arap3"          
+    ## [11965] "1700086O06Rik"   "0610009O20Rik"   "Rnf14"           "Gnpda1"         
+    ## [11969] "Ndfip1"          "Arhgap26"        "Nr3c1"           "Yipf5"          
+    ## [11973] "Prelid2"         "Sh3rf2"          "Lars"            "Rbm27"          
+    ## [11977] "Tcerg1"          "Eif3j2"          "Jakmip2"         "Dcp2"           
+    ## [11981] "Ythdc2"          "Trim36"          "Pggt1b"          "Ccdc112"        
+    ## [11985] "Fem1c"           "Ticam2"          "Tmed7"           "Eif1a"          
+    ## [11989] "Cdo1"            "Atg12"           "Ap3s1"           "Commd10"        
+    ## [11993] "Eno1b"           "Dtwd2"           "Dmxl1"           "Tnfaip8"        
+    ## [11997] "Hsd17b4"         "Gm4950"          "Srfbp1"          "Snx2"           
+    ## [12001] "Ppic"            "Cep120"          "Csnk1g3"         "Zfp608"         
+    ## [12005] "Gramd3"          "Aldh7a1"         "Phax"            "Lmnb1"          
+    ## [12009] "March3"          "C330018D20Rik"   "Prrc1"           "Slc12a2"        
+    ## [12013] "Fbn2"            "Isoc1"           "Gm4951"          "Gm4841"         
+    ## [12017] "F830016B08Rik"   "Iigp1"           "Smim3"           "Dctn4"          
+    ## [12021] "Rbm22"           "Synpo"           "Ndst1"           "Rps14"          
+    ## [12025] "Cd74"            "Tcof1"           "Camk2a"          "Hmgxb3"         
+    ## [12029] "Slc26a2"         "Pde6a"           "Ppargc1b"        "Csnk1a1"        
+    ## [12033] "Pcyox1l"         "Grpel2"          "1500015A07Rik"   "Adrb2"          
+    ## [12037] "Gm9949"          "Fbxo38"          "Spink10"         "Napg"           
+    ## [12041] "Txnl1"           "Wdr7"            "Fech"            "Nars"           
+    ## [12045] "Atp8b1"          "Nedd4l"          "Alpk2"           "Malt1"          
+    ## [12049] "Sec11c"          "Lman1"           "Pmaip1"          "Gnal"           
+    ## [12053] "Mppe1"           "Impa2"           "Tubb6"           "Afg3l2"         
+    ## [12057] "Gm17669"         "Cep76"           "Psmg2"           "Ptpn2"          
+    ## [12061] "Gm26910"         "Seh1l"           "Cep192"          "Ldlrad4"        
+    ## [12065] "Fam210a"         "Rnmt"            "Tcf4"            "Rab27b"         
+    ## [12069] "4930503L19Rik"   "Stard6"          "Poli"            "Mbd2"           
+    ## [12073] "Mex3c"           "Smad4"           "Elac1"           "Me2"            
+    ## [12077] "Ska1"            "Cxxc1"           "Mbd1"            "Acaa2"          
+    ## [12081] "Rpl17"           "BC031181"        "Dym"             "Smad7"          
+    ## [12085] "Ctif"            "Smad2"           "Ier3ip1"         "Hdhd2"          
+    ## [12089] "Pias2"           "8030462N17Rik"   "Haus1"           "Atp5a1"         
+    ## [12093] "Epg5"            "Slc14a1"         "Gm6133"          "Setbp1"         
+    ## [12097] "Pard6g"          "Adnp2"           "Rbfa"            "Gm16286"        
+    ## [12101] "Txnl4a"          "Pqlc1"           "Ctdp1"           "Nfatc1"         
+    ## [12105] "Atp9b"           "Mbp"             "Zfp236"          "Zfp516"         
+    ## [12109] "Tshz1"           "Zadh2"           "Zfp407"          "Cndp2"          
+    ## [12113] "Cyb5a"           "Timm21"          "Socs6"           "Rttn"           
+    ## [12117] "Cd226"           "Tmx3"            "Ighmbp2"         "Mrpl21"         
+    ## [12121] "Cpt1a"           "Ppp6r3"          "Lrp5"            "1810055G02Rik"  
+    ## [12125] "Suv420h1"        "Chka"            "Tcirg1"          "Ndufs8"         
+    ## [12129] "Unc93b1"         "Nudt8"           "Doc2g"           "Ndufv1"         
+    ## [12133] "Gstp1"           "Gstp2"           "BC021614"        "Cdk2ap2"        
+    ## [12137] "Pitpnm1"         "Aip"             "Cabp4"           "Coro1b"         
+    ## [12141] "Ptprcap"         "Rps6kb2"         "Carns1"          "Gm17552"        
+    ## [12145] "Tbc1d10c"        "Ppp1ca"          "Rad9a"           "Clcf1"          
+    ## [12149] "Pold4"           "Ssh3"            "Ankrd13d"        "Adrbk1"         
+    ## [12153] "Kdm2a"           "Rhod"            "Pcx"             "Rce1"           
+    ## [12157] "Gm21992"         "Rbm4b"           "Rbm4"            "Rbm14"          
+    ## [12161] "Ccs"             "Ctsf"            "Zdhhc24"         "Dpp3"           
+    ## [12165] "Mrpl11"          "Npas4"           "Slc29a2"         "B4gat1"         
+    ## [12169] "Brms1"           "Rin1"            "Tmem151a"        "Yif1a"          
+    ## [12173] "Cnih2"           "Rab1b"           "Klc2"            "Pacs1"          
+    ## [12177] "Sf3b2"           "Cst6"            "Banf1"           "Eif1ad"         
+    ## [12181] "Sart1"           "Drap1"           "AI837181"        "Ccdc85b"        
+    ## [12185] "Fibp"            "Ctsw"            "Efemp2"          "Mus81"          
+    ## [12189] "Cfl1"            "Snx32"           "1700020D05Rik"   "Ap5b1"          
+    ## [12193] "Rnaseh2c"        "Kat5"            "Rela"            "Sipa1"          
+    ## [12197] "Pcnxl3"          "Map3k11"         "Kcnk7"           "Ehbp1l1"        
+    ## [12201] "Fam89b"          "Sssca1"          "Scyl1"           "Malat1"         
+    ## [12205] "Neat1"           "Frmd8os"         "Frmd8"           "Slc25a45"       
+    ## [12209] "Tigd3"           "Dpf2"            "Pola2"           "Capn1"          
+    ## [12213] "Gm10814"         "Syvn1"           "Mrpl49"          "Fau"            
+    ## [12217] "Znhit2"          "Tm7sf2"          "Vps51"           "Zfpl1"          
+    ## [12221] "Cdca5"           "Sac3d1"          "Snx15"           "Arl2"           
+    ## [12225] "Ppp2r5b"         "Atg2a"           "Ehd1"            "Cdc42bpg"       
+    ## [12229] "Men1"            "Map4k2"          "Gm14966"         "Sf1"            
+    ## [12233] "Pygm"            "Rasgrp2"         "Rps6ka4"         "Ccdc88b"        
+    ## [12237] "Prdx5"           "Trmt112"         "Esrra"           "Gpr137"         
+    ## [12241] "Bad"             "Plcb3"           "Ppp1r14b"        "Fkbp2"          
+    ## [12245] "Vegfb"           "Dnajc4"          "Nudt22"          "Trpt1"          
+    ## [12249] "Fermt3"          "Stip1"           "Macrod1"         "Otub1"          
+    ## [12253] "Cox8a"           "Naa40"           "Mark2"           "Gm17227"        
+    ## [12257] "AI846148"        "1700105P06Rik"   "Rtn3"            "Atl3"           
+    ## [12261] "Pla2g16"         "Slc3a2"          "Wdr74"           "Stx5a"          
+    ## [12265] "Nxf1"            "Taf6l"           "Polr2g"          "Zbtb3"          
+    ## [12269] "Ttc9c"           "Hnrnpul2"        "Gng3"            "Bscl2"          
+    ## [12273] "Ubxn1"           "Uqcc3"           "Lbhd1"           "1810009A15Rik"  
+    ## [12277] "Ints5"           "Ganab"           "B3gat3"          "Rom1"           
+    ## [12281] "Eml3"            "Mta2"            "Tut1"            "Eef1g"          
+    ## [12285] "Ahnak"           "Asrgl1"          "Pcna-ps2"        "Incenp"         
+    ## [12289] "Fth1"            "Fads1"           "Fen1"            "Tmem258"        
+    ## [12293] "Sdhaf2"          "Cpsf7"           "Tmem216"         "Tmem138"        
+    ## [12297] "Cyb561a3"        "Tkfc"            "Ddb1"            "Vps37c"         
+    ## [12301] "Cd5"             "Cd6"             "Slc15a3"         "Tmem109"        
+    ## [12305] "Prpf19"          "Ccdc86"          "Gm28347"         "AW112010"       
+    ## [12309] "Gm28935"         "Ms4a4c"          "Ms4a4b"          "Gm37387"        
+    ## [12313] "Ms4a6c"          "Gm8369"          "Gm19261"         "Ms4a6b"         
+    ## [12317] "Ms4a4d"          "Ms4a6d"          "Mrpl16"          "Stx3"           
+    ## [12321] "Patl1"           "Osbp"            "Mpeg1"           "Dtx4"           
+    ## [12325] "Fam111a"         "Zfp91"           "Lpxn"            "Olfr1444"       
+    ## [12329] "Tle4"            "Psat1"           "Cep78"           "Gnaq"           
+    ## [12333] "Gna14"           "Vps13a"          "Gcnt1"           "Rfk"            
+    ## [12337] "Ostf1"           "Nmrk1"           "Carnmt1"         "D030056L22Rik"  
+    ## [12341] "Trpm6"           "Rorb"            "Anxa1"           "Zfand5"         
+    ## [12345] "1110059E24Rik"   "Abhd17b"         "Tmem2"           "Klf9"           
+    ## [12349] "Smc5"            "Gm9493"          "Gm6563"          "Ptar1"          
+    ## [12353] "Gm9938"          "Tjp2"            "Fxn"             "Fam122a"        
+    ## [12357] "Gm10053"         "Cbwd1"           "Dock8"           "Smarca2"        
+    ## [12361] "Pum3"            "Rfx3"            "4430402I18Rik"   "Plpp6"          
+    ## [12365] "Cdc37l1"         "Ak3"             "1700018L02Rik"   "Rcl1"           
+    ## [12369] "Jak2"            "Insl6"           "Plgrkt"          "Cd274"          
+    ## [12373] "Pdcd1lg2"        "A930007I19Rik"   "Ric1"            "Ermp1"          
+    ## [12377] "9930021J03Rik"   "Ranbp6"          "Uhrf2"           "Gldc"           
+    ## [12381] "Cstf2t"          "Asah2"           "Sgms1"           "Rpl9-ps6"       
+    ## [12385] "Minpp1"          "Atad1"           "Pten"            "Rnls"           
+    ## [12389] "Lipo1"           "Stambpl1"        "Acta2"           "Fas"            
+    ## [12393] "Lipa"            "Ifit2"           "Ifit3"           "Ifit1bl1"       
+    ## [12397] "Ifit3b"          "Ifit1bl2"        "Ifit1"           "Pank1"          
+    ## [12401] "Kif20b"          "Rpp30"           "Pcgf5"           "Hectd2"         
+    ## [12405] "Tnks2"           "Fgfbp3"          "Btaf1"           "March5"         
+    ## [12409] "Ide"             "Kif11"           "Hhex"            "Exoc6"          
+    ## [12413] "Cep55"           "Fra10ac1"        "Slc35g1"         "Noc3l"          
+    ## [12417] "Tbc1d12"         "Hells"           "Pdlim1"          "Sorbs1"         
+    ## [12421] "Aldh18a1"        "Gm27042"         "Tctn3"           "Entpd1"         
+    ## [12425] "Ccnj"            "Zfp518a"         "Tm9sf3"          "Lcor"           
+    ## [12429] "Gm340"           "AI606181"        "Arhgap19"        "Frat2"          
+    ## [12433] "Rrp12"           "Pgam1"           "Exosc1"          "Zdhhc16"        
+    ## [12437] "Mms19"           "Ubtd1"           "Pi4k2a"          "Avpi1"          
+    ## [12441] "Marveld1"        "Zfyve27"         "R3hcc1l"         "Hps1"           
+    ## [12445] "Got1"            "Slc25a28"        "Entpd7"          "Cox15"          
+    ## [12449] "Cutc"            "Erlin1"          "Chuk"            "Cwf19l1"        
+    ## [12453] "Bloc1s2"         "Scd2"            "Sec31b"          "Ndufb8"         
+    ## [12457] "Hif1an"          "Fam178a"         "Mrpl43"          "Peo1"           
+    ## [12461] "Lzts2"           "Sfxn3"           "Kazald1"         "Btrc"           
+    ## [12465] "Poll"            "Dpcd"            "Fbxw4"           "Npm3"           
+    ## [12469] "Gm15491"         "Mgea5"           "Kcnip2"          "9130011E15Rik"  
+    ## [12473] "Hps6"            "Ldb1"            "Pprc1"           "Nolc1"          
+    ## [12477] "Gbf1"            "Nfkb2"           "Fbxl15"          "Cuedc2"         
+    ## [12481] "Tmem180"         "Actr1a"          "Sufu"            "Trim8"          
+    ## [12485] "Arl3"            "Sfxn2"           "Wbp1l"           "Borcs7"         
+    ## [12489] "As3mt"           "Cnnm2"           "Nt5c2"           "Pcgf6"          
+    ## [12493] "Taf5"            "Usmg5"           "Pdcd11"          "Calhm2"         
+    ## [12497] "Sh3pxd2a"        "Obfc1"           "Gm19557"         "Slk"            
+    ## [12501] "Sfr1"            "Cfap43"          "Gsto1"           "Gsto2"          
+    ## [12505] "Rpl13a-ps1"      "Xpnpep1"         "Add3"            "Mxi1"           
+    ## [12509] "Smndc1"          "Mirt1"           "4833407H14Rik"   "Dusp5"          
+    ## [12513] "Nutf2-ps1"       "Smc3"            "Pdcd4"           "Bbip1"          
+    ## [12517] "Shoc2"           "Gpam"            "Gucy2g"          "Acsl5"          
+    ## [12521] "Zdhhc6"          "Vti1a"           "Tcf7l2"          "Nrap"           
+    ## [12525] "Casp7"           "Dclre1a"         "Nhlrc2"          "Adrb1"          
+    ## [12529] "Ccdc186"         "Ablim1"          "B230217O12Rik"   "Fam160b1"       
+    ## [12533] "Trub1"           "Atrnl1"          "Shtn1"           "Pdzd8"          
+    ## [12537] "Rps12-ps3"       "Rab11fip2"       "Fam204a"         "Cacul1"         
+    ## [12541] "Nanos1"          "Eif3a"           "Fam45a"          "Sfxn4"          
+    ## [12545] "Prdx3"           "Grk5"            "Zfp950"          "Gm7102"         
+    ## [12549] "Csf2ra"          "mt-Nd1"          "mt-Nd2"          "mt-Co1"         
+    ## [12553] "mt-Co2"          "mt-Atp8"         "mt-Atp6"         "mt-Co3"         
+    ## [12557] "mt-Nd3"          "mt-Nd4l"         "mt-Nd4"          "mt-Nd5"         
+    ## [12561] "mt-Nd6"          "mt-Cytb"         "Vamp7"           "Tmlhe"          
+    ## [12565] "Csprs"           "AC125149.3"      "AC168977.2"      "AC168977.1"     
+    ## [12569] "PISD"            "DHRSX"           "CAAA01147332.1"
+
+The mitochondrial genes can be identified as follows. Review the R
+grep() function before reviewing this code chunk.
 
 ``` r
-rownames(curr.count)[grepl("^mt-", rownames(curr.count))] # these look like mitochondrial genes!
+rownames(tem)[grep("^mt-", rownames(tem))]
 ```
 
     ##  [1] "mt-Nd1"  "mt-Nd2"  "mt-Co1"  "mt-Co2"  "mt-Atp8" "mt-Atp6" "mt-Co3" 
     ##  [8] "mt-Nd3"  "mt-Nd4l" "mt-Nd4"  "mt-Nd5"  "mt-Nd6"  "mt-Cytb"
 
-Add the mitochondrial percentage for all seurat objects in our list
+Next, we add the mitochondrial content percentage to each Seurat objects
+in our list (see QC notebook for details). We consider to equivalent
+approaches (looping and lapply) for updating Seurat objects in a list.
+
+First, we define a function which augments the meta data of a Seurat
+object by the mitochondrial proportion.
 
 ``` r
-add_mt <- function(so){
+addmt <- function(so){
   so[["percent.mt"]] <- PercentageFeatureSet(so, pattern = "^mt-")
   return(so)
 }
+```
 
+Next we apply this function by looping over the list.
+
+``` r
 seulist.mt <- list()
 for(i in 1:length(seulist)){
-  seulist.mt[[i]] <- add_mt(seulist[[i]])
-  print(head(seulist.mt[[i]]@meta.data))
+  seulist.mt[[i]] <- addmt(seulist[[i]])
 }
-```
-
-    ##                  orig.ident nCount_RNA nFeature_RNA percent.mt
-    ## AAACCTGAGTCCTCCT     disTrm       2459          963   3.538024
-    ## AAACCTGCACTTAAGC     disTrm       3035         1038   3.228995
-    ## AAACCTGTCTGATACG     disTrm       6070         1745   2.075783
-    ## AAACGGGAGCGATCCC     disTrm       8625         1700   3.524638
-    ## AAAGTAGCACATGTGT     disTrm       3969         1403   2.670698
-    ## AAATGCCGTCAATACC     disTrm       2712          968   2.138643
-    ##                  orig.ident nCount_RNA nFeature_RNA percent.mt
-    ## AAACCTGCAGGTGGAT        Tcm       3597         1142   2.224076
-    ## AAACCTGGTACGCTGC        Tcm       4175         1185   2.419162
-    ## AAACCTGGTCAGTGGA        Tcm       5912         1472   1.962111
-    ## AAACCTGGTCGTTGTA        Tcm       8476         1948   2.524776
-    ## AAACCTGTCACGAAGG        Tcm       3934         1104   3.050330
-    ## AAACCTGTCAGCTGGC        Tcm       4090         1189   3.056235
-    ##                  orig.ident nCount_RNA nFeature_RNA percent.mt
-    ## AAACCTGCAAGGTTCT        Tem       6011         1797  0.9316254
-    ## AAACCTGCACGCGAAA        Tem       3740         1186  2.7005348
-    ## AAACCTGGTATGGTTC        Tem       1861          776  2.4180548
-    ## AAACCTGTCTGGTATG        Tem       2336          955  2.0547945
-    ## AAACGGGCATGCCTAA        Tem       6249         1539  2.2083533
-    ## AAACGGGGTCTGATTG        Tem       9313         2374  2.2549125
-    ##                  orig.ident nCount_RNA nFeature_RNA percent.mt
-    ## AAACCTGGTCTTGCGG        Trm       4480         1544   2.343750
-    ## AAACGGGAGGCTCAGA        Trm       7628         1696   3.224961
-    ## AAACGGGGTCAACATC        Trm       4830         1572   2.939959
-    ## AAACGGGTCTTGAGAC        Trm       8058         2239   2.593696
-    ## AAAGATGGTAGGGTAC        Trm       2378         1003   3.195963
-    ## AAAGATGTCCTACAGA        Trm       2934         1027   2.453988
-
-``` r
 names(seulist.mt) <- names(seulist)
-seulist <- seulist.mt
+seulist.mt
 ```
 
-Examine the distribution of nFeature and nCount for each dataset
+    ## $disTrm
+    ## An object of class Seurat 
+    ## 12064 features across 863 samples within 1 assay 
+    ## Active assay: RNA (12064 features, 0 variable features)
+    ## 
+    ## $Tcm
+    ## An object of class Seurat 
+    ## 12840 features across 4009 samples within 1 assay 
+    ## Active assay: RNA (12840 features, 0 variable features)
+    ## 
+    ## $Tem
+    ## An object of class Seurat 
+    ## 12571 features across 1457 samples within 1 assay 
+    ## Active assay: RNA (12571 features, 0 variable features)
+    ## 
+    ## $Trm
+    ## An object of class Seurat 
+    ## 11778 features across 459 samples within 1 assay 
+    ## Active assay: RNA (11778 features, 0 variable features)
+
+Generally speaking the preferred approach to applying functions to a
+list of Seurat objects is to use the R lapply() function.
 
 ``` r
-plotlist <- list()
-for (i in 1:length(seulist)){
-  plotlist[[i]] <- ggplot(seulist[[i]]@meta.data, aes(x = nCount_RNA, y = nFeature_RNA, 
-                          color = percent.mt)) +
+seulist <- lapply(seulist, addmt)
+seulist
+```
+
+    ## $disTrm
+    ## An object of class Seurat 
+    ## 12064 features across 863 samples within 1 assay 
+    ## Active assay: RNA (12064 features, 0 variable features)
+    ## 
+    ## $Tcm
+    ## An object of class Seurat 
+    ## 12840 features across 4009 samples within 1 assay 
+    ## Active assay: RNA (12840 features, 0 variable features)
+    ## 
+    ## $Tem
+    ## An object of class Seurat 
+    ## 12571 features across 1457 samples within 1 assay 
+    ## Active assay: RNA (12571 features, 0 variable features)
+    ## 
+    ## $Trm
+    ## An object of class Seurat 
+    ## 11778 features across 459 samples within 1 assay 
+    ## Active assay: RNA (11778 features, 0 variable features)
+
+### Generate QC plots
+
+Next, we examine the distribution of nFeature and nCount of each object
+
+``` r
+plotfun1 <- function(so) {
+  so@meta.data %>% 
+    ggplot(aes(x = nCount_RNA, y = nFeature_RNA, color = percent.mt)) +
     geom_point(size = 1) +
     labs(x = "nCount", y = "nFeature", color = "MT%") +
     theme_classic() +
-    geom_hline(yintercept = 200, linetype = 2)
-  
+    geom_hline(yintercept = 200, linetype = 2) +
+    ggtitle(so@project.name)
 }
-names(plotlist) <- names(seulist)
-plotlist[["disTrm"]] + ggtitle("disTrm")
 ```
 
-![](3_load_transformCounts_files/figure-markdown_github/unnamed-chunk-5-1.png)
+This function can be used to produce the plot for a single object.
 
 ``` r
-plotlist[["Tcm"]] + ggtitle("Tcm")
+plotfun1(seulist[["Tem"]])
 ```
 
-![](3_load_transformCounts_files/figure-markdown_github/unnamed-chunk-5-2.png)
+![](3_load_transformCounts_files/figure-markdown_github/plotfun1ex-1.png)
+
+The function can also be applied to all Seurat objects in the list.
 
 ``` r
-plotlist[["Tem"]] + ggtitle("Tem")
+lapply(seulist, plotfun1)
 ```
 
-![](3_load_transformCounts_files/figure-markdown_github/unnamed-chunk-5-3.png)
+    ## $disTrm
 
-``` r
-plotlist[["Trm"]] + ggtitle("Trm")
-```
+![](3_load_transformCounts_files/figure-markdown_github/plotfun1apply-1.png)
 
-![](3_load_transformCounts_files/figure-markdown_github/unnamed-chunk-5-4.png)
+    ## 
+    ## $Tcm
+
+![](3_load_transformCounts_files/figure-markdown_github/plotfun1apply-2.png)
+
+    ## 
+    ## $Tem
+
+![](3_load_transformCounts_files/figure-markdown_github/plotfun1apply-3.png)
+
+    ## 
+    ## $Trm
+
+![](3_load_transformCounts_files/figure-markdown_github/plotfun1apply-4.png)
 
 Are there any cells with less than 200 expressed genes?
 
+We first write a function to produce a figure
+
 ``` r
-plotlist <- list()
-for (i in 1:length(seulist)){
-  plotlist[[i]] <- ggplot(seulist[[i]]@meta.data, aes(x = nFeature_RNA)) +
+plotfun2 <- function(so) {
+  so@meta.data %>%
+    ggplot(aes(x = percent.mt)) +
     geom_histogram() +
     theme_classic() +
-    geom_vline(xintercept = 200, linetype = 2)
+    geom_vline(xintercept = 5, linetype = 2) +
+    ggtitle(so@project.name)
 }
-names(plotlist) <- names(seulist)
-
-plotlist[["disTrm"]] + ggtitle("disTrm")
 ```
-
-![](3_load_transformCounts_files/figure-markdown_github/unnamed-chunk-6-1.png)
 
 ``` r
-plotlist[["Tcm"]] + ggtitle("Tcm")
+lapply(seulist, plotfun2)
 ```
 
-![](3_load_transformCounts_files/figure-markdown_github/unnamed-chunk-6-2.png)
+    ## $disTrm
+
+![](3_load_transformCounts_files/figure-markdown_github/unnamed-chunk-1-1.png)
+
+    ## 
+    ## $Tcm
+
+![](3_load_transformCounts_files/figure-markdown_github/unnamed-chunk-1-2.png)
+
+    ## 
+    ## $Tem
+
+![](3_load_transformCounts_files/figure-markdown_github/unnamed-chunk-1-3.png)
+
+    ## 
+    ## $Trm
+
+![](3_load_transformCounts_files/figure-markdown_github/unnamed-chunk-1-4.png)
+
+Are there any cells with more than 5% mitochondrial genes?
+
+### Tabulating QC summaries
+
+One can use the summarize() function from the dplyr function to produce
+summary statistics for the meta data. The following is a simple
+demonstration.
 
 ``` r
-plotlist[["Tem"]] + ggtitle("Tem")
+seulist[["Tem"]]@meta.data %>% 
+  summarize(
+    n=n(), 
+    min=min(nCount_RNA), 
+    mean=mean(nCount_RNA), 
+    median=median(nCount_RNA),
+    max = max(nCount_RNA)
+  ) %>% 
+  mutate(dlabel = "Tem", .before = "n")
 ```
 
-![](3_load_transformCounts_files/figure-markdown_github/unnamed-chunk-6-3.png)
+    ##   dlabel    n  min     mean median   max
+    ## 1    Tem 1457 1619 3890.022   3358 11513
+
+To generalize, we can consider writing a function
 
 ``` r
-plotlist[["Trm"]] + ggtitle("Trm")
+summfun1 <- function(so) {
+  so@meta.data %>% 
+    summarize(
+    n=n(), 
+    min=min(nCount_RNA), 
+    mean=mean(nCount_RNA), 
+    median=median(nCount_RNA),
+    max = max(nCount_RNA)
+  ) %>% 
+  mutate(dlabel = so@project.name, .before = "n")
+}
+
+summfun1(seulist[["Tem"]])
 ```
 
-![](3_load_transformCounts_files/figure-markdown_github/unnamed-chunk-6-4.png)
+    ##   dlabel    n  min     mean median   max
+    ## 1    Tem 1457 1619 3890.022   3358 11513
+
+To generalize this further, so as to not hardcode the meta data column,
+we can consider the following function. Note the use of the !!sym()
+function to programmatically pass the variable name.
+
+``` r
+summfun2 <- function(so, mdcol) {
+  so@meta.data %>% 
+    summarize(
+    n=n(), 
+    min=min(!!(sym(mdcol))), 
+    mean=mean(!!sym(mdcol)),
+    median=median(!!sym(mdcol)),
+    max = max(!!sym(mdcol))
+  ) %>% 
+  mutate(dlabel = so@project.name, mfeat = mdcol, .before = "n")
+}
+```
+
+Now apply this function.
+
+``` r
+summfun2(seulist[["Tem"]], "nCount_RNA")
+```
+
+    ##   dlabel      mfeat    n  min     mean median   max
+    ## 1    Tem nCount_RNA 1457 1619 3890.022   3358 11513
+
+``` r
+summfun2(seulist[["Tem"]], "nFeature_RNA")
+```
+
+    ##   dlabel        mfeat    n min     mean median  max
+    ## 1    Tem nFeature_RNA 1457 500 1268.495   1164 2495
+
+``` r
+summfun2(seulist[["Tem"]], "percent.mt")
+```
+
+    ##   dlabel      mfeat    n min     mean   median      max
+    ## 1    Tem percent.mt 1457   0 2.175146 2.072947 4.952538
+
+The do
+
+``` r
+do.call("rbind", lapply(seulist, summfun2, mdcol = "percent.mt"))
+```
+
+    ##        dlabel      mfeat    n       min     mean   median      max
+    ## disTrm disTrm percent.mt  863 0.8255366 2.562216 2.472704 4.888039
+    ## Tcm       Tcm percent.mt 4009 0.6540019 2.441314 2.396953 4.828367
+    ## Tem       Tem percent.mt 1457 0.0000000 2.175146 2.072947 4.952538
+    ## Trm       Trm percent.mt  459 0.4261364 2.352405 2.312704 4.456825
+
 Summarize as a table
 
 ``` r
@@ -319,77 +3640,28 @@ seulist %>%
     ## 3 Tem      500 1268.  2495
     ## 4 Trm      372 1244.  2442
 
-Are there any cells with more than 5% mitochondrial genes?
-
-``` r
-plotlist <- list()
-for (i in 1:length(seulist)){
-  plotlist[[i]] <- ggplot(seulist[[i]]@meta.data, aes(x = percent.mt)) +
-    geom_histogram() +
-    theme_classic() +
-    geom_vline(xintercept = 5, linetype = 2)
-}
-names(plotlist) <- names(seulist)
-
-plotlist[["disTrm"]] + ggtitle("disTrm")
-```
-
-![](3_load_transformCounts_files/figure-markdown_github/unnamed-chunk-9-1.png)
-
-``` r
-plotlist[["Tcm"]] + ggtitle("Tcm")
-```
-
-![](3_load_transformCounts_files/figure-markdown_github/unnamed-chunk-9-2.png)
-
-``` r
-plotlist[["Tem"]] + ggtitle("Tem")
-```
-
-![](3_load_transformCounts_files/figure-markdown_github/unnamed-chunk-9-3.png)
-
-``` r
-plotlist[["Trm"]] + ggtitle("Trm")
-```
-
-![](3_load_transformCounts_files/figure-markdown_github/unnamed-chunk-9-4.png)
-Summarize as a table
-
-``` r
-df <- data.frame(seuobj = names(seulist))
-df[,c("min","mean","max")] <- NA
-for (i in 1:length(seulist)){
-  df[i,c("min","mean","max")] <- seulist[[i]]@meta.data %>%
-    summarize(min = min(percent.mt),
-            mean = mean(percent.mt),
-            max = max(percent.mt))
-  
-}
-df
-```
-
-    ##   seuobj       min     mean      max
-    ## 1 disTrm 0.8255366 2.562216 4.888039
-    ## 2    Tcm 0.6540019 2.441314 4.828367
-    ## 3    Tem 0.0000000 2.175146 4.952538
-    ## 4    Trm 0.4261364 2.352405 4.456825
-
-## 3. Transform gene counts
+3. Transform gene counts
+------------------------
 
 *METHOD DETAILS, Single-cell RNA-seq analysis, page e4*: “Gene counts
 were scaled to total gene expression and percentage of mitochondrial
 genes with a scaling factor of 10,000, and then log-transformed.”
 
-First, take a look at how data are structured inside the filtered seurat
-object
+### Examine slots of a Seurat object
+
+We will examine the structure of a Seurat object. First, we get a list
+of the slots
 
 ``` r
 tem <- seulist$Tem
-
-Assays(tem)
+slotNames(tem)
 ```
 
-    ## [1] "RNA"
+    ##  [1] "assays"       "meta.data"    "active.assay" "active.ident" "graphs"      
+    ##  [6] "neighbors"    "reductions"   "images"       "project.name" "misc"        
+    ## [11] "version"      "commands"     "tools"
+
+The object has a single assay
 
 ``` r
 tem@assays
@@ -401,108 +3673,27 @@ tem@assays
     ##  Mrpl15, Lypla1, Tcea1, Atp6v1h, Rb1cc1, 4732440D04Rik, Pcmtd1, Gm26901,
     ## Rrs1, Mybl1
 
-There is 1 assay called “RNA”. Inside this, there are 3 slots for
-matrices named “counts”, “data”, and “scale.data”. Each matrix consists
-of rows = features and columns = cells.
+It is also the “active” assay
 
 ``` r
-curr.counts <- tem@assays$RNA@counts
-dim(curr.counts) # 12571 features as rows and 1457 cells as columns
+tem@active.assay
 ```
 
-    ## [1] 12571  1457
+    ## [1] "RNA"
+
+Now let’s look at the slots of the RNA assay
 
 ``` r
-colnames(curr.counts)[1:10]
+slotNames(tem@assays$RNA)
 ```
 
-    ##  [1] "AAACCTGCAAGGTTCT" "AAACCTGCACGCGAAA" "AAACCTGGTATGGTTC" "AAACCTGTCTGGTATG"
-    ##  [5] "AAACGGGCATGCCTAA" "AAACGGGGTCTGATTG" "AAACGGGTCACCTCGT" "AAACGGGTCTTCAACT"
-    ##  [9] "AAAGATGAGTCAATAG" "AAAGATGGTCTTGATG"
+    ## [1] "counts"        "data"          "scale.data"    "key"          
+    ## [5] "assay.orig"    "var.features"  "meta.features" "misc"
+
+This will extract the count matrix
 
 ``` r
-rownames(curr.counts)[1:10]
-```
-
-    ##  [1] "Mrpl15"        "Lypla1"        "Tcea1"         "Atp6v1h"      
-    ##  [5] "Rb1cc1"        "4732440D04Rik" "Pcmtd1"        "Gm26901"      
-    ##  [9] "Rrs1"          "Mybl1"
-
-``` r
-curr.data <- tem@assays$RNA@data
-dim(curr.data) # 12571 features as rows and 1457 cells as columns
-```
-
-    ## [1] 12571  1457
-
-``` r
-colnames(curr.data)[1:10]
-```
-
-    ##  [1] "AAACCTGCAAGGTTCT" "AAACCTGCACGCGAAA" "AAACCTGGTATGGTTC" "AAACCTGTCTGGTATG"
-    ##  [5] "AAACGGGCATGCCTAA" "AAACGGGGTCTGATTG" "AAACGGGTCACCTCGT" "AAACGGGTCTTCAACT"
-    ##  [9] "AAAGATGAGTCAATAG" "AAAGATGGTCTTGATG"
-
-``` r
-rownames(curr.data)[1:10]
-```
-
-    ##  [1] "Mrpl15"        "Lypla1"        "Tcea1"         "Atp6v1h"      
-    ##  [5] "Rb1cc1"        "4732440D04Rik" "Pcmtd1"        "Gm26901"      
-    ##  [9] "Rrs1"          "Mybl1"
-
-``` r
-curr.scale.data <- tem@assays$RNA@scale.data
-dim(curr.scale.data) # empty
-```
-
-    ## [1] 0 0
-
-Compare how the “counts” and “data” values differ. Pull out values for a
-single cell and plot.
-
-``` r
-i<-1
-colnames(curr.counts)[i] # cell identifier
-```
-
-    ## [1] "AAACCTGCAAGGTTCT"
-
-``` r
-df <- data.frame(count = curr.counts[,i], data = curr.data[,i], feature = row.names(curr.counts), row.names = NULL)
-head(df)
-```
-
-    ##   count data       feature
-    ## 1     1    1        Mrpl15
-    ## 2     2    2        Lypla1
-    ## 3     1    1         Tcea1
-    ## 4     1    1       Atp6v1h
-    ## 5     1    1        Rb1cc1
-    ## 6     0    0 4732440D04Rik
-
-``` r
-ggplot(df, aes(x = count, y = data)) +
-  geom_point() +
-  geom_abline(slope = 1, intercept = 0, linetype = 2, color = "grey")
-```
-
-![](3_load_transformCounts_files/figure-markdown_github/unnamed-chunk-13-1.png)
-
-Normalize the counts and re-examine the data slots. Note that only the
-values in the “data” slot have changed.
-
-``` r
-tem.s <- NormalizeData(object = tem, normalization.method = "LogNormalize", scale.factor = 10000)
-
-s.counts <- tem.s@assays$RNA@counts
-dim(s.counts) # 12571 features as rows and 1457 cells as columns
-```
-
-    ## [1] 12571  1457
-
-``` r
-s.counts[1:10,1:10]
+tem@assays$RNA@counts[1:10,1:10]
 ```
 
     ## 10 x 10 sparse Matrix of class "dgCMatrix"
@@ -518,18 +3709,62 @@ s.counts[1:10,1:10]
     ## Rrs1          . . . . . . . . . 1
     ## Mybl1         . . . . . . . . . .
 
-``` r
-#colnames(s.counts)[1:10]
-#rownames(s.counts)[1:10]
+Note that the data slot is identical to the counts slot
 
-s.data <- tem.s@assays$RNA@data
-dim(s.data) # 12571 features as rows and 1457 cells as columns
+``` r
+identical(tem@assays$RNA@data, tem@assays$RNA@counts)
 ```
 
-    ## [1] 12571  1457
+    ## [1] TRUE
+
+### Normalize the counts
+
+The Seurat NormalizedData() function can be used to “normalize” the UMI
+counts.
 
 ``` r
-s.data[1:10,1:10]
+tem.s <- NormalizeData(
+  object = tem,
+  normalization.method = "LogNormalize",
+  scale.factor = 10000
+)
+```
+
+Note that while the count slot remains unchanged,
+
+``` r
+identical(tem.s@assays$RNA@counts,tem@assays$RNA@counts)
+```
+
+    ## [1] TRUE
+
+``` r
+tem.s@assays$RNA@counts[1:10,1:10]
+```
+
+    ## 10 x 10 sparse Matrix of class "dgCMatrix"
+    ##                                  
+    ## Mrpl15        1 . . . . 1 . . . .
+    ## Lypla1        2 1 . . . 1 . . . .
+    ## Tcea1         1 . . 1 1 1 . . . 1
+    ## Atp6v1h       1 . . . . . . . . 1
+    ## Rb1cc1        1 . . . . . . . . .
+    ## 4732440D04Rik . . . 1 . . . . . .
+    ## Pcmtd1        . . . . 1 . . . . .
+    ## Gm26901       . . . . . . . . . .
+    ## Rrs1          . . . . . . . . . 1
+    ## Mybl1         . . . . . . . . . .
+
+the data object has been modified
+
+``` r
+identical(tem.s@assays$RNA@data,tem@assays$RNA@data)
+```
+
+    ## [1] FALSE
+
+``` r
+tem.s@assays$RNA@data[1:10,1:10]
 ```
 
     ## 10 x 10 sparse Matrix of class "dgCMatrix"
@@ -545,53 +3780,57 @@ s.data[1:10,1:10]
     ## Rrs1          .         .        . .        .         .         . . . 0.8456252
     ## Mybl1         .         .        . .        .         .         . . . .
 
-``` r
-#colnames(s.data)[1:10]
-#rownames(s.data)[1:10]
-
-s.scale.data <- tem.s@assays$RNA@scale.data
-dim(s.scale.data) # empty
-```
-
-    ## [1] 0 0
+The following function can be used to normalize all objects in the list.
 
 ``` r
-## plot
-i <- 1
-colnames(s.counts)[i] # cell identifier
-```
-
-    ## [1] "AAACCTGCAAGGTTCT"
-
-``` r
-df <- data.frame(count = s.counts[,i], data = s.data[,i], feature = row.names(s.counts), row.names = NULL)
-ggplot(df, aes(x = count, y = data)) +
-  geom_point() +
-  geom_abline(slope = 1, intercept = 0, linetype = 2, color = "grey")
-```
-
-![](3_load_transformCounts_files/figure-markdown_github/unnamed-chunk-14-1.png)
-
-Normalize each of the seurat objects in the list.
-
-``` r
-sampleNames <- names(seulist)
-seulist.n <- list()
-for(i in 1:length(sampleNames)){
-  seulist.n[[i]] <- NormalizeData(object = seulist[[i]], normalization.method = "LogNormalize", 
-                                  scale.factor = 10000)
+normfun <- function(so) {
+   NormalizeData(
+     so, 
+     normalization.method = "LogNormalize", 
+    scale.factor = 10000
+    )
 }
-names(seulist.n) <- sampleNames
 ```
 
-Save the list of normalized seurat objects
+Apply function to the list.
 
 ``` r
-newfile <- file.path(intermeddir, "seulist-n.rds")
-#saveRDS(seulist.n, file = newfile)
+seulist <- lapply(seulist, normfun)
+seulist
+```
 
+    ## $disTrm
+    ## An object of class Seurat 
+    ## 12064 features across 863 samples within 1 assay 
+    ## Active assay: RNA (12064 features, 0 variable features)
+    ## 
+    ## $Tcm
+    ## An object of class Seurat 
+    ## 12840 features across 4009 samples within 1 assay 
+    ## Active assay: RNA (12840 features, 0 variable features)
+    ## 
+    ## $Tem
+    ## An object of class Seurat 
+    ## 12571 features across 1457 samples within 1 assay 
+    ## Active assay: RNA (12571 features, 0 variable features)
+    ## 
+    ## $Trm
+    ## An object of class Seurat 
+    ## 11778 features across 459 samples within 1 assay 
+    ## Active assay: RNA (11778 features, 0 variable features)
+
+Another widely used transformation is provided by the Seurat
+SCTransform() (regularized negative binomial regression to normalize UMI
+count data) function.
+
+Save the list of normalized Seurat objects
+------------------------------------------
+
+``` r
+newfile <- file.path(procdir, "seulist-normalized.christian2021.rds")
+saveRDS(seulist, file = newfile)
 tools::md5sum(newfile)
 ```
 
-    ## /hpc/group/chsi-mic-2022/intermed/seulist-n.rds 
-    ##              "a6716478ddf41b86a622048437b63215"
+    ## .//seulist-normalized.christian2021.rds 
+    ##      "50a379b434cb372ac85ce8d68078e21f"
