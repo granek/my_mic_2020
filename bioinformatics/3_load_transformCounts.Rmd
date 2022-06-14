@@ -31,18 +31,30 @@ Note that the Seurat - Guided Clustering Tutorial (<https://satijalab.org/seurat
 
 **METHOD DETAILS, Single-cell RNA-seq analysis, page e4**
 
--   Pre-processing: "Raw short reads were demultiplexed, filtering and mapped to mouse genome GRCm38/mm10 using cellranger v2.02."
+-   Pre-processing: "Raw short reads were demultiplexed, filtering and mapped to 
+mouse genome GRCm38/mm10 using cellranger v2.02."
 
--   QC: "The gene count matrices from cellranger were subjected to quality control, pre-processing and clustering using the R Seurat 2.3.4 package (Butler et al., 2018). Low-quality cells that had less than 200 expressed genes and more than 5% mitochondrial genes were filtered out."
+-   QC: "The gene count matrices from cellranger were subjected to quality 
+control, pre-processing and clustering using the R Seurat 2.3.4 package 
+(Butler et al., 2018). Low-quality cells that had less than 200 expressed genes 
+and more than 5% mitochondrial genes were filtered out."
 
--   Analysis: "Gene counts were scaled to total gene expression and percentage of mitochondrial genes with a scaling factor of 10,000, and then log-transformed. The high dimensional data for each sample were reduced by PCA and t-Distributed Stochastics Neighbor Embedding (tSNE). We used the FindCluster function to group clusters in each sample with a resolution of 0.6. Differential expressed genes (DEGs) were identified using the Wilcoxon rank-sum test."
+-   Analysis: "Gene counts were scaled to total gene expression and percentage 
+of mitochondrial genes with a scaling factor of 10,000, and then 
+log-transformed. The high dimensional data for each sample were reduced by PCA 
+and t-Distributed Stochastics Neighbor Embedding (tSNE). 
+We used the FindCluster function to group clusters in each sample 
+with a resolution of 0.6. Differential expressed genes (DEGs) were 
+identified using the Wilcoxon rank-sum test."
 
 ## 1. Load data into R as Seurat objects
 
 
-First, we identify the hdf5 (*.h5) files containing the Seurat objects 
-from Christian et al. 2021, and create a manifest including file and sample
-ids and the md5 hash. Review the R list.files(), basename() and gsub() functions.
+First, we identify the hdf5 (*.h5) files containing the UMI counts from
+cellranger from the Christian et al. 2021 paper, and create a 
+manifest including file and sample
+ids and the md5 hash. Review the R list.files(), basename() and gsub() 
+functions before reviwieng this code chunk.
 
 
 ```{r datafiles}
@@ -60,109 +72,135 @@ manifest
 ```
 
 
-
-
-Load the four 10x datasets that correspond to T cells sampled in and outside of the tumor. See Fig 2A for tSNE plots of each sample type.
+Confirm that you have identified data files corresponding 
+(see Fig 2A of Christian et al. for tSNE plots of each sample type):
 
 -   Tem = effector memory in tumor
 -   Tcm = central memory in tumor
 -   Trm = resident memory in tumor
 -   disTrm = resident memory T-cells outside of the tumor
 
-The following function can be used to import an hdf5 file from cellranger as
-a Seurat object
 
-```{r}
+Next, we write a function to import the hdf5 files as
+Seurat objects. Review the Read10X_h5() and CreateSeuratObject()
+functions from the Seurat package and the file.path() and paste0() functions
+from R before reviewing this code chunk.
+
+```{r importfun}
 readin_10x_to_SO <- function(datadir, fname, sampid, min.cells = 0, min.genes = 0){
-  
-  Read10X_h5(fname) %>%
+  # Create a full file name
+  filename <- file.path(datadir, paste0(sampid, "_10x.h5"))
+  Read10X_h5(filename) %>%
     CreateSeuratObject(
       project = sampid, 
-      min.cells=min.cells, min.genes=min.genes) -> seu.obj
+      min.cells = min.cells, 
+      min.genes = min.genes) -> seu.obj
   return(seu.obj)
 }
 ```
 
+Next, we use our custom function to read in the hdf5 files. This step will 
+create a list of four Seurat objects by looping over the rows of the manifest
+data frame. Review list and dataframe R objects and how to extract information
+from these, and the R seq_len() function before reviewing this code chunk. Note
+that the number of genes and cells vary across the files.
 
-```{r}
-sampleNames <- gsub("_10x","", basename(datadirs))
-sampleNames
-
+```{r importh5}
 seulist <- list()
-for(i in 1:length(sampleNames)){
-  seulist[[i]] <- readin_10x_to_SO(sample = sampleNames[i], path = datadirs[i])
+for(i in seq_len(nrow(manifest))){
+  fname <- manifest[[i,"fname"]]
+  sampid <- manifest[[i,"sampid"]]
+  seulist[[i]] <- readin_10x_to_SO(datadir, fname, sampid)
+  names(seulist)[i] <- sampid
 }
-names(seulist) <- sampleNames
 seulist
 ```
+The following illustrates how to access a specific object from the list you have created
 
-## 2. Verify data have been QC'd
-
-*METHOD DETAILS, Single-cell RNA-seq analysis, page e4*: "Low-quality cells that had less than 200 expressed genes and more than 5% mitochondrial genes were filtered out."
-
-The rownames are gene symbols. Investigating the names a bit more, the mitochondrial genes can be identified by the prefix "mt-"
-
-```{r}
-tem <- seulist$Tem
-curr.count <- tem@assays$RNA@counts
-rownames(curr.count)[1:10]
-rownames(curr.count)[grepl("^mt-", rownames(curr.count))] # these look like mitochondrial genes!
+```{r listaccessex}
+seulist[["Tem"]]
 ```
 
-Add the mitochondrial percentage for all seurat objects in our list
 
-```{r}
-add_mt <- function(so){
+
+## 2. Review the imported data against the information provided in the Christian paper
+
+*METHOD DETAILS, Single-cell RNA-seq analysis, page e4*: "Low-quality cells that 
+had less than 200 expressed genes and more than 5% mitochondrial genes were filtered out."
+
+First, we inspect the count matrix from on the imported objects. We observe that
+gene symbols are used as feature names
+
+```{r inspectcntmat}
+tem <- seulist$Tem
+cntmat <- tem@assays$RNA@counts
+head(cntmat[1:20,1:20])
+#rownames(curr.count)[1:10]
+#rownames(curr.count)[grepl("^mt-", rownames(curr.count))] # these look like mitochondrial genes!
+```
+
+Next, we add the mitochondrial percentage to each Seurat objects in our list
+(see QC notebook for details).
+We consider to equivalent approaches (looping and lapply) for updating
+Seurat objects in a list.
+First, we define a function which augments
+the meta data of a Seurat object by the mitochondrial proportion.
+
+
+```{r addmtfun}
+addmt <- function(so){
   so[["percent.mt"]] <- PercentageFeatureSet(so, pattern = "^mt-")
   return(so)
 }
+```
 
+Next we apply this function by looping over the list.
+
+```{r addmtloop}
 seulist.mt <- list()
 for(i in 1:length(seulist)){
   seulist.mt[[i]] <- add_mt(seulist[[i]])
-  print(head(seulist.mt[[i]]@meta.data))
 }
 names(seulist.mt) <- names(seulist)
-seulist <- seulist.mt
+seulist.mt
 ```
 
-Examine the distribution of nFeature and nCount for each dataset
+Generally speaking the preferred approach to applying functions to a list
+of Seurat objects is to use the R lapply() function.
 
 ```{r}
-plotlist <- list()
-for (i in 1:length(seulist)){
-  plotlist[[i]] <- ggplot(seulist[[i]]@meta.data, aes(x = nCount_RNA, y = nFeature_RNA, 
-                          color = percent.mt)) +
+seulist <- lapply(seulist, add_mt)
+seulist
+```
+
+
+Next, we examine the distribution of nFeature and nCount for each dataset
+
+```{r plotfun1}
+plotfun1 <- function(so) {
+  so@meta.data %>% 
+    ggplot(aes(x = nCount_RNA, y = nFeature_RNA, color = percent.mt)) +
     geom_point(size = 1) +
     labs(x = "nCount", y = "nFeature", color = "MT%") +
     theme_classic() +
-    geom_hline(yintercept = 200, linetype = 2)
-  
+    geom_hline(yintercept = 200, linetype = 2) +
+    ggtitle(so@project.name)
 }
-names(plotlist) <- names(seulist)
-plotlist[["disTrm"]] + ggtitle("disTrm")
-plotlist[["Tcm"]] + ggtitle("Tcm")
-plotlist[["Tem"]] + ggtitle("Tem")
-plotlist[["Trm"]] + ggtitle("Trm")
 ```
+
+This function can be used to produce the plot for a single object.
+```{r plotfun1ex}
+plotfun1(seulist[["Tem"]])
+```
+The function can also be applied to all Seurat objects in the list.
+
+```{r plotfun1apply}
+lapply(seulist, plotfun1)
+```
+
 
 Are there any cells with less than 200 expressed genes?
 
-```{r}
-plotlist <- list()
-for (i in 1:length(seulist)){
-  plotlist[[i]] <- ggplot(seulist[[i]]@meta.data, aes(x = nFeature_RNA)) +
-    geom_histogram() +
-    theme_classic() +
-    geom_vline(xintercept = 200, linetype = 2)
-}
-names(plotlist) <- names(seulist)
-
-plotlist[["disTrm"]] + ggtitle("disTrm")
-plotlist[["Tcm"]] + ggtitle("Tcm")
-plotlist[["Tem"]] + ggtitle("Tem")
-plotlist[["Trm"]] + ggtitle("Trm")
-```
 
 Summarize as a table
 
@@ -192,20 +230,20 @@ seulist %>%
 
 Are there any cells with more than 5% mitochondrial genes?
 
-```{r}
-plotlist <- list()
-for (i in 1:length(seulist)){
-  plotlist[[i]] <- ggplot(seulist[[i]]@meta.data, aes(x = percent.mt)) +
+We first write a function to produce a figure
+
+```{r plotfun2}
+plotfun2 <- function(so) {
+  so@meta.data %>%
+    ggplot(aes(x = percent.mt)) +
     geom_histogram() +
     theme_classic() +
-    geom_vline(xintercept = 5, linetype = 2)
+    geom_vline(xintercept = 5, linetype = 2) +
+    ggtitle(so@project.name)
 }
-names(plotlist) <- names(seulist)
-
-plotlist[["disTrm"]] + ggtitle("disTrm")
-plotlist[["Tcm"]] + ggtitle("Tcm")
-plotlist[["Tem"]] + ggtitle("Tem")
-plotlist[["Trm"]] + ggtitle("Trm")
+```
+```{r}
+lapply(seulist, plotfun2)
 ```
 
 Summarize as a table
@@ -225,46 +263,48 @@ df
 
 ## 3. Transform gene counts
 
-*METHOD DETAILS, Single-cell RNA-seq analysis, page e4*: "Gene counts were scaled to total gene expression and percentage of mitochondrial genes with a scaling factor of 10,000, and then log-transformed."
+*METHOD DETAILS, Single-cell RNA-seq analysis, page e4*: "Gene counts were 
+scaled to total gene expression and percentage of mitochondrial genes with a 
+scaling factor of 10,000, and then log-transformed."
 
-First, take a look at how data are structured inside the filtered Seurat object
+We will examine the structure of a Seurat object. First, we get a list of
+the slots
 
-```{r}
+```{r slotnames}
 tem <- seulist$Tem
+slotNames(tem)
+```
+The object has a single assay
 
-Assays(tem)
+```{r assay}
 tem@assays
 ```
+It is also the "active" assay
+```{r activeassay}
+tem@active.assay
+```
+Now let's look at the slots of the RNA assay
 
-There is 1 assay called "RNA". Inside this, there are 3 slots for matrices named "counts", "data", and "scale.data". Each matrix consists of rows = features and columns = cells.
+```{r RNAslot}
+slotNames(tem@assays$RNA)
+```
+This will extract the count matrix
 
-```{r}
-curr.counts <- tem@assays$RNA@counts
-dim(curr.counts) # 12571 features as rows and 1457 cells as columns
-colnames(curr.counts)[1:10]
-rownames(curr.counts)[1:10]
-
-curr.data <- tem@assays$RNA@data
-dim(curr.data) # 12571 features as rows and 1457 cells as columns
-colnames(curr.data)[1:10]
-rownames(curr.data)[1:10]
-
-curr.scale.data <- tem@assays$RNA@scale.data
-dim(curr.scale.data) # empty
+```{r RNAslot}
+tem@assays$RNA@counts[1:10,1:10]
 ```
 
-### Compare how the "counts" and "data" values differ. Pull out values for a single cell and plot.
+Note that the data slot is identical to the counts slot
 
-```{r}
-i<-1
-colnames(curr.counts)[i] # cell identifier
-df <- data.frame(count = curr.counts[,i], data = curr.data[,i], feature = row.names(curr.counts), row.names = NULL)
-head(df)
-
-ggplot(df, aes(x = count, y = data)) +
-  geom_point() +
-  geom_abline(slope = 1, intercept = 0, linetype = 2, color = "grey")
+```{r RNAslot}
+identical(tem@assays$RNA@data, tem@assays$RNA@counts)
 ```
+The scale.data slot is empty (the count have not yet been scaled)
+
+```{r RNAslot}
+tem@assays$RNA@scale.data
+```
+
 
 ### Normalize the counts and re-examine the data slots. Note that only the values in the "data" slot have changed.
 
@@ -297,7 +337,20 @@ ggplot(df, aes(x = count, y = data)) +
 
 ### Normalize each of the Seurat objects in the list
 
+
+
+```{r normalize}
+normfun1 <- function(so) {
+   NormalizeData(
+     so, 
+     normalization.method = "LogNormalize", 
+    scale.factor = 10000
+    )
+}
+seulist <- lapply(seulist, normfun1)
+```
 ```{r}
+
 sampleNames <- names(seulist)
 seulist.n <- list()
 for(i in 1:length(sampleNames)){
@@ -315,3 +368,88 @@ newfile <- file.path(intermeddir, "seulist-n.rds")
 
 tools::md5sum(newfile)
 ```
+
+
+One an use the summarize() function from the dplyr function to produce summary statistics
+for the meta data. The following is a simple demonstration.
+
+```{r summ1}
+seulist[["Tem"]]@meta.data %>% 
+  summarize(
+    n=n(), 
+    min=min(nCount_RNA), 
+    mean=mean(nCount_RNA), 
+    median=median(nCount_RNA),
+    max = max(nCount_RNA)
+  ) %>% 
+  mutate(dlabel = "Tem", .before = "n")
+
+```
+
+To generalize, we can consider the following function
+
+```{r summ2}
+summfun1 <- function(so) {
+  so@meta.data %>% 
+    summarize(
+    n=n(), 
+    min=min(nCount_RNA), 
+    mean=mean(nCount_RNA), 
+    median=median(nCount_RNA),
+    max = max(nCount_RNA)
+  ) %>% 
+  mutate(dlabel = so@project.name, .before = "n")
+}
+
+summfun1(seulist[["Tem"]])
+```
+
+To generalize this further so as to not hardcode the
+meta data column. Note the use of the !!sym() function
+to programmatically pass the variable name
+
+```{r summ3}
+summfun2 <- function(so, mdcol) {
+  so@meta.data %>% 
+    summarize(
+    n=n(), 
+    min=min(!!(sym(mdcol))), 
+    mean=mean(!!sym(mdcol)),
+    median=median(!!sym(mdcol)),
+    max = max(!!sym(mdcol))
+  ) %>% 
+  mutate(dlabel = so@project.name, mfeat = mdcol, .before = "n")
+}
+```
+
+Now apply this function.
+
+```{r summ4}
+summfun2(seulist[["Tem"]], "nCount_RNA")
+summfun2(seulist[["Tem"]], "nFeature_RNA")
+summfun2(seulist[["Tem"]], "percent.mt")
+```
+
+```{r summ4}
+do.call("rbind", lapply(seulist, summfun2, mdcol = "percent.mt"))
+```
+
+
+
+```{r}
+a %>% mutate(b="a", .before = "n")
+```
+```{r}
+lapply(seulist, function())
+seulist[["Tem"]]@meta.data %>% 
+  summarize(
+    n=n(), 
+    min=min(nCount_RNA), 
+    mean=mean(nCount_RNA), 
+    median=median(nCount_RNA)
+  )
+```
+
+
+
+
