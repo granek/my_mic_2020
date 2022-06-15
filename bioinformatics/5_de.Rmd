@@ -44,12 +44,11 @@ Note that the Seurat - Guided Clustering Tutorial (https://satijalab.org/seurat/
 
 - Analysis: "Gene counts were scaled to total gene expression and percentage of mitochondrial genes with a scaling factor of 10,000, and then log-transformed. The high dimensional data for each sample were reduced by PCA and t-Distributed Stochastics Neighbor Embedding (tSNE). We used the FindCluster function to group clusters in each sample with a resolution of 0.6. Differential expressed genes (DEGs) were identified using the Wilcoxon rank-sum test."
 
-## Load data
+## 0. Load data
 
-These are Seurat objects after they have been processed in the following ways...
+This tutorial will be based on the pre-processed Seurat object used in the 
+tutorial on clustering and cell-type inference (see clustering_annotation.Rmd).
 
-- Transformed the gene counts using NormalizeData(normalization.method = "LogNormalize"), see 3_load_transformCounts.Rmd and seulist-n.rds
-- Identified highly variable genes and then performed dimension reduction and clustering, see 4_clustering_annotation.Rmd and seulist-drc.rds
 
 ```{r loaddata}
 infile <- file.path(intermeddir, "seulist-drc.rds")
@@ -61,14 +60,16 @@ seulist.drc <- readRDS(infile)
 
 *METHOD DETAILS, Single-cell RNA-seq analysis, page 4e*: "Differentially expressed genes (DEGs) were identified using the Wilcoxon rank-sum test."
 
-We identify inferred clusters in Tem (Fig2B-D). First we have a look at the meta data
+This tutorial will be based on the Tem data set.
 
 ```{r temmd}
 tem <- seulist.drc[["Tem"]]
 tem@meta.data %>% head
 ```
 
-Next, we get the unique cluster ids
+The DE analysis will used the inferred clustering column seurat_clusters.
+Specifically, we will consider DE analysis between cluster {0} and clusters
+{1,2,3,4,5}.
 
 ```{r}
 tem@meta.data %>%
@@ -79,7 +80,7 @@ The Seurat FindMarkers() function can be used to conduct differential expression
 analysis between cluster (or group) variables in the meta data slot of a
 Seurat object. 
 For the purpose of trying to reproduce the manuscript results, we will assume 
-that the authors use the defaults. Here are a few default arguments to be aware 
+that the authors have used the defaults. Here are a few default arguments to be aware 
 of:
 
 - **min.pct = 0.1** : Do not test genes that make up fewer than 0.1 fraction 
@@ -107,7 +108,7 @@ see Seurat help for alternatives.
 - **ident.2** "A second identity class for comparison; if NULL, use all 
 other cells for comparison" (Seurat help)
 
-### Find DEGs that identify "Cluster 0"
+### DE analysis for specific cluster
 
 
 ```{r}
@@ -117,23 +118,24 @@ cluster0.markers %>%
   head(n = 5)
 ```
 
-The seurat_clusters variable is the active ident in the Tem object. had it not,
+The seurat_clusters variable is the active ident in the Tem object. Had it not,
 it would have to be set using the Seurat Ident() function
 
 
 **Examine Wilcoxon Rank Sum test** 
 
-Next, we will attempt to reproduce the P-value for Bcl2 by the FindMarker()
-function using the R wilcox.test() function.
+Next, we will attempt to reproduce the FindMarker() results
+for Bcl2 using standard R functions.
 
-First we indicate the gene of interest
+
+First we specify the gene of interest.
 
 ```{r}
 # Select the gene Bcl2
 sel.gene <- "Bcl2"
 ```
 
-Next, we subset the Tem object according to inferred cluster (0 vs others)
+Next, we subset the Tem object according to inferred cluster (0 vs others):
 
 ```{r}
 # subset cells in cluster 0
@@ -148,7 +150,7 @@ ncol(x = tem.else) # 1140 cells
 unique(Idents(tem.else)) # check that these are all from clusters other than 0
 ```
 
-This step extracts the expression values
+This step extracts the expression values from the two objects
 ```{r}
 # extract scaled expression values
 expr.0 <- GetAssayData(object = tem.0, slot = "data")
@@ -158,7 +160,6 @@ expr.else <- GetAssayData(object = tem.else, slot = "data")
 # Extract expression values for the gene Bcl2
 expr.0.sel <- expr.0[rownames(expr.0) == sel.gene,]
 expr.else.sel <- expr.else[rownames(expr.else) == sel.gene,]
-
 length(expr.0.sel)
 length(expr.else.sel)
 ```
@@ -214,7 +215,8 @@ cluster0.markers %>%
 
 
 
-Do this again for a gene with a less extreme p-value, e.g. Nkg7
+Exercise: Repeat the last analysis for Nkg7
+
 ```{r}
 # Select the gene Nkg7
 sel.gene <- "Nkg7"
@@ -224,8 +226,6 @@ sel.gene <- "Nkg7"
 # Extract expression values for the gene
 expr.0.sel <- expr.0[rownames(expr.0) == sel.gene,]
 expr.else.sel <- expr.else[rownames(expr.else) == sel.gene,]
-#expr.0.sel <- expr.0[rownames(expr.0) == sel.gene,]
-#expr.else.sel <- expr.else.sel[rownames(expr.else) == sel.gene,]
 length(expr.0.sel)
 length(expr.else.sel)
 ```
@@ -271,12 +271,17 @@ cluster0.markers %>%
 
 
 
-### Run FindMakers() for each cluster
-```{r}
+### DE Analysis for all clusters
+
+The Seurat FindAllmarkers() function can be used to conducted DE analysis
+for every cluster.
+
+```{r DEall}
 all.markers <- FindAllMarkers(tem)
 ```
 
-Show the top 5 up-regulated genes in each cluster
+Show the top 5 up-regulated (by FC) genes in each cluster
+
 ```{r}
 all.markers %>%
   group_by(cluster) %>%
@@ -285,7 +290,8 @@ all.markers %>%
 # note that this uses slice_max() and avg_log2FC is arranged from high to low with "-"
 ```
 
-Show the top 5 down-regulated genes in each cluster
+Show the top 5 down-regulated (by FC) genes in each cluster
+
 ```{r}
 all.markers %>%
   group_by(cluster) %>%
@@ -293,6 +299,9 @@ all.markers %>%
   arrange(cluster, avg_log2FC)
 # note that this uses slice_min() and avg_log2FC is arranged from low to high
 ```
+
+Exercise: How would you get the top down- or up-regulated
+genes according to FC?
 
 Visualize the top 5 up- and down-regulated genes in a heatmap
 ```{r}
@@ -312,14 +321,14 @@ DoHeatmap(tem, features = topGenes$gene)
 # Cluster 5 corresponds to p4?
 ```
 
-Investigate specific genes by overlaying gene expression on top of the tSNE plot as in the Fig2 B-D plots (page 5)
+Investigate a specific gene by overlaying gene expression on top of the tSNE plot as in the Fig2 B-D plots (page 5)
 ```{r}
 # remember this visualization tool from above too
 plot_grid(DimPlot(tem, reduction = "tsne"),
           FeaturePlot(tem, features = c("Hmgb2")))
 ```
 
-Investigate specific genes by generating violin plots. By default, the "expression level" is based on values in the "data" slot. Alternatively, you can plot counts from the "counts" slot instead.
+Investigate a specific gene by generating violin plots. By default, the "expression level" is based on values in the "data" slot. Alternatively, you can plot counts from the "counts" slot instead.
 ```{r}
 VlnPlot(tem, features = c("Hmgb2"), split.by = "seurat_clusters")
 # you can plot raw counts as well
@@ -327,18 +336,19 @@ VlnPlot(tem, features = c("Hmgb2"), slot = "counts")
 VlnPlot(tem, features = c("Hmgb2"), slot = "counts", log = TRUE)
 ```
 
-## 2. Re-name clusters
+## 2. Redefining clusters
 
-Name clusters based on biomarkers and study aims (Fig 2)
+Next, we attempt to redefine clusters based on biomarkers and study aims (Fig 2)
 
-I **think** the authors decided to assign the following names to these clusters, see *RESULTS, scRNA-seq dissects intratumoral TEff/EM heterogeneity, page 4-5*:
+Our understanding (see *RESULTS, scRNA-seq dissects intratumoral TEff/EM heterogeneity, page 4-5*)
+is that the the biomarkers were defined as follows
 
 p1 = Clusters 0, 1, 2 
 p2 = Cluster 3 
 p3 = Cluster 4
 p4 = Cluster 5
 
-We can add this information to the tem seurat object metadata
+We can add this information to the tem Seurat object metadata
 ```{r}
 new.cluster.ids <- c("p1", "p1", "p1", 
                      "p2", 
@@ -348,8 +358,13 @@ levels(tem)
 names(new.cluster.ids) <- levels(tem)
 tem <- RenameIdents(tem, new.cluster.ids)
 ```
+We can verify the 
 
-Based on these updated classifications, we can re-color the tSNE plot
+```{r}
+table(orig=tem@meta.data$seurat_clusters, new = Idents(tem))
+```
+
+Based on these updated classifications, we can re-annotate the tSNE plot
 ```{r}
 DimPlot(tem, reduction = "tsne", label = TRUE, pt.size = 0.5)
 ```
@@ -432,4 +447,6 @@ p4v2markers %>%
 
 - "This analysis illustrated that these CXCR6+ effector cells were quite unique: on the one hand, they could be labeled as terminally exhausted cells (Wherry et al., 2007) based on their elevated expression of Pdcd1, Nr4a1 (Liu et al., 2019), Lag3, and Havcr2 (Tim-3).." And from Fig 5 legend: "Classical exhaustion markers Nr4a1, Lag3, and Havcr2 were upregulated in the tumor TEff/EM p4 population."
 
-
+```{r sessioninfo}
+sessionInfo()
+```

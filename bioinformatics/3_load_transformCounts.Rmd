@@ -388,7 +388,10 @@ Another widely used transformation is provided by the Seurat SCTransform() (regu
 ## 4. Save the list of normalized Seurat objects
 
 ```{r saveobj}
-newfile <- file.path(procdir, "seulist-normalized.christian2021.rds")
+newfile <- file.path(procdir, "seulist-n.rds")
 saveRDS(seulist, file = newfile)
 tools::md5sum(newfile)
+```
+```{r sessioninfo}
+sessionInfo()
 ```
