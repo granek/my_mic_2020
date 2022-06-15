@@ -10,7 +10,7 @@ output:
 ---
 ```{r prereqs}
 knitr::opts_chunk$set(echo = T, message = FALSE, warning = FALSE)
-stdt<-date()
+stdt <- date()
 
 # Packages
 library(tidyverse)
@@ -64,7 +64,7 @@ This tutorial will be based on the Tem data set.
 
 ```{r temmd}
 tem <- seulist.drc[["Tem"]]
-tem@meta.data %>% head
+tem@meta.data %>% head()
 ```
 
 The DE analysis will used the inferred clustering column seurat_clusters.
@@ -73,7 +73,8 @@ Specifically, we will consider DE analysis between cluster {0} and clusters
 
 ```{r}
 tem@meta.data %>%
-  pull(seurat_clusters) %>% unique()
+  pull(seurat_clusters) %>%
+  unique()
 ```
 
 The Seurat FindMarkers() function can be used to conduct differential expression
@@ -158,8 +159,8 @@ expr.else <- GetAssayData(object = tem.else, slot = "data")
 ```
 ```{r}
 # Extract expression values for the gene Bcl2
-expr.0.sel <- expr.0[rownames(expr.0) == sel.gene,]
-expr.else.sel <- expr.else[rownames(expr.else) == sel.gene,]
+expr.0.sel <- expr.0[rownames(expr.0) == sel.gene, ]
+expr.else.sel <- expr.else[rownames(expr.else) == sel.gene, ]
 length(expr.0.sel)
 length(expr.else.sel)
 ```
@@ -186,12 +187,12 @@ avg.log2FC
 Next, we generate the P-value using the R wilcox.test().
 
 ```{r}
-# Perform the Wilcoxon Rank Sum test 
+# Perform the Wilcoxon Rank Sum test
 wilcox.test(
-  x = expr.0.sel, 
-  y = expr.else.sel, 
+  x = expr.0.sel,
+  y = expr.else.sel,
   alternative = "two.sided"
-  ) -> wtest
+) -> wtest
 
 wtest$p.value
 ```
@@ -210,7 +211,7 @@ The results above match the values provided by FindMarker()
 cluster0.markers %>%
   rownames_to_column(var = "gene_name") %>%
   filter(gene_name == sel.gene)
-# p-value = 2.175929e-28	
+# p-value = 2.175929e-28
 ```
 
 
@@ -224,8 +225,8 @@ sel.gene <- "Nkg7"
 
 ```{r}
 # Extract expression values for the gene
-expr.0.sel <- expr.0[rownames(expr.0) == sel.gene,]
-expr.else.sel <- expr.else[rownames(expr.else) == sel.gene,]
+expr.0.sel <- expr.0[rownames(expr.0) == sel.gene, ]
+expr.else.sel <- expr.else[rownames(expr.else) == sel.gene, ]
 length(expr.0.sel)
 length(expr.else.sel)
 ```
@@ -247,12 +248,12 @@ avg.log2FC
 ```
 
 ```{r}
-# Perform the Wilcoxon Rank Sum test 
+# Perform the Wilcoxon Rank Sum test
 wilcox.test(
-  x = expr.0.sel, 
-  y = expr.else.sel, 
+  x = expr.0.sel,
+  y = expr.else.sel,
   alternative = "two.sided"
-  ) -> wtest
+) -> wtest
 
 wtest$p.value
 ```
@@ -306,11 +307,11 @@ genes according to FC?
 Visualize the top 5 up- and down-regulated genes in a heatmap
 ```{r}
 all.markers %>%
-    group_by(cluster) %>%
-    slice_max(n = 5, order_by = avg_log2FC) -> upGenes
+  group_by(cluster) %>%
+  slice_max(n = 5, order_by = avg_log2FC) -> upGenes
 all.markers %>%
-    group_by(cluster) %>%
-    slice_min(n = 5, order_by = avg_log2FC) -> downGenes
+  group_by(cluster) %>%
+  slice_min(n = 5, order_by = avg_log2FC) -> downGenes
 upGenes %>%
   bind_rows(downGenes) -> topGenes
 
@@ -324,8 +325,10 @@ DoHeatmap(tem, features = topGenes$gene)
 Investigate a specific gene by overlaying gene expression on top of the tSNE plot as in the Fig2 B-D plots (page 5)
 ```{r}
 # remember this visualization tool from above too
-plot_grid(DimPlot(tem, reduction = "tsne"),
-          FeaturePlot(tem, features = c("Hmgb2")))
+plot_grid(
+  DimPlot(tem, reduction = "tsne"),
+  FeaturePlot(tem, features = c("Hmgb2"))
+)
 ```
 
 Investigate a specific gene by generating violin plots. By default, the "expression level" is based on values in the "data" slot. Alternatively, you can plot counts from the "counts" slot instead.
@@ -350,10 +353,12 @@ p4 = Cluster 5
 
 We can add this information to the tem Seurat object metadata
 ```{r}
-new.cluster.ids <- c("p1", "p1", "p1", 
-                     "p2", 
-                     "p3", 
-                     "p4")
+new.cluster.ids <- c(
+  "p1", "p1", "p1",
+  "p2",
+  "p3",
+  "p4"
+)
 levels(tem)
 names(new.cluster.ids) <- levels(tem)
 tem <- RenameIdents(tem, new.cluster.ids)
@@ -361,7 +366,7 @@ tem <- RenameIdents(tem, new.cluster.ids)
 We can verify the 
 
 ```{r}
-table(orig=tem@meta.data$seurat_clusters, new = Idents(tem))
+table(orig = tem@meta.data$seurat_clusters, new = Idents(tem))
 ```
 
 Based on these updated classifications, we can re-annotate the tSNE plot
@@ -408,7 +413,7 @@ p4v2markers %>%
 ```{r}
 p4v2markers %>%
   rownames_to_column(var = "gene") %>%
-  filter(gene %in% c("Il7r","Il18r1"))
+  filter(gene %in% c("Il7r", "Il18r1"))
 ```
 
 
@@ -418,7 +423,7 @@ p4v2markers %>%
 ```{r}
 p4v2markers %>%
   rownames_to_column(var = "gene") %>%
-  filter(gene %in% c("Gzmb","Klrc1", "Klrc2","Klrd1")) 
+  filter(gene %in% c("Gzmb", "Klrc1", "Klrc2", "Klrd1"))
 ```
 
 

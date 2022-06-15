@@ -11,7 +11,7 @@ output:
 
 ```{r prereqs}
 knitr::opts_chunk$set(echo = T, message = FALSE, warning = FALSE)
-stdt<-date()
+stdt <- date()
 
 # Packages
 library(tidyverse)
@@ -58,7 +58,7 @@ h5files <- list.files(path = datadir, pattern = ".h5", full.names = TRUE)
 # Inspect inventory
 tibble::tibble(
   fname = basename(h5files),
-  sampid =  gsub("_10x.h5", "", fname),
+  sampid = gsub("_10x.h5", "", fname),
   md5 = tools::md5sum(h5files)
 ) -> manifest
 manifest
@@ -74,14 +74,15 @@ Confirm that you have identified data files corresponding (see Fig 2A of Christi
 Next, we write a function to import the hdf5 files as Seurat objects. Review the Read10X_h5() and CreateSeuratObject() functions from the Seurat package and the file.path() and paste0() functions from R before reviewing this code chunk.
 
 ```{r importfun}
-readin_10x_to_SO <- function(datadir, fname, sampid, min.cells = 0, min.genes = 0){
+readin_10x_to_SO <- function(datadir, fname, sampid, min.cells = 0, min.genes = 0) {
   # Create a full file name
   filename <- file.path(datadir, paste0(sampid, "_10x.h5"))
   Read10X_h5(filename) %>%
     CreateSeuratObject(
-      project = sampid, 
-      min.cells = min.cells, 
-      min.genes = min.genes) -> seu.obj
+      project = sampid,
+      min.cells = min.cells,
+      min.genes = min.genes
+    ) -> seu.obj
   return(seu.obj)
 }
 ```
@@ -90,9 +91,9 @@ Next, we use our custom function to read in the hdf5 files. This step will creat
 
 ```{r importh5}
 seulist <- list()
-for(i in seq_len(nrow(manifest))){
-  fname <- manifest[[i,"fname"]]
-  sampid <- manifest[[i,"sampid"]]
+for (i in seq_len(nrow(manifest))) {
+  fname <- manifest[[i, "fname"]]
+  sampid <- manifest[[i, "sampid"]]
   seulist[[i]] <- readin_10x_to_SO(datadir, fname, sampid)
   names(seulist)[i] <- sampid
 }
@@ -131,7 +132,7 @@ Next, we add the mitochondrial content percentage to each Seurat objects in our 
 First, we define a function which augments the meta data of a Seurat object by the mitochondrial proportion.
 
 ```{r addmtfun}
-addmt <- function(so){
+addmt <- function(so) {
   so[["percent.mt"]] <- PercentageFeatureSet(so, pattern = "^mt-")
   return(so)
 }
@@ -141,7 +142,7 @@ Next we apply this function by looping over the list.
 
 ```{r addmtloop}
 seulist.mt <- list()
-for(i in 1:length(seulist)){
+for (i in 1:length(seulist)) {
   seulist.mt[[i]] <- addmt(seulist[[i]])
 }
 names(seulist.mt) <- names(seulist)
@@ -161,7 +162,7 @@ Next, we examine the distribution of nFeature and nCount of each object
 
 ```{r plotfun1}
 plotfun1 <- function(so) {
-  so@meta.data %>% 
+  so@meta.data %>%
     ggplot(aes(x = nCount_RNA, y = nFeature_RNA, color = percent.mt)) +
     geom_point(size = 1) +
     labs(x = "nCount", y = "nFeature", color = "MT%") +
@@ -209,31 +210,30 @@ Are there any cells with more than 5% mitochondrial genes?
 One can use the summarize() function from the dplyr function to produce summary statistics for the meta data. The following is a simple demonstration.
 
 ```{r summ1}
-seulist[["Tem"]]@meta.data %>% 
+seulist[["Tem"]]@meta.data %>%
   summarize(
-    n=n(), 
-    min=min(nCount_RNA), 
-    mean=mean(nCount_RNA), 
-    median=median(nCount_RNA),
+    n = n(),
+    min = min(nCount_RNA),
+    mean = mean(nCount_RNA),
+    median = median(nCount_RNA),
     max = max(nCount_RNA)
-  ) %>% 
+  ) %>%
   mutate(dlabel = "Tem", .before = "n")
-
 ```
 
 To generalize, we can consider writing a function
 
 ```{r summ2}
 summfun1 <- function(so) {
-  so@meta.data %>% 
+  so@meta.data %>%
     summarize(
-    n=n(), 
-    min=min(nCount_RNA), 
-    mean=mean(nCount_RNA), 
-    median=median(nCount_RNA),
-    max = max(nCount_RNA)
-  ) %>% 
-  mutate(dlabel = so@project.name, .before = "n")
+      n = n(),
+      min = min(nCount_RNA),
+      mean = mean(nCount_RNA),
+      median = median(nCount_RNA),
+      max = max(nCount_RNA)
+    ) %>%
+    mutate(dlabel = so@project.name, .before = "n")
 }
 
 summfun1(seulist[["Tem"]])
@@ -243,15 +243,15 @@ To generalize this further, so as to not hardcode the meta data column, we can c
 
 ```{r summ3}
 summfun2 <- function(so, mdcol) {
-  so@meta.data %>% 
+  so@meta.data %>%
     summarize(
-    n=n(), 
-    min=min(!!(sym(mdcol))), 
-    mean=mean(!!sym(mdcol)),
-    median=median(!!sym(mdcol)),
-    max = max(!!sym(mdcol))
-  ) %>% 
-  mutate(dlabel = so@project.name, mfeat = mdcol, .before = "n")
+      n = n(),
+      min = min(!!(sym(mdcol))),
+      mean = mean(!!sym(mdcol)),
+      median = median(!!sym(mdcol)),
+      max = max(!!sym(mdcol))
+    ) %>%
+    mutate(dlabel = so@project.name, mfeat = mdcol, .before = "n")
 }
 ```
 
@@ -273,13 +273,14 @@ Summarize as a table
 
 ```{r}
 df <- data.frame(seuobj = names(seulist))
-df[,c("min","mean","max")] <- NA
-for (i in 1:length(seulist)){
-  df[i,c("min","mean","max")] <- seulist[[i]]@meta.data %>%
-    summarize(min = min(nFeature_RNA),
-            mean = mean(nFeature_RNA),
-            max = max(nFeature_RNA))
-  
+df[, c("min", "mean", "max")] <- NA
+for (i in 1:length(seulist)) {
+  df[i, c("min", "mean", "max")] <- seulist[[i]]@meta.data %>%
+    summarize(
+      min = min(nFeature_RNA),
+      mean = mean(nFeature_RNA),
+      max = max(nFeature_RNA)
+    )
 }
 df
 ```
@@ -288,11 +289,13 @@ An alternative way to do this is by using purrr mapping functions
 
 ```{r}
 seulist %>%
-  map_dfr(~.x@meta.data, .id = "seuobj") %>%
+  map_dfr(~ .x@meta.data, .id = "seuobj") %>%
   group_by(seuobj) %>%
-  summarize(min = min(nFeature_RNA),
-            mean = mean(nFeature_RNA),
-            max = max(nFeature_RNA))
+  summarize(
+    min = min(nFeature_RNA),
+    mean = mean(nFeature_RNA),
+    max = max(nFeature_RNA)
+  )
 ```
 
 ## 3. Transform gene counts
@@ -329,7 +332,7 @@ slotNames(tem@assays$RNA)
 This will extract the count matrix
 
 ```{r}
-tem@assays$RNA@counts[1:5,1:5]
+tem@assays$RNA@counts[1:5, 1:5]
 ```
 
 Note that the data slot is identical to the counts slot
@@ -353,26 +356,26 @@ tem.s <- NormalizeData(
 Note that while the count slot remains unchanged,
 
 ```{r}
-identical(tem.s@assays$RNA@counts,tem@assays$RNA@counts)
-tem.s@assays$RNA@counts[1:5,1:5]
+identical(tem.s@assays$RNA@counts, tem@assays$RNA@counts)
+tem.s@assays$RNA@counts[1:5, 1:5]
 ```
 
 the data object has been modified
 
 ```{r}
-identical(tem.s@assays$RNA@data,tem@assays$RNA@data)
-tem.s@assays$RNA@data[1:10,1:10]
+identical(tem.s@assays$RNA@data, tem@assays$RNA@data)
+tem.s@assays$RNA@data[1:10, 1:10]
 ```
 
 The following function can be used to normalize all objects in the list.
 
 ```{r normalizefun}
 normfun <- function(so) {
-   NormalizeData(
-     so, 
-     normalization.method = "LogNormalize", 
+  NormalizeData(
+    so,
+    normalization.method = "LogNormalize",
     scale.factor = 10000
-    )
+  )
 }
 ```
 
