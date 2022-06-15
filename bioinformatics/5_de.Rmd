@@ -16,7 +16,7 @@ stdt <- date()
 library(tidyverse)
 library(Seurat)
 library(cowplot)
-
+library(patchwork)
 
 # Paths
 wd <- "/hpc/group/chsi-mic-2022"
@@ -322,14 +322,42 @@ DoHeatmap(tem, features = topGenes$gene)
 # Cluster 5 corresponds to p4?
 ```
 
-Investigate a specific gene by overlaying gene expression on top of the tSNE plot as in the Fig2 B-D plots (page 5)
+Investigate a specific gene by overlaying gene expression on top of the tSNE plot as in the Fig2 B-D plots (page 5).
+
+Example 1:
+
 ```{r}
 # remember this visualization tool from above too
 plot_grid(
   DimPlot(tem, reduction = "tsne"),
-  FeaturePlot(tem, features = c("Hmgb2"))
+  FeaturePlot(tem, features = c("Hmgb2")),
+  nrow = 1
 )
 ```
+Example 2 (Two genes):
+
+```{r}
+# remember this visualization tool from above too
+plot_grid(
+  DimPlot(tem, reduction = "tsne"),
+  FeaturePlot(tem, features = c("Hmgb2", "Bcl2")),
+  nrow = 2
+)
+```
+Example 3 (Use patchwork composition)
+
+```{r}
+DimPlot(tem, reduction = "tsne")  /
+  (FeaturePlot(tem, features = c("Bcl2"))| FeaturePlot(tem, features = c("Hmgb2")))
+```
+
+Example 3 (Use patchwork composition with spacer)
+
+```{r}
+(DimPlot(tem, reduction = "tsne") | plot_spacer()) /
+  (FeaturePlot(tem, features = c("Bcl2"))| FeaturePlot(tem, features = c("Hmgb2")))
+```
+
 
 Investigate a specific gene by generating violin plots. By default, the "expression level" is based on values in the "data" slot. Alternatively, you can plot counts from the "counts" slot instead.
 ```{r}
