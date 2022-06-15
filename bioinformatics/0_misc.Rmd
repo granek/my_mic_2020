@@ -1,0 +1,83 @@
+---
+title: "Misc"
+output:
+  md_document:
+    variant: markdown_github
+    toc: true
+  html_document:
+    toc: true
+    toc_float: true
+---
+```{r prereqs}
+knitr::opts_chunk$set(echo = T, message = FALSE, warning = FALSE)
+stdt <- date()
+
+# Packages
+library(tidyverse)
+library(Seurat)
+
+
+# Paths
+wd <- "/hpc/group/chsi-mic-2022"
+intermeddir <- file.path(wd, "intermed")
+```
+
+## Load lis with Seurat objects
+```{r loaddata}
+infile <- file.path(intermeddir, "seulist-drc.rds")
+tools::md5sum(infile)
+seulist.drc <- readRDS(infile)
+```
+
+## Extract Tem Seurat object
+```{r tem}
+tem <- seulist.drc[["Tem"]]
+tem
+```
+## Extract gene names and cell ids
+```{r genenames}
+genenames <- rownames(tem)
+genenames[1:10]
+```
+```{r cellids}
+cellids <- colnames(tem)
+cellids[1:10]
+```
+```{r confirm}
+# Confirm that the number of genes and cells 
+tem
+length(cellids)
+length(genenames)
+```
+
+## SCTransform
+```{r }
+# before
+tem
+```
+```{r }
+# Apply vst tramsformation
+tem <- SCTransform(tem)
+```
+```{r after}
+# Object after transformation
+tem
+```
+```{r assays}
+# Listing of assays
+tem@assays
+```
+
+```{r activeassay}
+tem@active.assay
+```
+```{r sctslots}
+slotNames(tem@assays$SCT)
+```
+```{r sctdata}
+dim(tem@assays$SCT@data)
+```
+
+```{r sessioninfo}
+sessionInfo()
+```
