@@ -5,9 +5,9 @@
 |           | 13:15-14:30 | Hands-on Tutorial                          | [Cellranger Rmarkdown](bioinformatics/1_cellranger-demo.Rmd) <br> [QC Rmarkdown](bioinformatics/2_qc.md)    | Owzar      |
 |           | 14:45-16:00 | Data Analysis Workshop I                   |                                                                                                             | Owzar      |
 |           |             |                                            |                                                                                                             |            |
-| Tuesday   | 09:00-10:15 | Clustering                                 |                                                                                                             | Xie        |
-|           | 10:30-11:45 | Cell-type Annotation                       |                                                                                                             | Xie        |
-|           | 13:15-14:30 | Hands-on Tutorial                          |                                                                                                             | Xie        |
+| Tuesday   | 09:00-10:15 | Clustering | [Cell clustering and cell-type annotation slides](statistics/SC_cluster_anno.pdf) | Xie  |
+|           | 10:30-11:45 | Cell-type Annotation | [Cell clustering and cell-type annotation slides](statistics/SC_cluster_anno.pdf) | Xie |
+|           | 13:15-14:30 | Hands-on Tutorial|   [Seurat pipeline Rmarkdown](bioinformatics/4_clustering_annotation.Rmd); [ScSorter Rmarkdown](bioinformatics/scSorter-demo.Rmd)| Xie |
 |           | 14:45-16:00 | Data Analysis Workshop II                  |                                                                                                             | Xie        |
 |           |             |                                            |                                                                                                             |            |
 | Wednesday | 09:00-10:15 | Differential Expression Analysis           | [Normalization and Transformation Rmarkdown](bioinformatics/3_load_transformCounts.md)                      | Owzar      |
