@@ -28,7 +28,15 @@ infile <- file.path(intermeddir, "seulist-drc.rds")
 tools::md5sum(infile)
 seulist.drc <- readRDS(infile)
 ```
+## basename and gsub
 
+```{r}
+filename <- "/hpc/group/chsi-mic-2022/data/Christian2021CellReports//disTrm_10x.h5"
+tools::md5sum(filename)
+bname <-basename(filename)
+bname
+gsub(".h5", "", bname)
+```
 ## Extract Tem Seurat object
 ```{r tem}
 tem <- seulist.drc[["Tem"]]
