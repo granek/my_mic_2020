@@ -52,17 +52,15 @@ library(dplyr)
 
 # High Priority
 
-1.  If you have **created or modified files** in your Jupyter container
-    that you would like to preserve, we recommend that you follow the
-    instructions for [Maintaining Personal
-    Files](#Maintaining-Personal-Files).
-    -   We recommend you do this before *as soon as possible*, if you
-        are not a Duke affliate, you may lose access to your account as
-        soon as the last day of the course.
-    -   Keep in mind that you only need to worry about this for files
-        that you have **created or modified**. The course material that
-        we created and shared with you will continue to be publicly
-        available.
+If you have **created or modified files** in your Jupyter container that
+you would like to preserve, we recommend that you follow the
+instructions for [Maintaining Personal
+Files](#Maintaining-Personal-Files). - We recommend you do this before
+*as soon as possible*, if you are not a Duke affliate, you may lose
+access to your account as soon as the last day of the course. - Keep in
+mind that you only need to worry about this for files that you have
+**created or modified**. The course material that we created and shared
+with you will continue to be publicly available.
 
 ## Important Notes
 
