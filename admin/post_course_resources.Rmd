@@ -1,15 +1,13 @@
 ---
-jupyter:
-  jupytext:
-    text_representation:
-      extension: .Rmd
-      format_name: rmarkdown
-      format_version: '1.2'
-      jupytext_version: 1.11.3
-  kernelspec:
-    display_name: Bash
-    language: bash
-    name: bash
+title: "Post Course Resources"
+output:
+  md_document:
+    variant: markdown_github
+    toc: true
+  html_document:
+    toc: true
+    toc_float: true
+date: '2022-06-17'
 ---
 
 # Overview
@@ -22,46 +20,44 @@ jupyter:
 # High Priority
 
 1. If you have **created or modified files** in your Jupyter container that you would like to preserve, we recommend that you follow the instructions for [Maintaining Personal Files](#Maintaining-Personal-Files).
-    - We recommend you do this before *as soon as possible*, certainly by July 2nd, 2021. After July 2nd, 2021 the container system we used during the course will be shut down.
+    - We recommend you do this before *as soon as possible*, if you are not a Duke affliate, you may lose access to your account as soon as the last day of the course.
     - Keep in mind that you only need to worry about this for files that you have  **created or modified**.  The course material that we created and shared with you will continue to be publicly available.
-
-2. Here are instruction to [download the gene count tables](../bioinformatics/setup/download_count_tables.Rmd)
 
 ## Important Notes
 
 See details below, but please keep the following in mind:
-1.  The course material will remain in the [2021 MIC Course Gitlab Repository](https://gitlab.oit.duke.edu/mic-course/2021-mic) and will be publicly available, in perpetuity (or as long as <https://gitlab.oit.duke.edu/> continues to exist), regardless of your affiliation with Duke (or lack thereof). See below for details.
-2.  The configuration and build information for the course Docker container will remain in the [Jupyter MIC 2021 Gitlab Repository](https://gitlab.oit.duke.edu/mic-course/jupyter-MIC-2021) and will be publicly available, in perpetuity (or as long as <https://gitlab.oit.duke.edu/> continues to exist), regardless of your affiliation with Duke (or lack thereof).
-3. The 2021 MIC Jupyter Docker image will remain in the [Jupyter MIC 2021 DockerHub Repository](https://hub.docker.com/repository/docker/miccourse/jupyter-mic-2021) and will be publicly available, in perpetuity (or as long as <https://hub.docker.com> continues to exist and host free repositories), regardless of your affiliation with Duke (or lack thereof).
+1.  The course material will remain in the [2022 MIC Course Content](https://gitlab.oit.duke.edu/mic-course/2022-mic) and will be publicly available, in perpetuity (or as long as <https://gitlab.oit.duke.edu/> continues to exist), regardless of your affiliation with Duke (or lack thereof). See below for details.
+2.  The configuration and build information for the course Docker container will remain in the [2022 MIC RStudio Singularity Image](https://gitlab.oit.duke.edu/mic-course/2022-mic-r-studio-singularity-image) and will be publicly available, in perpetuity (or as long as <https://gitlab.oit.duke.edu/> continues to exist), regardless of your affiliation with Duke (or lack thereof).
+3. The 2022 MIC RStudio Singularity Image will remain in the Duke Singularity Registry and will be publicly available, in perpetuity (as long as the Duke Singularity Registry continues to exist and freely host images), regardless of your affiliation with Duke (or lack thereof).
+
+You can pull (download) the singularity image to your current directory by running the following command in a terminal on a computer where singularity is installed
+> This command will not work within the MIC course environment, because Singularity is not installed within it.
+```
+singularity pull --dir . oras://gitlab-registry.oit.duke.edu/mic-course/2022-mic-r-studio-singularity-image:ver009
+```
 
 # Maintaining Personal Files
-
 ## Tar and Download
-
 ### Tarring
 
-
 #### Tarring: Only Notebooks
-If you only want to get *notebooks and shell scripts*, you could use the following to only grab the notebooks from 2021-mic. This will skip a lot of stuff you probably don't want. This archive file will be in your home directory and will be named 2021-mic-notebooks.tar.gz
+If you only want to get *Rmarkdown notebooks*, you could use the following to only grab the notebooks from 2022-mic. This will skip a lot of stuff you probably don't want. This archive file will be in your home directory and will be named 2022-mic-notebooks.tar.gz
 <!-- #endregion -->
 
 ```{bash}
-find ~/2021-mic  \
-    -not -path "*/.ipynb_checkpoints/*" \
+find ~/2022-mic  \
     -name "*.Rmd" \
-    -o -name "*.sh" \
-    | tar -cvzf ~/2021-mic-notebooks.tar.gz -T -
+    | tar -cvzf ~/2022-mic-notebooks.tar.gz -T -
 ```
 
 #### Tarring: Only Notebooks with a common name
 
-If you want only modified notebooks **and** you saved them with a standard naming scheme, e.g. leaving `-Copy1` in the name, for example, renaming `demultiplex.Rmd` to `demultiplex-Copy1.Rmd`, you could use the following to only grab the modified files from 2021-mic
+If you want only modified notebooks **and** you saved them with a standard naming scheme, e.g. leaving `-Copy1` in the name, for example, renaming `demultiplex.Rmd` to `demultiplex-Copy1.Rmd`, you could use the following to only grab the modified files from 2022-mic
 
 ```{bash}
-find ~/2021-mic \
-    -name "*-Copy1*" \
-    -not -path "*/.ipynb_checkpoints/*" \
-    | tar -cvzf ~/2021-mic-copy1.tar.gz -T -
+find ~/2022-mic \
+    -name "CopyOf*" \
+    | tar -cvzf ~/2022-mic-copyof.tar.gz -T -
 ```
 
 <!-- #region -->
@@ -69,39 +65,49 @@ find ~/2021-mic \
 
 Now you can do one of the following to download the tarball to your laptop. 
 
-1. Click on the "Jupyter" logo above to open the Jupyter file browser
-2. Naviagte your way to the directory where you saved the tarball.  The tarball should be in the toplevel directory, which is usually what opens when you click the Jupyter logo, but if not, you can click on the folder icon near the top of the file browser
-3. Click the checkbox next to `2021-mic-notebooks.tar.gz`
-4. Click the *Download* button near the top of the Jupyter window to download it.
+1. In the RStudio *Files* pane, click on *Home* to navigate to the directory where you saved the tarball.  T
+2. Click the checkbox next to `2022-mic-notebooks.tar.gz`
+3. In the *More* menu of the *Files* pane, select *Export*, then click the *Download* in the dialog box that pops up.
 
 ### Unpacking the tarball
-On a Mac you can "untar" by double clicking on the file in finder, or at the terminal with the command `tar -zxf 2021-mic-notebooks.tar.gz`.
+On a Mac you can "untar" by double clicking on the file in finder, or at the terminal with the command `tar -zxf 2022-mic-notebooks.tar.gz`.
 
 On Windows, you can download software that will do it, such as [7-Zip](http://www.7-zip.org/)
 
-> If you named your tarball, you should substitute whatever name you used above.
+> If you named your tarball differently, you should substitute whatever name you used above.
 
 # Accessing Course Material
 
 You can access the course material in three different ways:
-1.  You can browse and download the material from the [2021 MIC Course Repository](https://gitlab.oit.duke.edu/mic-course/2021-mic) by clicking on the Download button, which is right next to the blue **Clone** button. It will give you a choice of format you want. The best options are probably "zip" or "tar.gz"
-2.  You can **clone** the repo using git: `git clone https://gitlab.oit.duke.edu/mic-course/2021-mic.git`
+1.  You can browse and download the material from the [2022 MIC Course Repository](https://gitlab.oit.duke.edu/mic-course/2022-mic) by clicking on the Download button, which is right next to the blue **Clone** button. It will give you a choice of format you want. The best options are probably "zip" or "tar.gz"
+2.  You can **clone** the repo using git: `git clone git@gitlab.oit.duke.edu:mic-course/2022-mic.git`
 
 # Course Data
-The data we used in the 2021 MIC course was from GEO Accession number GSE159344.  The FASTQ files were downloaded from SRA and the metadata table was built using information from GEO and SRA. Both of these were done with the [download_data_sra.Rmd](../bioinformatics/setup/download_data_sra.Rmd) script.
-
+The data that we used in the course can be downloaded from [Mendeley Data](https://data.mendeley.com/datasets/3f4rsk96kf/3)
 
 # MIC Computing Environment
-The computing environment that we used in the MIC course was based on a Docker image. The MIC Course Docker image is available [here on DockerHub](https://hub.docker.com/repository/docker/miccourse/jupyter-mic-2021). If you install Docker, the image can be downloaded with the command `docker pull miccourse/jupyter-mic-2021:2021_final`.  The Dockerfile (i.e. recipe) used to build it is in the [Jupyter MIC 2021 GitLab Repository](https://gitlab.oit.duke.edu/mic-course/jupyter-MIC-2021). 
+## Using the MIC Computing Environment After the Course
+### Duke Affiliates
+If you are a Duke Affiliate, you can continue to use DCC OnDemand. 
 
-There are detailed instuctions on the [Jupyter MIC 2021 GitLab Repository](https://gitlab.oit.duke.edu/mic-course/jupyter-MIC-2021) for several different ways to run this computing environment:
+1. If you did not have a DCC account before the course, you will need to [follow these instructions](https://oit-rc.pages.oit.duke.edu/rcsupportdocs/dcc/#getting-a-dcc-account) to request one. 
+2. When launching a container, you will need to change the *Account* and *Partition* values to an account and partition to which you have access.
 
-1. [Run on a SLURM cluster](https://gitlab.oit.duke.edu/mic-course/jupyter-MIC-2021#running-the-course-image-on-a-slurm-cluster), like the [Duke Computer Cluster](https://rc.duke.edu/dcc/).
-2. [Run on your local computer](https://gitlab.oit.duke.edu/mic-course/jupyter-MIC-2021#run-image-on-your-local-computer)
-3. If you are at Duke, you can run things on the Duke Computer Cluster by cloning the git repo and cd'ing into the course repo directory, then following the [Run on a SLURM cluster](https://gitlab.oit.duke.edu/mic-course/jupyter-MIC-2021#running-the-course-image-on-a-slurm-cluster) instructions, but substituting the following for the command in step 3
+### People from outside Duke
+#### Open OnDemand
+The computing environment for our course ran within an [Open OnDemand](https://openondemand.org/) system. Look at your own institution to find out if you have access to a cluster running [Open OnDemand](https://openondemand.org/). If so, you can ask the administrators if you can run the MIC Course environment there. 
+1. You will need the [Singularity Recipe or Singularity Image](#The-MIC-Course-Singularity-Image-and-Recipe)
+2. You may need our [Open OnDemand Batch Connect App](https://gitlab.oit.duke.edu/chsi-informatics/ood_apps/mic-course-bc)
+
+If [Open OnDemand](https://openondemand.org/) is not installed on your local cluster, ask the system administrators to install it. It is free, was developed with funding from the US National Science Foundation, and is becoming a standard!
+
+You can also run the Singularity image on a cluster or a local server without Open OnDemand, but that is more complicated!
+
+
+## The MIC Course Singularity Image and Recipe
+The computing environment that we used in the MIC course ran withing a Singularity Container. The Singularity Image Recipe is here: [2022 MIC RStudio Singularity Image](https://gitlab.oit.duke.edu/mic-course/2022-mic-r-studio-singularity-image) and the built image can be pulled (downloaded) to your current directory by running the following command in a terminal on a computer where singularity is installed
+> This command will not work within the MIC course environment, because Singularity is not installed within it.
 ```
-export SINGULARITY_CACHEDIR="/work/${USER}/singularity_cache"; srun --cpus-per-task=20 --mem=50G admin/run_singularity/run_singularity_jupyter.sh
+singularity pull --dir . oras://gitlab-registry.oit.duke.edu/mic-course/2022-mic-r-studio-singularity-image:ver009
 ```
-
-> It takes about 40GB of RAM to run the notebooks as they are. It might be less if you run with fewer threads.
-<!-- #endregion -->
+The [SingularityCE User Guide](https://docs.sylabs.io/guides/latest/user-guide/) has information on installing and using Singularity 

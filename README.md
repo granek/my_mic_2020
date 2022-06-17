@@ -13,6 +13,5 @@ Shortened URL: https://duke.is/g2ahs
 - [Update workshop content](computing/reproducible/git_pull.md)
 
 # Miscellaneous
-- [Managing Notes](admin/managing_file_modifications.md) 
-- [Installing Git](admin/install_git.md)
-- After the MIC Course
+- [Managing Notes](admin/managing_file_modifications.Rmd)
+- [After the MIC Course](admin/post_course_resources.Rmd)
