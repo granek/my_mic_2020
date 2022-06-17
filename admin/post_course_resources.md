@@ -83,10 +83,12 @@ affiliation with Duke (or lack thereof).
 
 You can pull (download) the singularity image to your current directory
 by running the following command in a terminal on a computer where
-singularity is installed \> This command will not work within the MIC
-course environment, because Singularity is not installed within it.
+singularity is installed
 
     singularity pull --dir . oras://gitlab-registry.oit.duke.edu/mic-course/2022-mic-r-studio-singularity-image:ver009
+
+> This command will not work within the MIC course environment, because
+> Singularity is not installed within it.
 
 # Maintaining Personal Files
 
