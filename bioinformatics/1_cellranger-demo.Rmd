@@ -89,12 +89,17 @@ Sys.setenv(
   ANNO="/hpc/group/chsi-mic-2022/annotation/refdata-gex-GRCh38-2020-A/"
   )
 
+
+scratch_dir="/work"
+username=Sys.info()[["user"]] # output subdirectories in /work named based on each user's NetID
+mkfqdir=file.path(scratch_dir, username, "MIC2022/PROC/mkfastqstep")
+cntdir=file.path(scratch_dir, username, "MIC2022/PROC/cnt")
+
 # Output
 Sys.setenv(
-  MKFQDIR="/work/owzar001/MIC2022/PROC/mkfastqstep/",
-  CNTDIR="/work/owzar001/MIC2022/PROC/cnt/"
+  MKFQDIR=mkfqdir,
+  CNTDIR=cntdir
   )
-
 ```
 
 ### Inspect bcl tree content
