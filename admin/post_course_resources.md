@@ -177,13 +177,15 @@ On Windows, you can download software that will do it, such as
 
 # Accessing Course Material
 
-You can access the course material in three different ways: 1. You can
-browse and download the material from the [2022 MIC Course
-Repository](https://gitlab.oit.duke.edu/mic-course/2022-mic) by clicking
-on the Download button, which is right next to the blue **Clone**
-button. It will give you a choice of format you want. The best options
-are probably “zip” or “tar.gz” 2. You can **clone** the repo using git:
-`git clone git@gitlab.oit.duke.edu:mic-course/2022-mic.git`
+You can access the course material in three different ways:
+
+1.  You can browse and download the material from the [2022 MIC Course
+    Repository](https://gitlab.oit.duke.edu/mic-course/2022-mic) by
+    clicking on the Download button, which is right next to the blue
+    **Clone** button. It will give you a choice of format you want. The
+    best options are probably “zip” or “tar.gz”
+2.  You can **clone** the repo using git:
+    `git clone git@gitlab.oit.duke.edu:mic-course/2022-mic.git`
 
 # Course Data
 
@@ -214,11 +216,12 @@ The computing environment for our course ran within an [Open
 OnDemand](https://openondemand.org/) system. Look at your own
 institution to find out if you have access to a cluster running [Open
 OnDemand](https://openondemand.org/). If so, you can ask the
-administrators if you can run the MIC Course environment there. 1. You
-will need the [Singularity Recipe or Singularity
-Image](#The-MIC-Course-Singularity-Image-and-Recipe) 2. You may need our
-[Open OnDemand Batch Connect
-App](https://gitlab.oit.duke.edu/chsi-informatics/ood_apps/mic-course-bc)
+administrators if you can run the MIC Course environment there.
+
+1.  You will need the [Singularity Recipe or Singularity
+    Image](#The-MIC-Course-Singularity-Image-and-Recipe)
+2.  You may need our [Open OnDemand Batch Connect
+    App](https://gitlab.oit.duke.edu/chsi-informatics/ood_apps/mic-course-bc)
 
 If [Open OnDemand](https://openondemand.org/) is not installed on your
 local cluster, ask the system administrators to install it. It is free,
