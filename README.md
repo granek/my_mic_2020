@@ -14,4 +14,4 @@ Shortened URL: https://duke.is/g2ahs
 
 # Miscellaneous
 - [Managing Notes](admin/managing_file_modifications.Rmd)
-- [After the MIC Course](admin/post_course_resources.Rmd)
+- [After the MIC Course](admin/post_course_resources.md)
