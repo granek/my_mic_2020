@@ -86,6 +86,41 @@ slotNames(tem@assays$SCT)
 dim(tem@assays$SCT@data)
 ```
 
+## Extract annotation data from a GTF
+
+```{r gtffile}
+gtffile <- '/hpc/group/chsi-mic-2022/annotation/refdata-gex-GRCh38-2020-A/genes/genes.gtf'
+tools::md5sum(gtffile)
+```
+```{r pkg}
+library(rtracklayer)
+library(plyranges)
+```
+```{r importgtf}
+
+gtf <- import(gtffile)
+```
+
+```{r inspect}
+gtf
+```
+```{r genes}
+gtf %>% filter(type == "gene" & gene_type == "protein_coding") %>% as_tibble()
+```
+```{r dupgenes}
+
+gtf %>% plyranges::filter(type == "gene") %>% 
+  as_tibble() %>% 
+  select(seqnames, start, end, gene_id, gene_name) %>% 
+  dplyr::group_by(gene_name) %>% 
+  dplyr::filter(dplyr::n()>1)
+```
+
+
+
+
+
+
 ```{r sessioninfo}
 sessionInfo()
 ```
